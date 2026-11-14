@@ -4,7 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { money, when } from '@/lib/format';
 import { PayBadge, FulBadge, Avatar } from '@/components/ui';
-import { Tile } from '@/components/art';
+import { Media } from '@/components/art';
 import { FulfilAction, RefundAction } from '@/components/Actions';
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,8 +26,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           <div className={placed ? 'on' : ''}>Placed</div><div className={paid ? 'on' : ''}>{o.payment === 'failed' ? 'Payment failed' : 'Paid'}</div><div className={shipped ? 'on' : ''}>Fulfilled</div>
         </div>
         <div className="acts" style={{ marginTop: 18 }}>
-          {canFulfil && <FulfilAction number={o.number} items={o.lines.map(l => `${l.qty} × ${l.title}`)} />}
-          {(o.payment === 'paid' || o.payment === 'partially_refunded') && <RefundAction number={o.number} totalMinor={o.totalMinor} refundedMinor={o.refundedMinor} feeBp={50} />}
+          {canFulfil && <FulfilAction orderId={o.id} number={o.number} items={o.lines.map(l => `${l.qty} × ${l.title}`)} />}
+          {(o.payment === 'paid' || o.payment === 'partially_refunded') && <RefundAction orderId={o.id} number={o.number} totalMinor={o.totalMinor} refundedMinor={o.refundedMinor} feeBp={50} />}
         </div>
       </section>
       {o.payment === 'failed' && <div className="w flat" style={{ marginBottom: 16 }}>Payment failed. No charge was made and nothing needs fulfilling.</div>}
@@ -35,7 +35,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <section className="w c-8" aria-labelledby="items">
           <h2 id="items" style={{ marginBottom: 12 }}>Items</h2>
           <div className="rows">{o.lines.map(l => (
-            <div key={l.sku} className="row"><Tile seed={l.sku} label={l.title} small /><span className="t"><b>{l.title}</b><span className="mono">{l.sku} · {l.qty} × {money(l.unitMinor)}</span></span><span className="num">{money(l.qty * l.unitMinor)}</span></div>))}</div>
+            <div key={l.sku} className="row"><Media src={l.imageUrl} alt="" size={44} /><span className="t"><b>{l.title}</b><span className="mono">{l.sku} · {l.qty} × {money(l.unitMinor)}</span></span><span className="num">{money(l.qty * l.unitMinor)}</span></div>))}</div>
           <dl className="kv" style={{ marginTop: 18 }}>
             <dt>Subtotal</dt><dd className="num">{money(sub)}</dd>
             {o.discountMinor > 0 && <><dt>Discount</dt><dd className="num">−{money(o.discountMinor)}</dd></>}

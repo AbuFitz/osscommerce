@@ -4,7 +4,6 @@ import { gateway } from '@/lib/gateway-instance';
 import { plan, type Plan } from '@/lib/smart';
 import { money, when, day } from '@/lib/format';
 import { SalesBars, Dial, Donut } from '@/components/charts';
-import { StillLife } from '@/components/art';
 import { Header, Avatar } from '@/components/ui';
 
 const KPI = {
@@ -33,6 +32,7 @@ export default async function Overview() {
     caught_up: { chip: 'All caught up', h: 'Nothing needs you right now', p: 'New orders will appear here as customers check out.', a: { href: '/analytics', label: 'See how sales are going' } },
   };
   const H = heroCopy[P.hero];
+  const stat = ({ first_product: { n: '0', l: 'products listed' }, connect_payments: { n: `${done}/${store.readiness.length}`, l: 'steps to launch done' }, fulfil: { n: String(todo.length), l: todo.length === 1 ? 'order to ship' : 'orders to ship' }, finish_setup: { n: `${done}/${store.readiness.length}`, l: 'steps to launch done' }, caught_up: { n: String(s.fulfilled), l: 'orders fulfilled' } } as const)[P.hero];
 
   return (
     <>
@@ -47,7 +47,7 @@ export default async function Overview() {
 
       <div className="ov">
         <div className="stack">
-          <section className="hero" aria-labelledby="hero-t">
+          <section className="hero solo" aria-labelledby="hero-t">
             <div>
               <span className="glass">{H.chip}</span>
               <h2 id="hero-t">{H.h}</h2><p>{H.p}</p>
@@ -57,7 +57,7 @@ export default async function Overview() {
                 {H.b && <Link className="btn ghost" href={H.b.href}>{H.b.label}</Link>}
               </div>
             </div>
-            <div className="art"><StillLife /><span className="glass">Placeholder · add your photography</span></div>
+            <div className="stat"><b>{stat.n}</b><span>{stat.l}</span></div>
           </section>
 
           <div className="kgrid">

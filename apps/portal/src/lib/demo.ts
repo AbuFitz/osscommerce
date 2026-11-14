@@ -58,6 +58,8 @@ async function state(): Promise<DemoState> {
 }
 const ordersFor = (st: DemoState) => (st === 'new' ? [] : ORDERS);
 const productsFor = (st: DemoState) => (st === 'new' ? [] : P);
+const NOTE = ' Demo data: nothing was changed.';
+const okDemo = (m: string) => ({ ok: true, message: m + NOTE });
 export const demoGateway: CommerceGateway = {
   async store() {
     const st = await state();
@@ -152,4 +154,10 @@ export const demoGateway: CommerceGateway = {
       payments: { account: 'acct_••••3F2A', capabilities: [{ label: 'Card payments', ok: true }, { label: 'Payouts', ok: true }, { label: 'Identity verification', ok: true }], applicationFeeBp: 50, payouts: 'Weekly, Fridays' },
     };
   },
+  async fulfilOrder(id) { return okDemo(`Order marked fulfilled.`); },
+  async refundOrder(i) { return okDemo(`Refund of £${(i.amountMinor / 100).toFixed(2)} requested.`); },
+  async inviteMember(email) { return okDemo(`Invitation sent to ${email}.`); },
+  async rollbackTheme(v) { return okDemo(`Rollback to v${v} requested.`); },
+  async decideGrant(_id, dec) { return okDemo(dec === 'approve' ? 'Access approved for the time shown.' : dec === 'decline' ? 'Request declined.' : 'Access revoked.'); },
+  async savePreferences() { return okDemo('Preferences saved.'); },
 };

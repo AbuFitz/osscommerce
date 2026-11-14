@@ -3,12 +3,16 @@ import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import { Bell, Search } from 'lucide-react';
 import Link from 'next/link';
-import { Rail, TabBar } from '@/components/Nav';
+import { Shell, TabBar } from '@/components/Nav';
+import { cookies } from 'next/headers';
+import { PROGRESSIVE } from '@/components/nav-data';
 import { Switcher } from '@/components/Switcher';
-import { ToastProvider } from '@/components/Toast';
+import { ToastProvider } from '@oss-commerce/ui';
 import { gateway } from '@/lib/gateway-instance';
+import '@oss-commerce/ui/ui.css';
 import './globals.css';
 
+export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: { default: 'Commerce', template: '%s · OSS Commerce' }, robots: { index: false } };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#e4e9d4' };
 
@@ -18,13 +22,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const g = gateway();
   const [s, attention, all] = await Promise.all([g.store(), g.orders({ filter: 'attention' }), g.orders()]);
   // Progressive navigation: sections with nothing to show yet stay out of the way until the first order.
-  const hidden = all.length === 0 ? ['/analytics', '/customers', '/discounts', '/inventory'] : [];
+  const hidden = all.length === 0 ? PROGRESSIVE : [];
+  const expanded = (await cookies()).get('oss_rail')?.value === 'open';
   return (
     <html lang="en-GB" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body style={{ fontFamily: 'var(--font-geist-sans), system-ui, sans-serif' }}>
         <div className="backdrop" aria-hidden><i /><i /><i /></div>
-        <ToastProvider><div className="frame">
-          <Rail initials="MO" hidden={hidden} />
+        <ToastProvider><Shell initials="MO" name="Maya Okafor" role="Owner" hidden={hidden} defaultExpanded={expanded}>
           <div className="stage">
             <header className="top">
               <Switcher name={s.name} /><div className="spacer" />
@@ -34,7 +38,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <header className="topbar"><Switcher name={s.name} /><div className="spacer" /><Bellink n={attention.length} /></header>
             <main id="main">{children}</main>
           </div>
-        </div>
+        </Shell>
         <TabBar /></ToastProvider>
       </body>
     </html>

@@ -1,7 +1,7 @@
 import { AlertTriangle, Boxes, PackageX } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { Header } from '@/components/ui';
-import { Tile } from '@/components/art';
+import { Media } from '@/components/art';
 export const metadata = { title: 'Inventory' };
 
 export default async function Inventory() {
@@ -17,7 +17,7 @@ export default async function Inventory() {
     </div>
     <div className="w tw">
       <table className="t"><thead><tr><th scope="col">Product</th><th scope="col" className="r">On hand</th><th scope="col" className="r">Allocated</th><th scope="col">Available</th></tr></thead>
-        <tbody>{rows.map(p => <tr key={p.id}><td><span style={{ display: 'inline-flex', gap: 12, alignItems: 'center' }}><Tile seed={p.sku} label={p.title} small /><span><b style={{ fontWeight: 600 }}>{p.title}</b><div className="mono muted">{p.sku}</div></span></span></td><td className="r num">{p.onHand}</td><td className="r num">{p.allocated}</td>
+        <tbody>{rows.map(p => <tr key={p.id}><td><span style={{ display: 'inline-flex', gap: 12, alignItems: 'center' }}><Media src={p.imageUrl} alt="" size={44} /><span><b style={{ fontWeight: 600 }}>{p.title}</b><div className="mono muted">{p.sku}</div></span></span></td><td className="r num">{p.onHand}</td><td className="r num">{p.allocated}</td>
           <td style={{ minWidth: 200 }}><span style={{ display: 'flex', gap: 10, alignItems: 'center' }}><span className="num" style={{ minWidth: 24 }}>{p.avail}</span><span className={`meter ${p.low ? 'low' : ''}`} style={{ flex: 1 }} aria-hidden><i style={{ width: `${Math.min(100, (p.avail / Math.max(p.threshold * 3, 1)) * 100)}%` }} /></span>{p.low && <span className="badge warn">Low</span>}</span></td></tr>)}</tbody></table>
       <div className="cards">{rows.map(p => <div key={p.id}><b>{p.title}</b><b className="num">{p.avail}</b><span className="muted mono">{p.onHand} on hand · {p.allocated} allocated</span><span style={{ textAlign: 'right' }}>{p.low && <span className="badge warn">Low stock</span>}</span></div>)}</div>
     </div></>);

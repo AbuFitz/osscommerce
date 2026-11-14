@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Toggle } from './Toggle';
-import { Dialog } from './Dialog';
-import { useToast } from './Toast';
+import { Toggle } from '@oss-commerce/ui';
+import { Dialog } from '@oss-commerce/ui';
+import { useRun } from './Actions';
+import { savePreferences } from '@/app/actions';
 
 type Prefs = { lowStock: boolean; newOrder: boolean; guest: boolean; consent: boolean; showSoldOut: boolean; pause: boolean };
 const START: Prefs = { lowStock: true, newOrder: true, guest: true, consent: false, showSoldOut: true, pause: false };
@@ -12,7 +13,7 @@ export function Preferences() {
   const [saved, setSaved] = useState<Prefs>(START);
   const [v, setV] = useState<Prefs>(START);
   const [confirmPause, setConfirmPause] = useState(false);
-  const toast = useToast();
+  const { run, pending } = useRun();
   const dirty = (Object.keys(v) as (keyof Prefs)[]).some(k => v[k] !== saved[k]);
   useEffect(() => {
     if (!dirty) return;
@@ -37,7 +38,7 @@ export function Preferences() {
       {dirty && (
         <div className="savebar" role="region" aria-label="Unsaved changes"><span>You have unsaved changes</span>
           <span className="acts"><button className="btn sm" type="button" onClick={() => setV(saved)}>Discard</button>
-            <button className="btn sm primary" type="button" onClick={() => { setSaved(v); toast('Preferences saved. Demo data: nothing was sent.', 'info'); }}>Save changes</button></span></div>)}
+            <button className="btn sm primary" type="button" disabled={pending} onClick={() => run(() => savePreferences(v), () => setSaved(v))}>{pending ? 'Saving…' : 'Save changes'}</button></span></div>)}
       <Dialog open={confirmPause} onClose={() => setConfirmPause(false)} title="Pause new orders?" description="Customers will see that checkout is unavailable until you turn this off."
         footer={<><button className="btn" type="button" onClick={() => setConfirmPause(false)}>Keep checkout on</button><button className="btn primary" type="button" onClick={() => { set('pause')(true); setConfirmPause(false); }}>Pause checkout</button></>}><span /></Dialog>
     </>

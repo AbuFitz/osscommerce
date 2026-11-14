@@ -1,27 +1,43 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Menu } from 'lucide-react';
-import { commerce, accountLink } from './nav-data';
+import { useState } from 'react';
+import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { commerce, accountLink, GROUPS, type NavItem } from './nav-data';
 
 const active = (p: string, h: string) => (h === '/' ? p === '/' : p === h || p.startsWith(h + '/'));
 
-export function Rail({ initials, hidden = [] }: { initials: string; hidden?: string[] }) {
+/** Frame + rail. Owns the expanded state so the grid column can animate; the preference lives in a cookie so the server renders it without a flash. */
+export function Shell({ children, initials, name, role, hidden = [], defaultExpanded }: {
+  children: React.ReactNode; initials: string; name: string; role: string; hidden?: string[]; defaultExpanded: boolean;
+}) {
+  const [open, setOpen] = useState(defaultExpanded);
   const p = usePathname();
-  const item = (it: { href: string; label: string; icon: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }> }) => (
-    <Link key={it.href} href={it.href} data-label={it.label} aria-label={it.label} aria-current={active(p, it.href) ? 'page' : undefined}><it.icon size={19} aria-hidden /></Link>
+  const toggle = () => { const v = !open; setOpen(v); document.cookie = `oss_rail=${v ? 'open' : 'closed'}; path=/; max-age=31536000; samesite=lax`; };
+  const item = (it: NavItem) => (
+    <Link key={it.href} href={it.href} data-label={it.label} aria-label={open ? undefined : it.label} aria-current={active(p, it.href) ? 'page' : undefined}>
+      <it.icon size={19} aria-hidden /><span className="lbl">{it.label}</span>
+    </Link>
   );
   return (
-    <aside className="rail">
-      <nav aria-label="Main" style={{ display: 'contents' }}>
-        {commerce.slice(0, 8).filter(c => !hidden.includes(c.href)).map(item)}
-        <hr />
-        {item(commerce[8])}
-        {item(accountLink)}
-      </nav>
-      <div className="grow" />
-      <div className="avatar" title="Maya Okafor" aria-label="Signed in as Maya Okafor">{initials}</div>
-    </aside>
+    <div className="frame" data-rail={open ? 'open' : 'closed'}>
+      <aside className="rail">
+        <nav aria-label="Main" className="rail-nav">
+          {GROUPS.map((g, i) => { const items = g.items.filter(x => !hidden.includes(x.href)); if (!items.length) return null; return (
+            <div key={i} className="rail-grp">{g.label && <div className="rail-cap" aria-hidden={!open}>{g.label}</div>}{items.map(item)}</div>); })}
+          <div className="rail-grp rail-end">{item(commerce[8])}{item(accountLink)}</div>
+        </nav>
+        <div className="grow" />
+        <div className="rail-me">
+          <div className="avatar" aria-hidden>{initials}</div>
+          <div className="who"><b>{name}</b><span>{role}</span></div>
+        </div>
+        <button type="button" className="rail-toggle" onClick={toggle} aria-expanded={open} aria-label={open ? 'Collapse menu' : 'Expand menu'} data-label={open ? 'Collapse menu' : 'Expand menu'}>
+          {open ? <PanelLeftClose size={18} aria-hidden /> : <PanelLeftOpen size={18} aria-hidden />}<span className="lbl">Collapse</span>
+        </button>
+      </aside>
+      {children}
+    </div>
   );
 }
 

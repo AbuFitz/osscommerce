@@ -1,0 +1,36 @@
+name: CI
+on:
+  push: { branches: [main, staging, 'claude/**'] }
+  pull_request:
+concurrency: { group: ci-${{ github.ref }}, cancel-in-progress: true }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p apps/portal && npx tsc --noEmit -p apps/site
+      - name: Unit tests
+        run: npm test -w @oss-commerce/portal
+      - name: Build portal (demo data, preview only)
+        run: npm run build -w @oss-commerce/portal
+        env: { NEXT_PUBLIC_OSS_DEMO: '1' }
+      - name: Build site
+        run: npm run build -w @oss-commerce/site
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env: { GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+  # Slower, runs on its own so a flaky engine install never blocks the UI checks.
+  tenancy-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci --prefix services/engine
+      - run: npm run proof:isolation --prefix services/engine

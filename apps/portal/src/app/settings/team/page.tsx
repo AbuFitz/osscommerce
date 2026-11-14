@@ -16,7 +16,7 @@ export default async function Team() {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><b>{g.who}</b><span className={`badge ${g.state === 'active' ? 'ok' : 'warn'}`}>{g.state === 'pending' ? 'Needs your approval' : 'Active'}</span></div>
             <div className="muted" style={{ margin: '4px 0 8px' }}>{g.purpose}</div>
             <div className="muted" style={{ fontSize: 12.5 }}>{g.scopes.join(', ')} · {g.write ? 'can make changes' : 'read only'} · until {when(g.expires)}</div>
-            <GrantAction who={g.who} state={g.state === 'pending' ? 'pending' : 'active'} />
+            <GrantAction id={g.id} state={g.state === 'pending' ? 'pending' : 'active'} />
           </div>))}</div>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>OSS only sees your store with your approval. Everything is logged and you can revoke at any time.</p></section>
     </div></>);
