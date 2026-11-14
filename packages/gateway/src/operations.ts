@@ -6,7 +6,7 @@ export const PUBLIC_QUERIES = new Set(['activeChannel', 'product', 'products', '
 export const PRIVATE_QUERIES = new Set(['activeOrder', 'activeCustomer', 'orderByCode', 'eligibleShippingMethods', 'eligiblePaymentMethods', 'nextOrderStates', 'me']);
 export const MUTATIONS = new Set([
   'addItemToOrder', 'adjustOrderLine', 'removeOrderLine', 'removeAllOrderLines', 'applyCouponCode', 'removeCouponCode', 'setCustomerForOrder', 'setOrderShippingAddress', 'setOrderBillingAddress',
-  'setOrderShippingMethod', 'setOrderCustomFields', 'transitionOrderToState', 'addPaymentToOrder',
+  'setOrderShippingMethod', 'setOrderCustomFields', 'transitionOrderToState', 'createPaymentSession', 'addPaymentToOrder',
   'registerCustomerAccount', 'verifyCustomerAccount', 'login', 'logout', 'requestPasswordReset', 'resetPassword', 'updateCustomer', 'updateCustomerPassword', 'requestUpdateCustomerEmailAddress', 'updateCustomerEmailAddress',
   'createCustomerAddress', 'updateCustomerAddress', 'deleteCustomerAddress',
 ]);

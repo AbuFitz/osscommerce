@@ -1,15 +1,22 @@
 import { VendurePlugin, PluginCommonModule, Injector, TransactionalConnection, Order, RequestContext, ID } from '@vendure/core';
+import { OssOutbox } from './outbox-entity.ts';
+import { OutboxService } from './events.ts';
+import { PaymentSessionResolver, shopApiExtensions } from './shop-extension.ts';
 import Stripe from 'stripe';
 import { connectHandler } from './handler.ts';
 import { stripeWebhookMiddleware, WEBHOOK_PATH } from './webhook-route.ts';
 import type { StripePort } from './stripe-port.ts';
 import type { PaymentState, WebhookDeps } from './webhooks.ts';
 
-export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: string; webhookSecret: string; feeBp: number; refundsReturnFee: boolean }
+export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: string; webhookSecret: string; feeBp: number; refundsReturnFee: boolean; storeId: string; publishableKey: string;
+  outbox?: { cellId: string; secret: string; url: string; post(url: string, init: { body: string; headers: Record<string, string> }): Promise<{ status: number }>; intervalMs?: number; onAlert?: (m: string) => void } }
 
 /** Registers the Connect payment handler and mounts the signed webhook route. Order lookups go through Vendure's own connection. */
 @VendurePlugin({
   imports: [PluginCommonModule],
+  entities: [OssOutbox],
+  providers: [OutboxService],
+  shopApiExtensions: { schema: shopApiExtensions, resolvers: [PaymentSessionResolver] },
   configuration: (config) => {
     const o = CellPlugin.options;
     config.paymentOptions.paymentMethodHandlers.push(connectHandler({ stripe: o.stripe, account: o.account, feeBp: o.feeBp, refundsReturnFee: o.refundsReturnFee }));

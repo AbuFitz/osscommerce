@@ -31,5 +31,5 @@ Read against our requirements, it is a good structure and a poor security baseli
 - The gateway is a library with fake adapters under test. The Postgres registry adapter, the HTTP server, and the cell directory are not written.
 - The Vercel adapter is unverified against a live team; endpoint versions must be checked on first use.
 - No OSS console UI for connections yet; the data model and operations exist.
-- Emails are not wired to cell events; nothing sends order confirmations from a real order yet.
+- (Update) Cell events now flow through an outbox to the control plane; see ADR 0005. Email sending itself is still not wired.
 - The two-merchant end-to-end proof in the brief has not been run.

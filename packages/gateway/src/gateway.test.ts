@@ -96,3 +96,7 @@ test('classify: guest-friendly mutations and payment detection', () => {
   assert.equal((classify(READ) as any).cacheable, true);
 });
 test('session wrap/unwrap round trip is storefront-bound', () => { const s = wrap('k'.repeat(40), 'sf_a', 'raw'); assert.equal(unwrap('k'.repeat(40), 'sf_a', s), 'raw'); assert.equal(unwrap('k'.repeat(40), 'sf_b', s), null); assert.equal(unwrap('j'.repeat(40), 'sf_a', s), null); });
+
+test('createPaymentSession is allowed, needs a session, and is not a payment-completing operation', () => {
+  const c: any = classify('mutation { createPaymentSession { clientSecret publishableKey } }'); assert.equal(c.ok, true); assert.equal(c.needsSession, true); assert.equal(c.isPayment, false);
+});
