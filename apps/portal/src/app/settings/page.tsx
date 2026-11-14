@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { CreditCard, Truck, Users, Store, Receipt, ArrowUpRight } from 'lucide-react';
+import { CreditCard, Truck, Users, Store, Receipt, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
 import { Header } from '@/components/ui';
 export const metadata = { title: 'Settings' };
 const items = [
   { href: '/settings/payments', t: 'Payments', d: 'Stripe account, payouts and fees', i: CreditCard, c: 'lime' },
   { href: '/settings/shipping', t: 'Shipping and tax', d: 'Zones, rates and VAT', i: Truck, c: 'blue' },
+  { href: '/settings/preferences', t: 'Preferences', d: 'Alerts, checkout and pausing orders', i: SlidersHorizontal, c: 'blue' },
   { href: '/settings/team', t: 'Team and access', d: 'Members, roles and support access', i: Users, c: 'lilac' },
   { href: '/storefront', t: 'Storefront', d: 'Theme, domain and versions', i: Store, c: 'peach' },
   { href: '/account/billing', t: 'Plan and billing', d: 'Managed in your OSS account', i: Receipt, c: 'lime' },

@@ -6,16 +6,15 @@ import { commerce, accountLink } from './nav-data';
 
 const active = (p: string, h: string) => (h === '/' ? p === '/' : p === h || p.startsWith(h + '/'));
 
-export function Rail({ initials }: { initials: string }) {
+export function Rail({ initials, hidden = [] }: { initials: string; hidden?: string[] }) {
   const p = usePathname();
   const item = (it: { href: string; label: string; icon: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }> }) => (
     <Link key={it.href} href={it.href} data-label={it.label} aria-label={it.label} aria-current={active(p, it.href) ? 'page' : undefined}><it.icon size={19} aria-hidden /></Link>
   );
   return (
     <aside className="rail">
-      <Link className="logo" href="/" aria-label="OSS Commerce home">oss<i>.</i></Link>
       <nav aria-label="Main" style={{ display: 'contents' }}>
-        {commerce.slice(0, 8).map(item)}
+        {commerce.slice(0, 8).filter(c => !hidden.includes(c.href)).map(item)}
         <hr />
         {item(commerce[8])}
         {item(accountLink)}

@@ -11,7 +11,7 @@ export default async function Products() {
   return (<>
     <Header title="Products" eyebrow={`${ps.filter(p => p.status === 'published').length} published · ${ps.filter(p => p.status === 'draft').length} draft`}>
       <button className="btn" type="button">Import CSV</button><button className="btn primary" type="button">Add product</button></Header>
-    <div className="pgrid">{ps.map(p => { const avail = p.onHand - p.allocated; return (
+    {ps.length === 0 ? <div className="w empty"><b style={{ color: 'var(--ink)' }}>No products yet</b><p style={{ margin: '6px 0 0' }}>Add your first product, or import a CSV. You can preview every row before anything is saved.</p></div> : <div className="pgrid">{ps.map(p => { const avail = p.onHand - p.allocated; return (
       <article key={p.id} className="w" style={{ padding: 12 }}>
         <Tile seed={p.sku} label={p.title} />
         <div style={{ padding: '12px 6px 6px' }}>
@@ -23,5 +23,5 @@ export default async function Products() {
           </div>
           <div className="muted" style={{ fontSize: 12.5, marginTop: 8 }}>{p.status === 'published' ? `${avail} available` : 'Not on sale'}</div>
         </div>
-      </article>); })}</div></>);
+      </article>); })}</div>}</>);
 }

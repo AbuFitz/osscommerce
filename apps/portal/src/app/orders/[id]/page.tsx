@@ -5,6 +5,7 @@ import { gateway } from '@/lib/gateway-instance';
 import { money, when } from '@/lib/format';
 import { PayBadge, FulBadge, Avatar } from '@/components/ui';
 import { Tile } from '@/components/art';
+import { FulfilAction, RefundAction } from '@/components/Actions';
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const o = await gateway().order((await params).id);
@@ -25,8 +26,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           <div className={placed ? 'on' : ''}>Placed</div><div className={paid ? 'on' : ''}>{o.payment === 'failed' ? 'Payment failed' : 'Paid'}</div><div className={shipped ? 'on' : ''}>Fulfilled</div>
         </div>
         <div className="acts" style={{ marginTop: 18 }}>
-          {canFulfil && <button className="btn lime" type="button">Mark as fulfilled</button>}
-          {o.payment === 'paid' && <button className="btn ghost" type="button">Refund</button>}
+          {canFulfil && <FulfilAction number={o.number} items={o.lines.map(l => `${l.qty} × ${l.title}`)} />}
+          {(o.payment === 'paid' || o.payment === 'partially_refunded') && <RefundAction number={o.number} totalMinor={o.totalMinor} refundedMinor={o.refundedMinor} feeBp={50} />}
         </div>
       </section>
       {o.payment === 'failed' && <div className="w flat" style={{ marginBottom: 16 }}>Payment failed. No charge was made and nothing needs fulfilling.</div>}

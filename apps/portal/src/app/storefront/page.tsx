@@ -3,6 +3,7 @@ import { gateway } from '@/lib/gateway-instance';
 import { when } from '@/lib/format';
 import { Header } from '@/components/ui';
 import { StillLife } from '@/components/art';
+import { RollbackAction } from '@/components/Actions';
 export const metadata = { title: 'Storefront' };
 const st = { healthy: ['Healthy', 'ok'], building: ['Building', 'info'], failed: ['Deploy failed', 'bad'] } as const;
 
@@ -23,6 +24,6 @@ export default async function Storefront() {
       <section className="w c-7" aria-labelledby="hc"><div className="wh"><h2 id="hc">Health checks</h2></div>
         <ul className="check">{sf.checks.map(c => <li key={c.label}><span className={`tick ${c.ok ? 'on' : ''}`} style={c.ok ? undefined : { borderColor: '#c2410c', color: '#c2410c' }}>{c.ok ? <Check size={12} aria-hidden /> : <X size={12} aria-hidden />}</span><div><span style={{ fontWeight: 550 }}>{c.label}</span><span className="sr">{c.ok ? ' — passing' : ' — failing'}</span><small>{c.detail}</small></div></li>)}</ul></section>
       <section className="w c-5" aria-labelledby="vh"><div className="wh"><h2 id="vh">Versions</h2><History size={16} className="muted" aria-hidden /></div>
-        <div className="rows">{sf.history.map(v => <div key={v.version} className="row"><span className="t"><b>v{v.version}</b><span>{v.note} · {when(v.at)}</span></span>{v.current ? <span className="badge ok">Current</span> : <button className="btn sm" type="button">Roll back</button>}</div>)}</div></section>
+        <div className="rows">{sf.history.map(v => <div key={v.version} className="row"><span className="t"><b>v{v.version}</b><span>{v.note} · {when(v.at)}</span></span>{v.current ? <span className="badge ok">Current</span> : <RollbackAction version={v.version} />}</div>)}</div></section>
     </div></>);
 }

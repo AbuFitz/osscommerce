@@ -1,4 +1,5 @@
 import 'server-only';
+import { cookies } from 'next/headers';
 import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type Customer, type Order, type Product, type Summary } from './gateway';
 import { StoreId, OrganisationId } from '@oss-commerce/contracts';
 
@@ -49,17 +50,29 @@ const mk = (i: number): Order => {
 const ORDERS = Array.from({ length: 24 }, (_, i) => mk(i));
 const CUSTOMERS: Customer[] = names.map((n, i) => ({ id: `c${i}`, name: n, email: `${n.split(' ')[0].toLowerCase()}@example.com`, orders: 1 + (i % 5), spentMinor: 2400 + i * 1850, lastOrder: ORDERS[i].placedAt, marketing: i % 3 !== 0 }));
 
+
+/** Demo-only view switch (cookie set by /demo). Lets reviewers see how the portal adapts: new store, setting up, live. */
+export type DemoState = 'new' | 'setup' | 'live';
+async function state(): Promise<DemoState> {
+  try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
+}
+const ordersFor = (st: DemoState) => (st === 'new' ? [] : ORDERS);
+const productsFor = (st: DemoState) => (st === 'new' ? [] : P);
 export const demoGateway: CommerceGateway = {
   async store() {
-    const done: Record<string, boolean> = { contract_signed: true, payments_enabled: true, domain_verified: false, test_order_passed: false, launch_approved: false };
+    const st = await state();
+    const done: Record<string, boolean> = st === 'live' ? { contract_signed: true, payments_enabled: true, domain_verified: true, test_order_passed: true, launch_approved: true }
+      : st === 'new' ? { contract_signed: true, payments_enabled: false, domain_verified: false, test_order_passed: false, launch_approved: false }
+      : { contract_signed: true, payments_enabled: true, domain_verified: false, test_order_passed: false, launch_approved: false };
     return {
       name: 'Kiln & Thread',
-      store: { storeId: StoreId.parse('st_demo'), organisationId: OrganisationId.parse('org_demo'), cellId: 'cell-demo', hostnames: [{ host: 'kilnandthread.example', verified: false }], region: 'eu-west-london', lifecycle: 'configuring', entitlementVersion: 1, paymentReadiness: 'enabled' },
+      store: { storeId: StoreId.parse('st_demo'), organisationId: OrganisationId.parse('org_demo'), cellId: 'cell-demo', hostnames: [{ host: 'kilnandthread.example', verified: st === 'live' }], region: 'eu-west-london', lifecycle: st === 'live' ? 'live' : 'configuring', entitlementVersion: 1, paymentReadiness: st === 'new' ? 'not_started' : 'enabled' },
       readiness: LAUNCH_GATES.map(g => ({ gate: g, done: done[g], ...GATE_COPY[g] })),
     };
   },
   async summary(): Promise<Summary> {
-    const paid = ORDERS.filter(o => o.payment !== 'failed');
+    const st = await state(); const ALL = ordersFor(st);
+    const paid = ALL.filter(o => o.payment !== 'failed');
     const gross = paid.reduce((s, o) => s + o.totalMinor, 0);
     const refunded = paid.reduce((s, o) => s + o.refundedMinor, 0);
     const day = (n: number) => new Date(Date.parse(AS_OF) - n * 86400_000).toISOString().slice(0, 10);
@@ -71,26 +84,26 @@ export const demoGateway: CommerceGateway = {
     const byProduct = new Map<string, number>();
     for (const o of paid) for (const l of o.lines) byProduct.set(l.title, (byProduct.get(l.title) ?? 0) + l.qty * l.unitMinor);
     const topProducts = [...byProduct].map(([title, netMinor]) => ({ title, netMinor })).sort((a, b) => b.netMinor - a.netMinor);
-    const count = (f: (o: Order) => boolean) => ORDERS.filter(f).length;
+    const count = (f: (o: Order) => boolean) => ALL.filter(f).length;
     return {
-      netMinor: gross - refunded, grossMinor: gross, orders: paid.length, aovMinor: Math.round(gross / paid.length), refundedMinor: refunded,
+      netMinor: gross - refunded, grossMinor: gross, orders: paid.length, aovMinor: paid.length ? Math.round(gross / paid.length) : 0, refundedMinor: refunded,
       toFulfil: count(o => o.state === 'open'), fulfilled: count(o => o.state === 'completed'), paidOrders: paid.length,
-      lowStock: P.filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length, series, topProducts,
+      lowStock: productsFor(st).filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length, series, topProducts,
       statusMix: [{ label: 'Fulfilled', count: count(o => o.state === 'completed') }, { label: 'To fulfil', count: count(o => o.state === 'open') }, { label: 'Cancelled', count: count(o => o.state === 'cancelled') }],
       asOf: AS_OF,
     };
   },
   async orders(q) {
-    let r = ORDERS;
+    let r = ordersFor(await state());
     if (q?.filter === 'unfulfilled') r = r.filter(o => o.state === 'open');
     if (q?.filter === 'attention') r = r.filter(o => o.payment === 'failed' || o.payment === 'disputed');
     if (q?.filter === 'refunded') r = r.filter(o => o.refundedMinor > 0);
     if (q?.q) { const s = q.q.toLowerCase(); r = r.filter(o => `${o.number} ${o.customer} ${o.email}`.toLowerCase().includes(s)); }
     return r;
   },
-  async order(id) { return ORDERS.find(o => o.id === id) ?? null; },
-  async products() { return P; },
-  async customers() { return CUSTOMERS; },
+  async order(id) { return ordersFor(await state()).find(o => o.id === id) ?? null; },
+  async products() { return productsFor(await state()); },
+  async customers() { return (await state()) === 'new' ? [] : CUSTOMERS; },
   async discounts() {
     return [
       { code: 'WELCOME10', kind: 'percent', value: 10, status: 'active', used: 14, limit: 200, window: 'No end date' },

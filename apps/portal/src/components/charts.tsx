@@ -2,14 +2,18 @@ import type { SalesPoint } from '@/lib/gateway';
 import { day, money, moneyShort } from '@/lib/format';
 
 /** Gross (pale) behind net (mid): the gap is refunds. Peak day is emphasised with a label. Data table is the accessible equivalent. */
-export function SalesBars({ series, dark = false }: { series: SalesPoint[]; dark?: boolean }) {
+export function SalesBars({ series, hatch = false }: { series: SalesPoint[]; hatch?: boolean }) {
   const W = 560, H = 190, base = 150, gap = 8, bw = (W - gap * (series.length - 1)) / series.length;
   const max = Math.max(...series.map(s => s.grossMinor), 1);
   const peak = series.reduce((a, b) => (b.netMinor > a.netMinor ? b : a));
   const total = series.reduce((s, p) => s + p.netMinor, 0);
   return (
     <>
-      <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Net sales per day, ${day(series[0].day)} to ${day(series.at(-1)!.day)}. Total ${money(total)}. Best day ${day(peak.day)}, ${money(peak.netMinor)}.`}>
+      <svg className={`chart ${hatch ? 'hatch' : ''}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Net sales per day, ${day(series[0].day)} to ${day(series.at(-1)!.day)}. Total ${money(total)}. Best day ${day(peak.day)}, ${money(peak.netMinor)}.`}>
+        {hatch && <defs>
+          {[['l', 'rgba(60,45,0,.18)'], ['m', 'rgba(60,45,0,.42)'], ['d', 'rgba(35,25,0,.8)']].map(([k, c]) => (
+            <pattern key={k} id={`dots-${k}`} width="4" height="4" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.15" fill={c} /></pattern>))}
+        </defs>}
         {series.map((p, i) => {
           const x = i * (bw + gap), hg = Math.max(6, (p.grossMinor / max) * (base - 34)), hn = Math.max(p.netMinor > 0 ? 6 : 0, (p.netMinor / max) * (base - 34));
           const isPeak = p === peak && p.netMinor > 0;
@@ -62,6 +66,22 @@ export function Donut({ slices, centre, sub }: { slices: { label: string; value:
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeContent: 'center', textAlign: 'center' }}><div className="kpi" style={{ margin: 0, fontSize: 26 }}>{centre}</div><div className="muted" style={{ fontSize: 12 }}>{sub}</div></div>
       </div>
       <ul className="legend">{slices.map((s, i) => <li key={s.label}><i style={{ background: SLICE[i % SLICE.length] }} /><span>{s.label}</span><span className="num">{Math.round((s.value / total) * 100)}%</span></li>)}</ul>
+    </div>
+  );
+}
+
+/** Pie dial: DINEOS-style status gauge for dark widgets. Value is a share of total. */
+export function Dial({ value, total, label, tone }: { value: number; total: number; label: string; tone: string }) {
+  const pct = total ? (value / total) * 100 : 0, r = 12.5, c = 2 * Math.PI * r;
+  return (
+    <div className="dial" role="img" aria-label={`${label}: ${value} of ${total}, ${Math.round(pct)}%`}>
+      <b>{Math.round(pct)}<small>%</small></b>
+      <svg viewBox="0 0 32 32" aria-hidden>
+        <circle cx="16" cy="16" r="15" fill="none" stroke="rgba(255,255,255,.18)" strokeWidth=".6" strokeDasharray="1 2" />
+        <circle cx="16" cy="16" r="11" fill="rgba(255,255,255,.07)" />
+        <circle cx="16" cy="16" r={r / 2} fill="none" stroke={tone} strokeWidth={r} strokeDasharray={`${(pct / 100) * (c / 2)} ${c}`} transform="rotate(-90 16 16)" />
+      </svg>
+      <span>{label} ({value})</span>
     </div>
   );
 }

@@ -1,25 +1,21 @@
-/** Original still-life for hero/tiles. Placeholder for real merchant photography; no third-party imagery. */
+/** Abstract placeholder art: deliberately not a product, so nobody mistakes it for real merchandise. Swap for real photography. */
 export function StillLife() {
   return (
     <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" aria-hidden>
       <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f3e7d3" /><stop offset="1" stopColor="#e2cba8" /></linearGradient>
-        <linearGradient id="mug" x1="0" x2="1"><stop offset="0" stopColor="#f6f1e7" /><stop offset=".6" stopColor="#e6dccb" /><stop offset="1" stopColor="#cbbca2" /></linearGradient>
-        <linearGradient id="bowl" x1="0" x2="1"><stop offset="0" stopColor="#7d9a3f" /><stop offset="1" stopColor="#3f5220" /></linearGradient>
-        <radialGradient id="sun" cx=".25" cy=".1" r=".8"><stop offset="0" stopColor="#fff" stopOpacity=".75" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></radialGradient>
+        <linearGradient id="a-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f1ede0" /><stop offset="1" stopColor="#dfe7c6" /></linearGradient>
+        <linearGradient id="a-arch" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="#5b7a28" /><stop offset="1" stopColor="#2a3a14" /></linearGradient>
+        <linearGradient id="a-blue" x1="0" x2="1"><stop offset="0" stopColor="#dbe9f7" /><stop offset="1" stopColor="#a9c5e6" /></linearGradient>
+        <radialGradient id="a-sun" cx=".2" cy=".05" r=".9"><stop offset="0" stopColor="#fff" stopOpacity=".8" /><stop offset="1" stopColor="#fff" stopOpacity="0" /></radialGradient>
+        <pattern id="a-dots" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.2" fill="#14170f" opacity=".22" /></pattern>
       </defs>
-      <rect width="400" height="300" fill="url(#bg)" />
-      <rect y="214" width="400" height="86" fill="#c9a97a" opacity=".55" />
-      <rect width="400" height="300" fill="url(#sun)" />
-      <ellipse cx="150" cy="236" rx="78" ry="12" fill="#5b4527" opacity=".25" />
-      <ellipse cx="290" cy="240" rx="70" ry="11" fill="#5b4527" opacity=".25" />
-      <path d="M96 140h108v62a54 40 0 0 1-108 0z" fill="url(#mug)" />
-      <path d="M204 156h18a22 22 0 0 1 0 44h-18" fill="none" stroke="#d8cdb8" strokeWidth="13" strokeLinecap="round" />
-      <ellipse cx="150" cy="140" rx="54" ry="11" fill="#7b5c36" />
-      {Array.from({ length: 26 }, (_, i) => <circle key={i} cx={104 + ((i * 37) % 92)} cy={150 + ((i * 53) % 44)} r={1.4} fill="#8a6a45" opacity=".55" />)}
-      <path d="M222 190h136a68 56 0 0 1-136 0z" fill="url(#bowl)" />
-      <ellipse cx="290" cy="190" rx="68" ry="12" fill="#2c3a15" />
-      <ellipse cx="290" cy="188" rx="60" ry="8" fill="#b9d072" opacity=".5" />
+      <rect width="400" height="300" fill="url(#a-bg)" />
+      <path d="M70 300V150a80 80 0 0 1 160 0v150z" fill="url(#a-arch)" />
+      <circle cx="292" cy="96" r="46" fill="#e4f55e" />
+      <path d="M232 300v-70a70 70 0 0 1 140 0v70z" fill="url(#a-blue)" />
+      <rect x="250" y="150" width="108" height="26" rx="13" fill="#e4dcfa" />
+      <rect x="30" y="40" width="64" height="64" rx="32" fill="url(#a-dots)" />
+      <rect width="400" height="300" fill="url(#a-sun)" />
     </svg>
   );
 }
