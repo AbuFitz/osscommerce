@@ -1,0 +1,18 @@
+{
+  "name": "@oss-commerce/engine",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "scripts": {
+    "proof:isolation": "tsx proofs/isolation.proof.ts"
+  },
+  "dependencies": {
+    "@vendure/core": "3.8.2"
+  },
+  "devDependencies": {
+    "@vendure/testing": "3.8.2",
+    "better-sqlite3": "^11.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "~5.8.0"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "oss-commerce",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @oss-commerce/portal",
+    "build": "npm run build -w @oss-commerce/portal",
+    "proof:isolation": "npm run proof:isolation --prefix services/engine"
+  }
+}

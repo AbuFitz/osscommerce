@@ -1,0 +1,36 @@
+{
+  "vendure": "3.8.2",
+  "at": "2026-11-14T19:58:43.295Z",
+  "results": [
+    {
+      "probe": "P1 same email registers at both stores",
+      "verdict": "PASS",
+      "detail": "A=Success B=Success (if B is an error, email is globally unique across tenants)"
+    },
+    {
+      "probe": "P2 store-A password logs into store B",
+      "verdict": "LEAK",
+      "detail": "login result at B using A's password: CurrentUser"
+    },
+    {
+      "probe": "P3 customers are distinct records per store",
+      "verdict": "LEAK",
+      "detail": "A sees customer ids [T_1], B sees [] (identical ids = one shared Customer row)"
+    },
+    {
+      "probe": "P4 merchant-A admin with forged B channel header",
+      "verdict": "PASS",
+      "detail": "denied: You are not currently authorized to perform this action"
+    },
+    {
+      "probe": "P5 global zones/tax visible to merchant admin (must be OSS-only)",
+      "verdict": "LEAK",
+      "detail": "visible zones=1 countries=1 taxRates=1"
+    },
+    {
+      "probe": "P6 merchant-A can enumerate roles of B",
+      "verdict": "PASS",
+      "detail": "roles seen: denied"
+    }
+  ]
+}
