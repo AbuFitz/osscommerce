@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { SITE } from '@/config';
+import { SITE, COMPANY } from '@/config';
 import { LEGAL_DOCS } from '@/content/legal';
 import { Wordmark } from './Wordmark';
 
@@ -14,7 +14,7 @@ export function Footer() {
         <div><h4>Legal</h4><ul>{LEGAL_DOCS.map(d => <li key={d.slug}><Link href={`/legal/${d.slug}`}>{d.short}</Link></li>)}</ul></div>
         <div><h4>Follow</h4><ul>{SITE.social.map(s => <li key={s.href}><a href={s.href} rel="noopener noreferrer">{s.label}</a></li>)}</ul></div>
       </div>
-      <div className="fbase"><span>© {new Date().getFullYear()} OneSimpleSite. All rights reserved.</span><span>No tracking or advertising cookies on this site.</span></div>
+      <div className="fbase"><span>© {new Date().getFullYear()} {COMPANY.legalName}. Registered in {COMPANY.jurisdiction}, no. {COMPANY.companyNumber}. Registered office: {COMPANY.registeredAddress}.</span><span>No tracking or advertising cookies on this site.</span></div>
     </div></footer>
   );
 }

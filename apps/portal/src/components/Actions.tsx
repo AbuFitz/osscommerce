@@ -30,7 +30,7 @@ export function FulfilAction({ orderId, number, items }: { orderId: string; numb
 export function RefundAction({ orderId, number, totalMinor, refundedMinor, feeBp }: { orderId: string; number: number; totalMinor: number; refundedMinor: number; feeBp: number }) {
   const d = useDialog(); const { run, pending } = useRun();
   const left = totalMinor - refundedMinor;
-  const [full, setFull] = useState(true); const [amt, setAmt] = useState(''); const [restock, setRestock] = useState(true); const [fee, setFee] = useState(false); const [reason, setReason] = useState('Customer request');
+  const [full, setFull] = useState(true); const [amt, setAmt] = useState(''); const [restock, setRestock] = useState(true); const [fee, setFee] = useState(true); const [reason, setReason] = useState('Customer request');
   const minor = full ? left : Math.round(parseFloat(amt || '0') * 100);
   const bad = !Number.isFinite(minor) || minor <= 0 || minor > left;
   return (<>
@@ -43,7 +43,7 @@ export function RefundAction({ orderId, number, totalMinor, refundedMinor, feeBp
       {!full && <div className="field"><label htmlFor="ra">Amount (£)</label><input id="ra" inputMode="decimal" value={amt} onChange={e => setAmt(e.target.value)} aria-invalid={bad} aria-describedby="ra-h" /><small id="ra-h" className={bad ? 'err' : 'muted'}>{bad ? `Enter an amount up to ${money(left)}.` : 'Tax and shipping are allocated automatically.'}</small></div>}
       <div className="field"><label htmlFor="rr">Reason</label><select id="rr" value={reason} onChange={e => setReason(e.target.value)}><option>Customer request</option><option>Item damaged</option><option>Out of stock</option><option>Other</option></select></div>
       <label className="check1"><input type="checkbox" checked={restock} onChange={e => setRestock(e.target.checked)} /> Return items to stock</label>
-      <label className="check1"><input type="checkbox" checked={fee} onChange={e => setFee(e.target.checked)} /> Also refund our {(feeBp / 100).toFixed(2)}% platform fee</label>
+      <label className="check1"><input type="checkbox" checked={fee} onChange={e => setFee(e.target.checked)} /> Return our {(feeBp / 100).toFixed(2)}% platform fee on this refund</label>
       <p className="note">Stripe may keep its own processing fee. We show Pending until Stripe confirms the refund, so confirm once.</p>
     </Dialog>
   </>);

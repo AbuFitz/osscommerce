@@ -4,10 +4,20 @@
   "version": "0.1.0",
   "type": "commonjs",
   "scripts": {
-    "proof:isolation": "tsx proofs/isolation.proof.ts"
+    "proof:isolation": "tsx proofs/isolation.proof.ts",
+    "test": "tsx --test src/**/*.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vendure/core": "3.8.2"
+    "@vendure/core": "3.8.2",
+    "@vendure/job-queue-plugin": "3.8.2",
+    "@vendure/harden-plugin": "3.8.2",
+    "@apollo/server": "^5.0.0",
+    "bullmq": "^5.4.2",
+    "ioredis": "^5.3.2",
+    "stripe": "^23.1.0",
+    "zod": "^3.24.0",
+    "@oss-commerce/contracts": "file:../../packages/contracts"
   },
   "devDependencies": {
     "@vendure/testing": "3.8.2",

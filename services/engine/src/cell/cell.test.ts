@@ -1,0 +1,90 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseEnv } from './env.ts';
+import { createPaymentIntentForOrder, verifyPayment, refundPayment, PaymentError } from './connect-payments.ts';
+import { handleConnectEvent, advance, type WebhookDeps, type PaymentState } from './webhooks.ts';
+import type { StripePort, PaymentIntentLite } from './stripe-port.ts';
+
+const good = { APP_ENV: 'staging', STORE_ID: 'store_demo', CELL_ID: 'cell_demo', CHANNEL_TOKEN: 'x'.repeat(20), DATABASE_URL: 'postgres://u:p@h/db', REDIS_URL: 'redis://h:6379', SUPERADMIN_USER: 'ops-admin', SUPERADMIN_PASSWORD: 'long-random-pass', COOKIE_SECRET: 'c'.repeat(40), STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_WEBHOOK_SECRET: 'whsec_abc', STRIPE_CONNECTED_ACCOUNT_ID: 'acct_1', FEE_BP: '50' };
+
+test('env: accepts a safe staging config', () => assert.equal(parseEnv(good).FEE_BP, 50));
+test('env: refuses live keys outside production', () => assert.throws(() => parseEnv({ ...good, STRIPE_SECRET_KEY: 'sk_live_abc' }), /live Stripe key/));
+test('env: production needs a live key', () => assert.throws(() => parseEnv({ ...good, APP_ENV: 'production' }), /live Stripe key/));
+test('env: staging needs Redis so the DB can sleep', () => assert.throws(() => parseEnv({ ...good, REDIS_URL: undefined }), /REDIS_URL/));
+test('env: default superadmin rejected', () => assert.throws(() => parseEnv({ ...good, SUPERADMIN_PASSWORD: 'superadmin' }), /Default superadmin/));
+test('env: demo flag rejected in production', () => assert.throws(() => parseEnv({ ...good, APP_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_a', NEXT_PUBLIC_OSS_DEMO: '1' }), /Demo mode/));
+
+function fakeStripe(over: Partial<PaymentIntentLite> = {}) {
+  const calls: any[] = [];
+  const s: StripePort = {
+    async createPaymentIntent(a, p) { calls.push(['create', a, p]); return { id: 'pi_1', clientSecret: 'cs' }; },
+    async retrievePaymentIntent() { return { id: 'pi_1', status: 'succeeded', amount: 10000, currency: 'gbp', metadata: { orderCode: 'A1' }, application_fee_amount: 50, ...over }; },
+    async createRefund(a, p) { calls.push(['refund', a, p]); return { id: 're_1', status: 'succeeded' }; },
+  };
+  return { s, calls };
+}
+const order = { code: 'A1', id: '1', totalWithTaxMinor: 10000, currency: 'GBP' };
+
+test('payments: charge on the merchant account with our fee computed server-side', async () => {
+  const { s, calls } = fakeStripe();
+  await createPaymentIntentForOrder({ stripe: s, account: 'acct_1', feeBp: 50, refundsReturnFee: true }, order);
+  assert.equal(calls[0][1], 'acct_1'); assert.equal(calls[0][2].applicationFeeAmount, 50); assert.equal(calls[0][2].currency, 'gbp');
+});
+test('payments: rejects tiny totals', async () => {
+  const { s } = fakeStripe();
+  await assert.rejects(createPaymentIntentForOrder({ stripe: s, account: 'a', feeBp: 50, refundsReturnFee: true }, { ...order, totalWithTaxMinor: 10 }), PaymentError);
+});
+test('verify: settled when amount, currency, fee and order all match', async () => {
+  const { s } = fakeStripe();
+  assert.equal((await verifyPayment({ stripe: s, account: 'a', feeBp: 50, refundsReturnFee: true }, order, 'pi_1')).state, 'Settled');
+});
+test('verify: amount mismatch, wrong order and wrong fee are refused', async () => {
+  const d = (o: Partial<PaymentIntentLite>) => verifyPayment({ stripe: fakeStripe(o).s, account: 'a', feeBp: 50, refundsReturnFee: true }, order, 'pi_1');
+  await assert.rejects(d({ amount: 9999 }), /amount/); await assert.rejects(d({ metadata: { orderCode: 'B2' } }), /belong/); await assert.rejects(d({ application_fee_amount: 1 }), /fee/);
+});
+test('refund: returns our fee proportionally by default', async () => {
+  const { s, calls } = fakeStripe();
+  const r = await refundPayment({ stripe: s, account: 'acct_1', feeBp: 50, refundsReturnFee: true }, { paymentIntentId: 'pi_1', chargeMinor: 10000, refundMinor: 5000, refundId: 'r1' });
+  assert.equal(r.feeReturnedMinor, 25); assert.equal(calls[0][2].refundApplicationFee, true); assert.equal(calls[0][2].idempotencyKey, 'refund:r1');
+});
+test('refund: fee kept when the agreement says so', async () => {
+  const { s } = fakeStripe();
+  assert.equal((await refundPayment({ stripe: s, account: 'a', feeBp: 50, refundsReturnFee: false }, { paymentIntentId: 'p', chargeMinor: 10000, refundMinor: 5000, refundId: 'r2' })).feeReturnedMinor, 0);
+});
+
+function deps(state: PaymentState = 'pending') {
+  const seen = new Set<string>(); const log: string[] = []; let st = state;
+  const d: WebhookDeps = {
+    account: 'acct_1',
+    seen: { async markIfNew(a, id) { const k = a + id; if (seen.has(k)) return false; seen.add(k); return true; } },
+    orders: { async byOrderCode(c) { return c === 'A1' ? { code: 'A1', totalWithTaxMinor: 10000, currency: 'GBP', paymentState: st } : null; },
+      async setPaymentState(_c, s) { st = s; log.push('state:' + s); }, async flagForReview(_c, r) { log.push('review:' + r); } },
+    checkout: { async restrict(r) { log.push('restrict:' + r); }, async allow() { log.push('allow'); } },
+  };
+  return { d, log, get st() { return st; } };
+}
+const ev = (type: string, object: any, o: any = {}) => ({ id: 'evt_' + type, type, account: 'acct_1', created: 1, data: { object }, ...o });
+
+test('webhook: other merchant account rejected', async () => assert.equal((await handleConnectEvent(ev('payment_intent.succeeded', {}, { account: 'acct_2' }), deps().d)).status, 400));
+test('webhook: duplicate delivery processed once', async () => {
+  const x = deps(); const e = ev('payment_intent.succeeded', { amount: 10000, currency: 'gbp', metadata: { orderCode: 'A1' } });
+  await handleConnectEvent(e, x.d); const r = await handleConnectEvent(e, x.d);
+  assert.equal(r.note, 'Duplicate ignored'); assert.deepEqual(x.log, ['state:paid']);
+});
+test('webhook: amount mismatch flagged, not paid', async () => {
+  const x = deps(); await handleConnectEvent(ev('payment_intent.succeeded', { amount: 1, currency: 'gbp', metadata: { orderCode: 'A1' } }), x.d);
+  assert.equal(x.st, 'pending'); assert.match(x.log[0], /^review:/);
+});
+test('webhook: late paid never overwrites refunded', async () => {
+  const x = deps('refunded'); await handleConnectEvent(ev('payment_intent.succeeded', { amount: 10000, currency: 'gbp', metadata: { orderCode: 'A1' } }), x.d);
+  assert.equal(x.st, 'refunded'); assert.equal(advance('disputed', 'paid'), 'disputed');
+});
+test('webhook: partial vs full refund', async () => {
+  const a = deps('paid'); await handleConnectEvent(ev('charge.refunded', { amount: 10000, amount_refunded: 2500, metadata: { orderCode: 'A1' } }), a.d); assert.equal(a.st, 'partially_refunded');
+  const b = deps('paid'); await handleConnectEvent(ev('charge.refunded', { amount: 10000, amount_refunded: 10000, metadata: { orderCode: 'A1' } }), b.d); assert.equal(b.st, 'refunded');
+});
+test('webhook: account.updated restricts and re-allows checkout', async () => {
+  const x = deps(); await handleConnectEvent(ev('account.updated', { charges_enabled: false, requirements: { disabled_reason: 'requirements.past_due' } }, { id: 'e1' }), x.d);
+  await handleConnectEvent(ev('account.updated', { charges_enabled: true, requirements: { disabled_reason: null } }, { id: 'e2' }), x.d);
+  assert.deepEqual(x.log, ['restrict:requirements.past_due', 'allow']);
+});

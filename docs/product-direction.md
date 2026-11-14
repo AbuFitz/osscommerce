@@ -57,5 +57,11 @@ Prices, fees, allowances and feature flags live in data, not code. `packages/con
 ## 9. Trust and ownership
 Merchant owns domain, brand, products and customer relationships; payments are in their own Stripe account; data is exportable. Processes still to build: onboarding checklist, data export job, account closure, domain handover, backups with tested restore, service status, support. OSS Manage and the portal are one account: contracts, subscriptions, invoices and support requests link from the portal (integration contract in `docs/manage-integration.md`).
 
-## 10. Open decisions
-Application-fee refund default; abandoned-checkout consent basis; job runner choice and Neon cost; Connect controller configuration and fees; final plan entitlements; Plus commission rate; whether Link is enough as the accelerated option.
+## 10. Decisions and what is still open
+Resolved:
+- Application fee is returned on refunds by default, proportionally (ADR 0002).
+- Abandoned-checkout email needs explicit, separate opt-in (ADR 0002).
+- Plus commission is 0.3%, falling to 0.2% from £100,000 a month; Commerce 0.5% (ADR 0002, `docs/economics`).
+- Job runner is pg-boss in the control plane, BullMQ in cells, validated on Neon (ADR 0003).
+
+Still open: Connect controller configuration and fees (eligibility for Stripe-handled pricing is unverified), final plan entitlements, whether Link is enough as the accelerated option, solicitor review of the legal drafts.

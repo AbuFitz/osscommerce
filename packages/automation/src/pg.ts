@@ -1,0 +1,41 @@
+import type { Pool, PoolClient } from 'pg';
+import type { DomainEvent, EventType, Rule, Run } from './model.ts';
+import type { EventStore, RuleStore, RunStore, SuppressionPort } from './ports.ts';
+import { createHash } from 'node:crypto';
+
+/** Postgres adapters for the control-plane tables. Every query runs inside a transaction that first sets app.store_id,
+ *  so row-level security confines it to one merchant. Connect as a non-owner role (e.g. oss_runtime members), never the table owner. */
+export class PgStores {
+  constructor(private pool: Pool) {}
+  private async tx<T>(storeId: string, fn: (c: PoolClient) => Promise<T>): Promise<T> {
+    const c = await this.pool.connect();
+    try { await c.query('begin'); await c.query("select set_config('app.store_id', $1, true)", [storeId]); const r = await fn(c); await c.query('commit'); return r; }
+    catch (e) { await c.query('rollback').catch(() => {}); throw e; } finally { c.release(); }
+  }
+  private toRule = (r: Record<string, any>): Rule => ({ id: r.id, storeId: r.store_id, name: r.name, version: r.version, trigger: r.trigger, kind: r.kind, enabled: r.enabled, delaySeconds: r.delay_seconds, conditions: r.conditions, guard: r.guard ?? undefined, throttle: r.throttle ?? undefined, action: r.action });
+  private toRun = (r: Record<string, any>): Run => ({ id: r.id, storeId: r.store_id, ruleId: r.rule_id, ruleVersion: r.rule_version, kind: r.kind, eventId: r.event_id, eventType: r.event_type, idempotencyKey: r.idempotency_key, recipient: r.recipient ?? undefined, runAt: new Date(r.run_at).toISOString(), status: r.status, skipReason: r.skip_reason ?? undefined, attempts: r.attempts, messageId: r.message_id ?? undefined, createdAt: new Date(r.created_at).toISOString(), updatedAt: new Date(r.updated_at).toISOString() });
+
+  rules: RuleStore = {
+    rulesFor: (storeId, trigger: EventType) => this.tx(storeId, async c => (await c.query('select * from cp.automation_rules where store_id = $1 and trigger = $2', [storeId, trigger])).rows.map(this.toRule)),
+    rule: (storeId, id) => this.tx(storeId, async c => { const r = (await c.query('select * from cp.automation_rules where store_id = $1 and id = $2', [storeId, id])).rows[0]; return r ? this.toRule(r) : null; }),
+  };
+  events: EventStore = {
+    save: (e: DomainEvent) => this.tx(e.storeId, async c => { await c.query('insert into cp.automation_events (store_id, id, type, payload) values ($1,$2,$3,$4) on conflict do nothing', [e.storeId, e.id, e.type, e]); }),
+    get: (storeId, id) => this.tx(storeId, async c => { const r = (await c.query('select payload from cp.automation_events where store_id = $1 and id = $2', [storeId, id])).rows[0]; return r ? (r.payload as DomainEvent) : null; }),
+  };
+  runs: RunStore = {
+    insertIfAbsent: (r: Run) => this.tx(r.storeId, async c => (await c.query(
+      `insert into cp.automation_runs (id, store_id, rule_id, rule_version, event_id, event_type, kind, idempotency_key, recipient, recipient_hash, run_at, status, attempts, created_at, updated_at)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) on conflict (idempotency_key) do nothing returning id`,
+      [r.id, r.storeId, r.ruleId, r.ruleVersion, r.eventId, r.eventType, r.kind, r.idempotencyKey, r.recipient ?? null, r.recipient ? createHash('sha256').update(r.recipient.toLowerCase()).digest('hex') : null, r.runAt, r.status, JSON.stringify(r.attempts), r.createdAt, r.updatedAt])).rowCount === 1),
+    get: (storeId, id) => this.tx(storeId, async c => { const r = (await c.query('select * from cp.automation_runs where store_id = $1 and id = $2', [storeId, id])).rows[0]; return r ? this.toRun(r) : null; }),
+    update: (storeId, id, p) => this.tx(storeId, async c => { await c.query('update cp.automation_runs set status = coalesce($3, status), skip_reason = $4, message_id = coalesce($5, message_id), attempts = coalesce($6::jsonb, attempts), updated_at = coalesce($7, now()) where store_id = $1 and id = $2',
+      [storeId, id, p.status ?? null, p.skipReason ?? null, p.messageId ?? null, p.attempts ? JSON.stringify(p.attempts) : null, p.updatedAt ?? null]); }),
+    countSent: (storeId, ruleId, recipient, since) => this.tx(storeId, async c => Number((await c.query("select count(*) n from cp.automation_runs where store_id = $1 and rule_id = $2 and recipient = $3 and status = 'sent' and updated_at >= $4", [storeId, ruleId, recipient, since])).rows[0].n)),
+    countNonEssentialThisMonth: (storeId, month) => this.tx(storeId, async c => Number((await c.query("select count(*) n from cp.automation_runs where store_id = $1 and kind <> 'transactional' and status = 'sent' and updated_at >= $2::date", [storeId, `${month}-01`])).rows[0].n)),
+  };
+  suppression: SuppressionPort & { add(storeId: string, email: string, reason: 'bounce' | 'complaint' | 'unsubscribe' | 'manual'): Promise<void> } = {
+    isSuppressed: (storeId, email) => this.tx(storeId, async c => (await c.query('select 1 from cp.email_suppressions where store_id = $1 and email = $2', [storeId, email.toLowerCase()])).rowCount === 1),
+    add: (storeId, email, reason) => this.tx(storeId, async c => { await c.query('insert into cp.email_suppressions (store_id, email, reason) values ($1,$2,$3) on conflict do nothing', [storeId, email.toLowerCase(), reason]); }),
+  };
+}

@@ -16,14 +16,18 @@ export const SITE = {
   ],
 } as const;
 
-/** Not published anywhere we could read. Legal pages show a visible draft notice until these are supplied and reviewed. */
+/** From the public Companies House record (company 17552675, checked 14 Nov 2026). Company-level details only.
+ *  Still unknown: VAT number and ICO registration. As a data controller the company should hold an ICO data protection fee registration; confirm. */
 export const COMPANY = {
-  legalName: null as string | null,
-  companyNumber: null as string | null,
-  registeredAddress: null as string | null,
+  legalName: 'OneSimpleSite Ltd' as string | null,
+  companyNumber: '17552675' as string | null,
+  registeredAddress: '3f Foxhill, Watford, United Kingdom, WD24 6SX' as string | null,
+  jurisdiction: 'England and Wales',
   vatNumber: null as string | null,
   icoRegistration: null as string | null,
 };
+/** Required identity fields. VAT and ICO numbers are shown only when present. */
+export const COMPANY_REQUIRED = ['legalName', 'companyNumber', 'registeredAddress'] as const;
 export const LEGAL = {
   /** Set NEXT_PUBLIC_LEGAL_REVIEWED=1 only after a solicitor has approved the documents. */
   reviewed: process.env.NEXT_PUBLIC_LEGAL_REVIEWED === '1',
@@ -43,7 +47,7 @@ export const PRICING = {
       includes: ['The OSS Commerce platform and merchant dashboard', 'Managed hosting and infrastructure', 'Security, monitoring and platform maintenance', 'Payment infrastructure and essential integrations', 'Defined technical support', 'Standard platform updates and improvements'],
     },
     {
-      id: 'plus', name: 'OSS Commerce Plus', monthly: 99, buildFrom: 1499, commissionBp: null, commissionNote: 'A reduced rate for higher-volume shops, agreed in your order form',
+      id: 'plus', name: 'OSS Commerce Plus', monthly: 99, buildFrom: 1499, commissionBp: 30 as number | null, commissionNote: 'of captured payments, falling to 0.2% above £100,000 a month. Payment processing fees are separate',
       includes: ['Everything in OSS Commerce', 'Advanced reporting', 'Additional automation', 'Higher usage allowances', 'More advanced team and inventory features', 'Priority technical support'],
     },
   ],

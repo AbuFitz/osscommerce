@@ -24,6 +24,8 @@ export type Entitlements = z.infer<typeof Entitlements>;
 /** Transaction commission on captured payments, in basis points, optionally tiered by monthly volume (minor units, GBP). */
 export const FeeSchedule = z.object({
   baseBp: z.number().int().min(0).max(1000),
+  /** Decision (ADR 0002): when a payment is refunded, our fee on the refunded part is returned to the merchant. Default true. */
+  refundsReturnFee: z.boolean().default(true),
   tiers: z.array(z.object({ fromMonthlyVolumeMinor: z.number().int().nonnegative(), bp: z.number().int().min(0).max(1000) })).default([]),
 });
 export type FeeSchedule = z.infer<typeof FeeSchedule>;
@@ -44,9 +46,9 @@ export const MerchantAgreement = z.object({
 export type MerchantAgreement = z.infer<typeof MerchantAgreement>;
 
 export const SEED_PLANS: Plan[] = [
-  { id: 'commerce', name: 'OSS Commerce', monthlyMinor: 4999, buildFromMinor: 69900, status: 'provisional', fee: { baseBp: 50, tiers: [] },
+  { id: 'commerce', name: 'OSS Commerce', monthlyMinor: 4999, buildFromMinor: 69900, status: 'provisional', fee: { baseBp: 50, refundsReturnFee: true, tiers: [] },
     entitlements: { features: ['automation_basic'], limits: { staffSeats: 3, stockLocations: 1, automationRunsPerMonth: 1000, emailsPerMonth: 5000, storageGb: 10 } } },
-  { id: 'plus', name: 'OSS Commerce Plus', monthlyMinor: 9900, buildFromMinor: 149900, status: 'provisional', fee: { baseBp: 40, tiers: [{ fromMonthlyVolumeMinor: 5_000_000, bp: 30 }] },
+  { id: 'plus', name: 'OSS Commerce Plus', monthlyMinor: 9900, buildFromMinor: 149900, status: 'provisional', fee: { baseBp: 30, refundsReturnFee: true, tiers: [{ fromMonthlyVolumeMinor: 10_000_000, bp: 20 }] },
     entitlements: { features: ['automation_basic', 'automation_advanced', 'advanced_reporting', 'priority_support', 'custom_checkout_branding'], limits: { staffSeats: 10, stockLocations: 5, automationRunsPerMonth: 20000, emailsPerMonth: 50000, storageGb: 50 } } },
 ];
 
@@ -65,3 +67,10 @@ export function resolveAgreement(plan: Plan, a: MerchantAgreement, at: Date, mon
 }
 export const hasFeature = (e: Entitlements, f: FeatureKey) => e.features.includes(f);
 export const feeMinor = (amountMinor: number, feeBp: number) => Math.round((amountMinor * feeBp) / 10000);
+
+/** Fee returned on a refund. Proportional to the refunded share of the original charge, matching Stripe's own behaviour when the application fee is refunded. */
+export function feeRefundMinor(args: { chargeMinor: number; feeMinor: number; refundMinor: number; refundsReturnFee: boolean }) {
+  if (!args.refundsReturnFee || args.chargeMinor <= 0) return 0;
+  const r = Math.min(Math.max(args.refundMinor, 0), args.chargeMinor);
+  return Math.floor((args.feeMinor * r) / args.chargeMinor);
+}
