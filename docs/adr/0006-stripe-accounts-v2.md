@@ -1,0 +1,29 @@
+# ADR 0006: Stripe Accounts v2, onboarding, and what the sandbox actually told us
+
+Status: accepted. Findings below are from real calls against the OSS Commerce Stripe **sandbox** (API `2026-10-28.endive`, SDK 23.1.0), not from documentation alone.
+
+## Decisions
+- **New accounts use Accounts v2** with: `dashboard: full`, `defaults.responsibilities.fees_collector: stripe`, `losses_collector: stripe`, `configuration.merchant.capabilities.card_payments.requested`, `identity.country: gb`, `defaults.currency: gbp`. `buildAccountRequest()` is the single source; a test pins every value.
+- **Versions are pinned.** SDK `23.1.0` exactly; API `2026-10-28.endive` (a named release, not `.preview`). A test fails if the SDK's default API version stops matching ours.
+- **Readiness is mapped per API version** (`readinessOf({kind})`). v2 has no `charges_enabled`, `payouts_enabled` or `details_submitted`: card payments and payouts are capability statuses under `configuration.merchant`, and requirements are `entries`. A v2 response where `configuration.merchant` was not requested through `include` is **`unknown`, never "disabled"**, and an `unknown` read never overwrites a known state. Reads always send `include=[configuration.merchant, requirements, defaults]`.
+- **Accounts connected through OAuth are v1** (Stripe: OAuth requires v1). `liveConnect.retrieveAccount` tries v2 and falls back to v1, and the v1 mapper is kept.
+- **Events**: v1 `account.updated` and v2 thin events (`v2.core.account[requirements].updated`, `[configuration.merchant].capability_status_updated`, `[identity].updated`, `[defaults].updated`, `[future_requirements].updated`) all resolve to "refresh this account". The refresh re-reads Stripe and stores the result only if that read started later than the stored one, so out-of-order delivery cannot move the state backwards. Payment events (`payment_intent.*`, `charge.*`) are unchanged v1 Connect events carrying `account`; creating a v2 account does not change how payments or their webhooks work, and PaymentIntents are still created with `Stripe-Account`.
+- **Checkout follows Stripe**: the control plane pushes `allowed`/`blocked` to the cell through a signed, sequence-ordered call; the cell refuses `createPaymentSession` while blocked. Existing orders, refunds and reporting are unaffected.
+- **Organisation model** (migration 0007): organisation -> legal entity -> payment account -> store. One store per payment account is a single named constraint (`one_store_per_payment_account`). A SQL test lifts it inside a transaction to show multi-store sharing needs nothing else, and that a store still cannot bind to another organisation's account (trigger) and still sees only its own binding (RLS). Lifting it in production is a deliberate, separately tested change.
+
+## Findings from the sandbox (each one is something the documentation did not make clear)
+1. **The agreed configuration is accepted.** Full dashboard + Stripe fees + Stripe losses + `card_payments`, UK/GBP, created two accounts (company: 44 requirement entries; individual: 12). The `capability_not_available_for_loss_collector` error did not occur for `card_payments`.
+2. **Platform-collected requirements are not available to us.** v1 `type: custom` is refused ("platform as the losses collector... use Accounts v2... `losses_collector: stripe`") and `requirements_collector` is not a settable field. Combined with `tos_acceptance_on_behalf_not_allowed`, every connected account must be onboarded by the merchant in Stripe's own UI. There is no programmatic shortcut, in sandbox or live.
+3. **Stripe's hosted onboarding sits behind a captcha**, so end-to-end sandbox onboarding needs a person once per account. We do not automate it.
+4. **The v2 account link has no `configurations` field** (`use_case.account_onboarding` takes only `refresh_url`, `return_url`, `collection_options`). The first draft of the adapter used one; the real API rejected it and it is fixed. This is the kind of error only a real call finds.
+5. **Hosted onboarding prefilled the contact email** we sent at creation, as intended.
+6. Stripe's UK page lists "Collect additional fees on each transaction" as **Included** under "Stripe handles pricing". Eligibility and "account losses covered by Stripe" still need written confirmation from Stripe before live payments.
+7. The platform account is a GB test-mode account named "OneSimpleSite - Commerce sandbox".
+
+## Sandbox proof status (`services/engine/proofs/stripe-sandbox.proof.ts`, results in `docs/payments/sandbox-proof-results.json`)
+- **Run and passing against Stripe:** platform is GB/GBP/test (S1); both connected accounts exist with exactly the agreed configuration and our readiness mapper reads them correctly as `action_required` with the right number of outstanding items (S2A, S2B).
+- **Written but NOT yet run (blocked on onboarding):** domain registration, direct charge with application fee on the correct account, 3D Secure, decline and duplicate submission, partial and full refunds with fee return, ledger import and reconciliation from real balance transactions, webhook signature, replay and ordering, dispute card, cross-account isolation. These may contain mistakes that only running them will reveal.
+- **To unblock:** open the two single-use links the script prints, complete hosted onboarding using Stripe's test data for each, then re-run the script. It refuses to run in live mode.
+
+## Not built
+Embedded Connect.js components in the portal (hosted onboarding is the working path; the Account Session server logic and allowlist exist); a real HTTP gateway for the portal; MFA step-up beyond the existing owner and recent-password rule; existing-account connection via OAuth (v1) and the case where Stripe refuses to connect an account already attached to another platform; payout-failure and dispute screens; ledger persistence jobs.

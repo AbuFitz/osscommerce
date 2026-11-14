@@ -2,8 +2,8 @@ import Stripe from 'stripe';
 import type { PaymentIntentLite, StripePort } from './stripe-port.ts';
 
 /** Real adapter. Direct charges: every call carries the connected account, so the charge lives on the merchant's own Stripe account. */
-export function liveStripe(secretKey: string): StripePort {
-  const s = new Stripe(secretKey);
+export function liveStripe(secretKey: string, override?: Stripe): StripePort {
+  const s = override ?? new Stripe(secretKey);
   return {
     async createPaymentIntent(account, p) {
       const pi = await s.paymentIntents.create({ amount: p.amount, currency: p.currency, application_fee_amount: p.applicationFeeAmount, metadata: p.metadata, automatic_payment_methods: { enabled: true } }, { stripeAccount: account, idempotencyKey: p.idempotencyKey });

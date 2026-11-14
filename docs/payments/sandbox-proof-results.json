@@ -1,0 +1,70 @@
+{
+  "ranAt": "2026-11-14T23:18:15.662Z",
+  "apiVersion": "2026-10-28.endive",
+  "accounts": {
+    "A": "acct_1Ubq1qCGgbUZTtVt",
+    "B": "acct_1Ubq2LCGgbezn3zq"
+  },
+  "results": [
+    {
+      "stage": "S1 platform is a UK test-mode Connect platform",
+      "verdict": "PASS",
+      "detail": "platform acct_1UbpyUCGgbDrMPcj, test mode, GBP"
+    },
+    {
+      "stage": "S2A connected account A exists with the agreed v2 configuration",
+      "verdict": "PASS",
+      "detail": "acct_1Ubq1qCGgbUZTtVt: dashboard=full fees=stripe losses=stripe gbp; readiness=action_required, checkout=false, 44 requirement(s) awaiting the merchant"
+    },
+    {
+      "stage": "S2B connected account B exists with the agreed v2 configuration",
+      "verdict": "PASS",
+      "detail": "acct_1Ubq2LCGgbezn3zq: dashboard=full fees=stripe losses=stripe gbp; readiness=action_required, checkout=false, 12 requirement(s) awaiting the merchant"
+    },
+    {
+      "stage": "S3 checkout domain registration",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S4 direct charge with application fee on the right account",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S5 SCA (3D Secure) requires action, then succeeds",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S6 declined card and duplicate submission",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S7 refunds: full and partial with explicit fee return",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S8 ledger import and reconciliation from real balance transactions",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S9 verified webhook events and out-of-order handling",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S10 dispute and negative paths",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    },
+    {
+      "stage": "S11 cross-account isolation",
+      "verdict": "BLOCKED",
+      "detail": "needs a human to finish Stripe's hosted onboarding for both accounts (Stripe puts a captcha in front of it). Fresh single-use links are printed above; re-run afterwards."
+    }
+  ]
+}

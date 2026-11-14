@@ -219,3 +219,5 @@ table.t tbody tr:hover td{background:rgba(30,40,15,.075)}
 @media (max-width:900px){.hero.solo{grid-template-columns:1fr}.stat{max-width:none;justify-self:stretch;display:flex;align-items:baseline;gap:12px;padding:14px 18px}.stat b{font-size:30px}.stat span{margin:0}}
 
 @media (min-width:901px) and (max-height:980px){.frame[data-rail=closed] .rail a,.frame[data-rail=closed] .rail-toggle{width:40px;height:40px}.frame[data-rail=closed] .rail-grp{gap:6px}.frame[data-rail=closed] .rail{gap:6px;padding-top:14px}.frame[data-rail=open] .rail a,.frame[data-rail=open] .rail-toggle{height:38px}.frame[data-rail=open] .rail-cap{padding-top:2px}}
+
+.steps.four{grid-template-columns:repeat(4,1fr)}.steps.four li{min-width:0}@media(max-width:700px){.steps.four{grid-template-columns:1fr 1fr}}

@@ -27,6 +27,10 @@ export interface StorefrontView {
 export interface Member { name: string; email: string; role: 'owner' | 'manager' | 'fulfilment' | 'analyst'; status: 'active' | 'invited' }
 export interface AccessGrant { id: string; who: string; purpose: string; scopes: string[]; write: boolean; state: 'pending' | 'active' | 'expired' | 'revoked'; expires: string }
 export interface ShippingZone { name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
+/** What the merchant sees about payments. Derived by the platform from Stripe's account state (see packages/payments readiness); the portal never interprets raw Stripe fields. */
+export type PaymentSetupStatus = 'unknown' | 'not_started' | 'onboarding' | 'pending_verification' | 'action_required' | 'restricted' | 'enabled' | 'payouts_paused' | 'disconnected';
+export interface PaymentSetup { status: PaymentSetupStatus; headline: string; detail: string; chargesEnabled: boolean; payoutsEnabled: boolean; checkoutAllowed: boolean; actionRequired: boolean; due: string[]; pending: string[]; deadline?: string; account?: string; applicationFeeBp: number; payoutSchedule?: string }
+export type StartPaymentSetup = { ok: true; mode: 'hosted'; url: string } | { ok: false; message: string };
 export interface ShippingTax { zones: ShippingZone[]; pricesIncludeTax: boolean; vatRegistered: boolean | null; payments: { account: string; capabilities: { label: string; ok: boolean }[]; applicationFeeBp: number; payouts: string } }
 export interface Readiness { gate: LaunchGate; label: string; done: boolean; hint: string }
 export interface StoreView { name: string; store: StoreRecord; readiness: Readiness[] }
@@ -52,6 +56,8 @@ export interface CommerceGateway {
   storefront(): Promise<StorefrontView>;
   team(): Promise<{ members: Member[]; grants: AccessGrant[] }>;
   shippingTax(): Promise<ShippingTax>;
+  paymentSetup(preview?: string): Promise<PaymentSetup>;
+  startPaymentSetup(): Promise<StartPaymentSetup>;
   content(): Promise<ContentView>;
   legalPages(): Promise<LegalPage[]>;
   automations(): Promise<{ rules: Automation[]; runs: AutomationRun[]; runsLimit: number }>;

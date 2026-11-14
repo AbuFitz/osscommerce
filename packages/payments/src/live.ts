@@ -18,7 +18,7 @@ export function liveConnect(secretKey: string, stripeOverride?: Stripe): Connect
     },
     /** Hosted onboarding, used as the fallback when embedded components are unavailable. */
     async createAccountLink({ account, returnUrl, refreshUrl }) {
-      const r = await (s as any).v2.core.accountLinks.create({ account, use_case: { type: 'account_onboarding', account_onboarding: { configurations: ['merchant'], refresh_url: refreshUrl, return_url: returnUrl } } });
+      const r = await (s as any).v2.core.accountLinks.create({ account, use_case: { type: 'account_onboarding', account_onboarding: { refresh_url: refreshUrl, return_url: returnUrl } } });
       return { url: r.url as string };
     },
     /** v2 first; an account that is not a v2 account (connected through OAuth) answers with a specific error and is read as v1. */

@@ -1,6 +1,6 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type Customer, type Order, type Product, type Summary } from './gateway';
+import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId } from '@oss-commerce/contracts';
 
 /**
@@ -144,6 +144,22 @@ export const demoGateway: CommerceGateway = {
       ],
     };
   },
+  /** Demo only: every state the real platform can report, selectable with ?state= so each can be reviewed. */
+  async paymentSetup(preview?: string): Promise<PaymentSetup> {
+    const base = { applicationFeeBp: 50, account: 'acct_••••3F2A', payoutSchedule: 'Weekly, Fridays', chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [] as string[], pending: [] as string[] };
+    const states: Record<string, PaymentSetup> = {
+      not_started: { ...base, account: undefined, status: 'not_started', headline: 'Set up payments', detail: 'Connect your bank account so customers can pay and you get paid directly.' },
+      onboarding: { ...base, status: 'onboarding', headline: 'Finish setting up payments', detail: 'A few details are still needed before customers can pay.', actionRequired: true, due: ['Business address', 'Bank account for payouts', 'Accept Stripe terms'] },
+      pending_verification: { ...base, status: 'pending_verification', headline: 'Stripe is verifying your details', detail: 'Checkout turns on as soon as verification completes.', pending: ['Identity check'] },
+      action_required: { ...base, status: 'action_required', headline: 'Action needed soon', detail: 'Provide the missing details before the deadline to avoid interruption.', chargesEnabled: true, payoutsEnabled: true, checkoutAllowed: true, actionRequired: true, due: ['Business tax ID'], deadline: '2026-12-01T00:00:00.000Z' },
+      restricted: { ...base, status: 'restricted', headline: 'Payments are not available', detail: 'Stripe has limited this account. Contact support so we can help with next steps.', actionRequired: true },
+      payouts_paused: { ...base, status: 'payouts_paused', headline: 'Payouts are paused', detail: 'Customers can pay, but payouts to your bank are on hold. Check your bank details.', chargesEnabled: true, checkoutAllowed: true, actionRequired: true, due: ['Confirm bank account'] },
+      disconnected: { ...base, status: 'disconnected', headline: 'Stripe is disconnected', detail: 'Checkout is paused. Past orders and refunds stay available. Reconnect to take payments again.', actionRequired: true },
+      enabled: { ...base, status: 'enabled', headline: 'Payments are on', detail: 'Customers can pay and payouts go to your bank.', chargesEnabled: true, payoutsEnabled: true, checkoutAllowed: true },
+    };
+    return states[preview ?? 'enabled'] ?? states.enabled;
+  },
+  async startPaymentSetup(): Promise<StartPaymentSetup> { return { ok: false, message: 'Stripe onboarding opens here once the store is connected to the live platform. This is a demo.' }; },
   async shippingTax() {
     return {
       zones: [

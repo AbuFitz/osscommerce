@@ -21,3 +21,5 @@ export async function setAutomation(id: string, on: boolean) { return run(() => 
 export async function createServiceRequest(kind: ServiceRequest['kind'], title: string, detail: string) { return run(() => gateway().createServiceRequest(kind, title, detail), ['/support']); }
 export async function decideQuote(id: string, approve: boolean) { return run(() => gateway().decideQuote(id, approve), ['/support']); }
 export async function saveEmailSettings(brand: Partial<EmailSettings['brand']>, n: Record<string, boolean>) { return run(() => gateway().saveEmailSettings(brand, n), ['/settings/emails']); }
+
+export async function startPaymentSetup() { return gateway().startPaymentSetup(); }
