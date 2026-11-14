@@ -1,0 +1,35 @@
+# ADR 0004: Storefront connectivity, SDK and shared checkout
+
+Status: accepted for the foundations built so far; checkout UI and typed operations are not built yet (see Gaps)
+
+## Evidence: what the upstream starter is, read from its code
+`vendurehq/nextjs-starter-vendure` (MIT, Next.js 16). It is **source-distributed**: you copy it and own every file; upstream changes arrive through a documented, agent-assisted upgrade workflow (`.vendure/storefront.json`, `upgrade:prepare`), not through a versioned package. Layout: `app/` thin routes, `features/` vertical capabilities with enforced boundaries, `platform/` Vendure/i18n/revalidation, `site/` store-specific composition, `components/ui` primitives. Features: accounts, addresses, orders, search and facets, cart, multi-step checkout, locale and currency, a tag-based `/api/revalidate` route.
+
+Read against our requirements, it is a good structure and a poor security baseline for a shared engine:
+- `platform/vendure/api.ts` falls back to `__default_channel__` when no channel token is set. On a shared engine that silently serves the wrong merchant.
+- The auth token is stored with `cookies().set(name, token)` and no options: not `httpOnly`, not `secure`, no `sameSite`, and it is Vendure's raw bearer token.
+- Revalidation is one shared bearer secret compared with `!==`; no timestamp, no replay protection, no ordering.
+- No timeout, no retry policy, errors are plain `Error`.
+- The payment step lists configured payment methods and posts `addPaymentToOrder` with arbitrary metadata. There is no Stripe Payment Element and no Connect handling.
+
+## Decisions
+1. **Adopt the structure, not the code.** New storefronts follow the starter's `app / features / platform / site` split and its colocated-operations rule. We do not fork it wholesale, because its platform layer is the part we must replace. We keep its managed-upgrade idea for the reference storefront.
+2. **A versioned package for everything security-critical, source for everything visual.** `@oss-commerce/storefront-sdk` (config, transport, cache tags, signed revalidation, content manifest) is a package so fixes ship by version bump to every storefront. Visual composition stays in each merchant's own source, which keeps complete design freedom.
+3. **A gateway is the only door to a cell** (`packages/gateway`). A storefront authenticates with a server-only secret. The gateway resolves storefront -> store -> cell -> channel from the registry and sends the platform-chosen channel token upstream; client `vendure-token`, `authorization`, cookie and forwarding headers are dropped. There is no default channel anywhere: unknown credential is 401, missing cell is 503. The Admin API is not reachable (operations are an allowlist; introspection and unknown fields are refused).
+4. **Shopper sessions are storefront-bound.** The session returned to a storefront is `v1.<storefrontId>.<token>.<hmac>`; a session or cart from merchant A's storefront is rejected at merchant B's. The storefront keeps it in an HttpOnly, Secure, SameSite=Lax cookie set by a same-origin server route (backend-for-frontend), never readable from browser script.
+5. **Environments cannot cross.** A non-production storefront may reach only a test-mode cell and a production storefront only a live cell (`live_orders` is a generated column of `env`). A preview cannot place a real order or reach production data. Cells already refuse live Stripe keys outside production (ADR 0002 and `parseEnv`).
+6. **Registry separates storefronts from stores** (`cp.storefronts`, hosts, credentials, deployments, provisioning steps; migration 0004). Many storefronts per store; one live production storefront per store (unique partial index). Credentials are stored as SHA-256 hashes of 256-bit random values, with expiry, revocation and a prefix for identification, resolved only through `cp.resolve_storefront` (security definer, fails closed). The runtime role cannot read the credentials table.
+7. **Provisioning is a resumable ledger** (`packages/provisioning`): project, credentials and environment, domain, domain verification. A retry skips finished steps and adopts what a half-finished step already created. Secrets exist only in memory inside one step and are written to Vercel as `sensitive` variables; they never enter the ledger, audit log, return value or an error. A retry after secrets may have been lost rotates them rather than trying to recover them.
+8. **Revalidation is signed, tenant-qualified and ordered.** Tags are `<store>:<kind>[:<id>]`; private data (cart, order, customer, session) has no tag and is never cached. Events carry an id (dedupe), a sequence (a late older event is ignored), a timestamp (5-minute window) and an HMAC; the receiver rejects tags of another store.
+9. **Checkout runs on the merchant's own domain**, using a shared package, rather than redirecting to a central OSS domain. Reasons: no cross-site redirect for the buyer, session continuity, per-merchant branding, and Stripe's Payment Element runs in an iframe so card data never touches our code. It requires per-merchant Apple Pay domain registration on the connected account (Payment Method Domains) and `loadStripe(publishableKey, { stripeAccount })`.
+10. **Content: our own structured manifest, not another CMS.** Each storefront declares editable entries and fields (text, restricted rich text, image with alt, link, select, product and collection references, lists). The portal renders editors from it; the storefront validates published content against it. Unknown keys, unsafe links and markup, and missing alt text are rejected. Manifest changes are classified breaking or additive so a redesign cannot silently invalidate published content. Payload and Sanity were studied; adding either would add a second datastore, auth and hosting surface per merchant for a field set that Zod can express.
+11. **Vercel: one project per storefront.** Checked limits: Pro and Enterprise have unlimited projects (Hobby 200); 1000 environment variables per environment per project, 64 KB total; domains per project effectively unlimited on Pro. Secret variables are write-only after save and redacted in build logs. The token used for automation must be scoped to the one team.
+
+## Gaps (honest list)
+- Typed operations: GraphQL Code Generator (client preset) over the gateway's allowlisted schema is chosen but not built; the SDK transport currently takes query strings.
+- `@oss/checkout` UI (address, delivery, Stripe Payment Element, Express Checkout, 3DS, retries), headless components, and a reference storefront are not built.
+- The gateway is a library with fake adapters under test. The Postgres registry adapter, the HTTP server, and the cell directory are not written.
+- The Vercel adapter is unverified against a live team; endpoint versions must be checked on first use.
+- No OSS console UI for connections yet; the data model and operations exist.
+- Emails are not wired to cell events; nothing sends order confirmations from a real order yet.
+- The two-merchant end-to-end proof in the brief has not been run.

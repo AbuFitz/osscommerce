@@ -53,3 +53,25 @@ jobs:
         with: { node-version: 22 }
       - run: npm ci --prefix services/engine
       - run: npm run typecheck --prefix services/engine && npm test --prefix services/engine
+  storefront-layer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: test }
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck -w @oss-commerce/storefront-sdk && npm run typecheck -w @oss-commerce/gateway && npm run typecheck -w @oss-commerce/provisioning
+      - run: npm test -w @oss-commerce/storefront-sdk && npm test -w @oss-commerce/gateway && npm test -w @oss-commerce/provisioning
+      - name: Control-plane migrations and registry tests
+        env: { PGPASSWORD: test }
+        run: |
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -q -c 'create database cp_test'
+          for f in infra/control-plane/migrations/*.sql; do psql -h localhost -U postgres -d cp_test -v ON_ERROR_STOP=1 -q -f "$f"; done
+          psql -h localhost -U postgres -d cp_test -v ON_ERROR_STOP=1 -q -f infra/control-plane/tests/storefronts.test.sql
