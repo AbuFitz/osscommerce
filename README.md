@@ -4,7 +4,7 @@ Managed commerce for independent businesses. Research is in `research/`; decisio
 
 | Path | What it is | Status |
 |---|---|---|
-| `apps/portal` | Merchant portal (Next.js 15). Overview, Orders, Order detail, Products, Inventory, Customers, Settings. Desktop sidebar, mobile tab bar. | Builds; verified at 1440 and 390 px. **Runs on labelled demo data** behind `CommerceGateway`. |
+| `apps/portal` | Merchant portal (Next.js 15). Overview, Orders, Order detail, Products, Inventory, Customers, Discounts, Analytics, Storefront, Settings (Payments, Shipping and tax, Team and access). Floating glass frame with icon rail on desktop; floating tab bar on mobile. | Builds; verified at 1440 and 390 px. **Runs on labelled demo data** behind `CommerceGateway`. |
 | `packages/contracts` | Zod schemas and role/operation model shared with OSS Manage. | Typed, not yet consumed by a service |
 | `services/engine` | Vendure 3.8.2 (GPL, isolated service). Holds the isolation proof. | Proof runs; cell config not built |
 | `infra/control-plane` | Postgres control plane on Neon (dev). | Migration applied and probed |

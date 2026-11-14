@@ -15,8 +15,19 @@ export interface Order {
 }
 export interface Product { id: string; title: string; status: 'draft' | 'published' | 'archived'; sku: string; priceMinor: number; onHand: number; allocated: number; threshold: number; variants: number }
 export interface Customer { id: string; name: string; email: string; orders: number; spentMinor: number; lastOrder: string; marketing: boolean }
-export interface SalesPoint { day: string; netMinor: number }
-export interface Summary { netMinor: number; orders: number; aovMinor: number; refundedMinor: number; toFulfil: number; lowStock: number; series: SalesPoint[]; asOf: string }
+export interface SalesPoint { day: string; netMinor: number; grossMinor: number }
+export interface Summary { netMinor: number; grossMinor: number; orders: number; aovMinor: number; refundedMinor: number; toFulfil: number; lowStock: number; fulfilled: number; paidOrders: number; series: SalesPoint[]; topProducts: { title: string; netMinor: number }[]; statusMix: { label: string; count: number }[]; asOf: string }
+export interface Discount { code: string; kind: 'percent' | 'fixed' | 'shipping'; value: number; status: 'active' | 'scheduled' | 'expired'; used: number; limit?: number; window: string; minSpendMinor?: number }
+export interface StorefrontView {
+  theme: { name: string; version: string; deployedAt: string; state: 'healthy' | 'building' | 'failed' };
+  previewUrl: string; liveUrl: string | null;
+  checks: { label: string; ok: boolean; detail: string }[];
+  history: { version: string; at: string; note: string; current: boolean }[];
+}
+export interface Member { name: string; email: string; role: 'owner' | 'manager' | 'fulfilment' | 'analyst'; status: 'active' | 'invited' }
+export interface AccessGrant { id: string; who: string; purpose: string; scopes: string[]; write: boolean; state: 'pending' | 'active' | 'expired' | 'revoked'; expires: string }
+export interface ShippingZone { name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
+export interface ShippingTax { zones: ShippingZone[]; pricesIncludeTax: boolean; vatRegistered: boolean | null; payments: { account: string; capabilities: { label: string; ok: boolean }[]; applicationFeeBp: number; payouts: string } }
 export interface Readiness { gate: LaunchGate; label: string; done: boolean; hint: string }
 export interface StoreView { name: string; store: StoreRecord; readiness: Readiness[] }
 
@@ -28,6 +39,10 @@ export interface CommerceGateway {
   order(id: string): Promise<Order | null>;
   products(): Promise<Product[]>;
   customers(): Promise<Customer[]>;
+  discounts(): Promise<Discount[]>;
+  storefront(): Promise<StorefrontView>;
+  team(): Promise<{ members: Member[]; grants: AccessGrant[] }>;
+  shippingTax(): Promise<ShippingTax>;
 }
 
 export const GATE_COPY: Record<LaunchGate, { label: string; hint: string }> = {

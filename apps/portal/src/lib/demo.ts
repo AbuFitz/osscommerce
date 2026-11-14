@@ -64,12 +64,20 @@ export const demoGateway: CommerceGateway = {
     const refunded = paid.reduce((s, o) => s + o.refundedMinor, 0);
     const day = (n: number) => new Date(Date.parse(AS_OF) - n * 86400_000).toISOString().slice(0, 10);
     const series = Array.from({ length: 14 }, (_, k) => {
-      const d = day(13 - k);
-      return { day: d, netMinor: paid.filter(o => o.placedAt.slice(0, 10) === d).reduce((s, o) => s + o.totalMinor - o.refundedMinor, 0) };
+      const d = day(13 - k); const os = paid.filter(o => o.placedAt.slice(0, 10) === d);
+      const g = os.reduce((s, o) => s + o.totalMinor, 0);
+      return { day: d, grossMinor: g, netMinor: g - os.reduce((s, o) => s + o.refundedMinor, 0) };
     });
+    const byProduct = new Map<string, number>();
+    for (const o of paid) for (const l of o.lines) byProduct.set(l.title, (byProduct.get(l.title) ?? 0) + l.qty * l.unitMinor);
+    const topProducts = [...byProduct].map(([title, netMinor]) => ({ title, netMinor })).sort((a, b) => b.netMinor - a.netMinor);
+    const count = (f: (o: Order) => boolean) => ORDERS.filter(f).length;
     return {
-      netMinor: gross - refunded, orders: paid.length, aovMinor: Math.round(gross / paid.length), refundedMinor: refunded,
-      toFulfil: ORDERS.filter(o => o.state === 'open').length, lowStock: P.filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length, series, asOf: AS_OF,
+      netMinor: gross - refunded, grossMinor: gross, orders: paid.length, aovMinor: Math.round(gross / paid.length), refundedMinor: refunded,
+      toFulfil: count(o => o.state === 'open'), fulfilled: count(o => o.state === 'completed'), paidOrders: paid.length,
+      lowStock: P.filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length, series, topProducts,
+      statusMix: [{ label: 'Fulfilled', count: count(o => o.state === 'completed') }, { label: 'To fulfil', count: count(o => o.state === 'open') }, { label: 'Cancelled', count: count(o => o.state === 'cancelled') }],
+      asOf: AS_OF,
     };
   },
   async orders(q) {
@@ -83,4 +91,52 @@ export const demoGateway: CommerceGateway = {
   async order(id) { return ORDERS.find(o => o.id === id) ?? null; },
   async products() { return P; },
   async customers() { return CUSTOMERS; },
+  async discounts() {
+    return [
+      { code: 'WELCOME10', kind: 'percent', value: 10, status: 'active', used: 14, limit: 200, window: 'No end date' },
+      { code: 'FREESHIP50', kind: 'shipping', value: 0, status: 'active', used: 31, window: 'Until 31 Dec', minSpendMinor: 5000 },
+      { code: 'BLACKFRIDAY', kind: 'percent', value: 20, status: 'scheduled', used: 0, limit: 500, window: '27–30 Nov' },
+      { code: 'SUMMER5', kind: 'fixed', value: 500, status: 'expired', used: 88, limit: 100, window: 'Ended 31 Aug' },
+    ];
+  },
+  async storefront() {
+    return {
+      theme: { name: 'Kiln', version: '1.4.2', deployedAt: '2026-11-12T16:20:00Z', state: 'healthy' as const },
+      previewUrl: 'https://preview.kilnandthread.example', liveUrl: null,
+      checks: [
+        { label: 'Checkout reachable', ok: true, detail: 'Tested 2 min ago' },
+        { label: 'Product feed in sync', ok: true, detail: '7 products · last sync 2 min ago' },
+        { label: 'Domain and SSL', ok: false, detail: 'DNS record not found yet' },
+        { label: 'Legal pages', ok: true, detail: 'Terms, privacy and returns present' },
+      ],
+      history: [
+        { version: '1.4.2', at: '2026-11-12T16:20:00Z', note: 'Updated product page spacing', current: true },
+        { version: '1.4.1', at: '2026-11-09T11:05:00Z', note: 'Added size guide section', current: false },
+        { version: '1.4.0', at: '2026-11-02T09:40:00Z', note: 'New collection layout', current: false },
+      ],
+    };
+  },
+  async team() {
+    return {
+      members: [
+        { name: 'Maya Okafor', email: 'maya@example.com', role: 'owner' as const, status: 'active' as const },
+        { name: 'Tom Hendry', email: 'tom@example.com', role: 'fulfilment' as const, status: 'active' as const },
+        { name: 'Priya Nair', email: 'priya@example.com', role: 'analyst' as const, status: 'invited' as const },
+      ],
+      grants: [
+        { id: 'g1', who: 'OSS Support', purpose: 'Ticket 2041: checkout page error', scopes: ['Read orders'], write: false, state: 'pending' as const, expires: '2026-11-14T12:00:00Z' },
+        { id: 'g2', who: 'OSS Engineering', purpose: 'Domain verification', scopes: ['Read settings'], write: false, state: 'active' as const, expires: '2026-11-15T09:00:00Z' },
+      ],
+    };
+  },
+  async shippingTax() {
+    return {
+      zones: [
+        { name: 'United Kingdom', regions: 'England, Scotland, Wales, Northern Ireland', rates: [{ label: 'Standard, 2–4 days', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Next day', priceMinor: 795 }] },
+        { name: 'Highlands and Islands', regions: 'IV, KW, HS, ZE, PA20–80', rates: [{ label: 'Standard, 3–6 days', priceMinor: 895 }] },
+      ],
+      pricesIncludeTax: true, vatRegistered: null,
+      payments: { account: 'acct_••••3F2A', capabilities: [{ label: 'Card payments', ok: true }, { label: 'Payouts', ok: true }, { label: 'Identity verification', ok: true }], applicationFeeBp: 50, payouts: 'Weekly, Fridays' },
+    };
+  },
 };
