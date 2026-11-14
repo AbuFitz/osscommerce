@@ -88,3 +88,22 @@ test('webhook: account.updated restricts and re-allows checkout', async () => {
   await handleConnectEvent(ev('account.updated', { charges_enabled: true, requirements: { disabled_reason: null } }, { id: 'e2' }), x.d);
   assert.deepEqual(x.log, ['restrict:requirements.past_due', 'allow']);
 });
+
+import { stripeWebhookMiddleware } from './webhook-route.ts';
+import Stripe from 'stripe';
+import http from 'node:http';
+import express from 'express';
+
+test('webhook route: bad signature 400, valid signed event 200 and applied once', async () => {
+  const stripe = new Stripe('sk_test_x'); const secret = 'whsec_test'; const x = deps();
+  const app = express(); app.use('/webhooks/stripe', stripeWebhookMiddleware({ stripe, secret, deps: x.d }));
+  const srv = http.createServer(app); await new Promise<void>(r => srv.listen(0, r)); const port = (srv.address() as any).port;
+  const body = JSON.stringify({ id: 'evt_w1', object: 'event', type: 'payment_intent.succeeded', account: 'acct_1', created: 1, data: { object: { amount: 10000, currency: 'gbp', metadata: { orderCode: 'A1' } } } });
+  const post = (sig: string) => fetch(`http://127.0.0.1:${port}/webhooks/stripe`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': sig }, body });
+  try {
+    assert.equal((await post('t=1,v1=bad')).status, 400);
+    const sig = stripe.webhooks.generateTestHeaderString({ payload: body, secret });
+    assert.equal((await post(sig)).status, 200); assert.equal((await post(sig)).status, 200);
+    assert.deepEqual(x.log, ['state:paid']);
+  } finally { srv.close(); }
+});
