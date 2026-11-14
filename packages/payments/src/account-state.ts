@@ -5,7 +5,7 @@ export interface StripeAccountLite {
   requirements?: { currently_due?: string[]; eventually_due?: string[]; past_due?: string[]; pending_verification?: string[]; disabled_reason?: string | null; current_deadline?: number | null; errors?: { code: string; requirement: string; reason: string }[] };
   capabilities?: Record<string, 'active' | 'inactive' | 'pending' | 'unrequested' | string>;
 }
-export type PaymentStatus = 'not_started' | 'onboarding' | 'pending_verification' | 'action_required' | 'restricted' | 'enabled' | 'payouts_paused' | 'disconnected';
+export type PaymentStatus = 'unknown' | 'not_started' | 'onboarding' | 'pending_verification' | 'action_required' | 'restricted' | 'enabled' | 'payouts_paused' | 'disconnected';
 export interface PaymentReadiness {
   status: PaymentStatus; chargesEnabled: boolean; payoutsEnabled: boolean; checkoutAllowed: boolean;
   headline: string; detail: string; actionRequired: boolean; deadline?: string; due: string[]; pending: string[];

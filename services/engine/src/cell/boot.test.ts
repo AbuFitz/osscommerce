@@ -6,7 +6,7 @@ import { createTestEnvironment, testConfig, SqljsInitializer, registerInitialize
 import { parse } from 'graphql';
 import Stripe from 'stripe';
 import { feeMinor } from '@oss-commerce/contracts';
-import { CellPlugin } from './plugin.ts';
+import { CellPlugin, MemGate } from './plugin.ts';
 import { OutboxService } from './events.ts';
 import { sign } from './outbox.ts';
 import type { StripePort, PaymentIntentLite } from './stripe-port.ts';
@@ -23,9 +23,10 @@ const stripe: StripePort = {
 };
 const delivered: { body: string; sig: string }[] = [];
 const deps: any = { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } };
+const gate = new MemGate(); const CONTROL = 'c'.repeat(43);
 const config = mergeConfig(testConfig, {
   authOptions: { requireVerification: false, tokenMethod: 'bearer', superadminCredentials: { identifier: 'ops', password: 'long-random-pass' } },
-  plugins: [CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk_test_x',
+  plugins: [CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk_test_x', checkoutGate: gate, controlSecret: CONTROL,
     outbox: { cellId: 'cell_a', secret: 's'.repeat(43), url: 'https://cp/ingest', intervalMs: 3_600_000, post: async (_u, i) => { delivered.push({ body: i.body, sig: i.headers['oss-signature'] }); return { status: 200 }; } } }, deps)],
 });
 const { server, adminClient, shopClient } = createTestEnvironment(config);
@@ -80,4 +81,14 @@ test('sweep recovers an event lost between commit and subscriber', async () => {
   const svc = server.app.get(OutboxService); const conn = server.app.get(TransactionalConnection);
   await conn.rawConnection.query('delete from oss_outbox'); assert.equal((await svc.outbox.due(Date.now(), 10)).length, 0);
   const added = await svc.sweep(); assert.ok(added >= 1); assert.ok((await svc.outbox.due(Date.now(), 10)).some(r => r.event.type === 'order.paid')); assert.equal(await svc.sweep(), 0, 'idempotent');
+});
+
+const control = (body: object, sig?: string | null) => { const b = JSON.stringify(body); return fetch(`http://localhost:${testConfig.apiOptions.port}/control/checkout`, { method: 'POST', headers: { 'content-type': 'application/json', ...(sig === null ? {} : { 'oss-signature': sig ?? sign(CONTROL, b) }) }, body: b }); };
+test('control plane can block and re-allow checkout; unsigned, forged and out-of-order calls cannot', async () => {
+  await toArrangingPayment('gate@example.com');
+  assert.equal((await control({ allowed: false, sequence: 1 }, null)).status, 401); assert.equal((await control({ allowed: false, sequence: 1 }, sign('x'.repeat(43), '{}'))).status, 401); assert.equal(gate.allowed, true);
+  assert.equal((await control({ allowed: false, reason: 'requirements.past_due', sequence: 5 })).status, 200); assert.equal(gate.allowed, false);
+  await assert.rejects(shopClient.query(g(`mutation{ createPaymentSession{ clientSecret } }`)), /temporarily unavailable/);
+  assert.equal((await (await control({ allowed: true, sequence: 4 })).json()).stale, true); assert.equal(gate.allowed, false, 'an older allow does not undo a newer block');
+  assert.equal((await control({ allowed: true, sequence: 6 })).status, 200); assert.ok((await shopClient.query(g(`mutation{ createPaymentSession{ clientSecret } }`))).createPaymentSession.clientSecret);
 });

@@ -17,7 +17,10 @@ export class PaymentSessionResolver {
   constructor(@Inject(ActiveOrderService) private active: ActiveOrderService, @Inject(OrderService) private orders: OrderService) {}
   @Transaction() @Mutation() @Allow(Permission.Public)
   async createPaymentSession(@Ctx() ctx: RequestContext) {
-    const o = CellPlugin.options; const active = await this.active.getActiveOrder(ctx, undefined);
+    const o = CellPlugin.options;
+    const gate = o.checkoutGate ? await o.checkoutGate.get() : { allowed: true };
+    if (!gate.allowed) throw new PaymentError('Checkout is temporarily unavailable for this store.');
+    const active = await this.active.getActiveOrder(ctx, undefined);
     if (!active) throw new PaymentError('There is no active order.');
     const order = await this.orders.findOne(ctx, active.id);      // full order with lines and shipping, scoped to the caller's own active order
     if (!order) throw new PaymentError('There is no active order.');

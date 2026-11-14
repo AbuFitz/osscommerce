@@ -1,5 +1,6 @@
 /** What OSS decided about the connected-account model (ADR 0005). Expressed as data so it is reviewed, tested and applied uniformly. */
 export const ACCOUNT_MODEL = {
+  accountsApi: 'v2',                      // new accounts use Accounts v2; accounts connected through OAuth are v1 and are read through the v1 mapper
   charge: 'direct',                       // PaymentIntent is created on the merchant's account; the merchant is merchant of record
   feesPaidBy: 'account',                  // Stripe collects processing fees from the merchant; no OSS processing-fee exposure
   lossesBy: 'stripe',                     // Stripe is responsible for negative balances; confirm eligibility in writing before launch
@@ -15,10 +16,10 @@ export type Component = typeof ALLOWED_COMPONENTS[number];
 export const SENSITIVE: ReadonlySet<Component> = new Set(['account_management', 'account_onboarding']);
 
 export interface ConnectPort {
-  createAccount(p: { storeId: string; email?: string; country: 'GB'; businessUrl?: string; idempotencyKey: string }): Promise<{ id: string }>;
+  createAccount(p: import('./accounts.ts').NewMerchantAccount): Promise<{ id: string }>;
   createAccountSession(p: { account: string; components: Component[] }): Promise<{ clientSecret: string; expiresAt: number }>;
   createAccountLink(p: { account: string; returnUrl: string; refreshUrl: string }): Promise<{ url: string }>;
-  retrieveAccount(account: string): Promise<import('./account-state.ts').StripeAccountLite>;
+  retrieveAccount(account: string): Promise<import('./v2.ts').RetrievedAccount>;
   registerPaymentMethodDomain(account: string, domain: string): Promise<{ id: string; enabled: boolean; applePay: boolean; googlePay: boolean; link: boolean }>;
 }
 export interface AccountRegistry {
@@ -32,10 +33,10 @@ export class Forbidden extends Error {}
 const STEP_UP_SECONDS = 600;
 
 /** Creates (or reuses) the merchant's connected account. One store, one account: a retry never creates a second one. */
-export async function ensureAccount(d: { connect: ConnectPort; reg: AccountRegistry }, c: Caller, p: { email?: string; businessUrl?: string }): Promise<{ account: string; created: boolean }> {
+export async function ensureAccount(d: { connect: ConnectPort; reg: AccountRegistry }, c: Caller, p: { email?: string; businessUrl?: string; businessName: string; entityType?: 'company' | 'individual' }): Promise<{ account: string; created: boolean }> {
   if (c.role !== 'owner') throw new Forbidden('Only the store owner can set up payments.');
   const existing = await d.reg.accountFor(c.storeId); if (existing) return { account: existing, created: false };
-  const a = await d.connect.createAccount({ storeId: c.storeId, email: p.email, country: 'GB', businessUrl: p.businessUrl, idempotencyKey: `acct:${c.storeId}` });
+  const a = await d.connect.createAccount({ storeId: c.storeId, email: p.email, businessName: p.businessName, entityType: p.entityType ?? 'company', businessUrl: p.businessUrl, idempotencyKey: `acct:${c.storeId}` });
   await d.reg.bind(c.storeId, a.id); await d.reg.audit({ storeId: c.storeId, actor: c.userId, action: 'payments.account_created' });
   return { account: a.id, created: true };
 }

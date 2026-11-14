@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /** Cell -> control plane events. Written to the cell's own outbox in the same database as the order, then delivered at-least-once.
  *  Delivery is signed per cell; the control plane de-duplicates on event id, so retrying is always safe. Critical emails therefore
@@ -8,6 +8,11 @@ export interface OutboxRow { event: OutboxEvent; attempts: number; nextAt: numbe
 export interface OutboxStore { add(e: OutboxEvent): Promise<void>; due(now: number, limit: number): Promise<OutboxRow[]>; markDelivered(ids: string[], now: number): Promise<void>; markFailed(ids: string[], nextAt: number): Promise<void> }
 
 export const sign = (secret: string, body: string, now = Math.floor(Date.now() / 1000)) => `t=${now},v1=${createHmac('sha256', secret).update(`${now}.${body}`).digest('hex')}`;
+/** Same format as the platform's signer. Used to authenticate control-plane calls into the cell. */
+export function verify(secret: string, body: string, header: string | null | undefined, now = Math.floor(Date.now() / 1000)): boolean {
+  const m = /^t=(\d{1,12}),v1=([0-9a-f]{64})$/.exec(header ?? ''); if (!m || Math.abs(now - Number(m[1])) > 300) return false;
+  const want = createHmac('sha256', secret).update(`${m[1]}.${body}`).digest(), got = Buffer.from(m[2], 'hex'); return got.length === want.length && timingSafeEqual(got, want);
+}
 const BACKOFF = [30, 120, 600, 3600, 21600];      // seconds; after the last, keep retrying every 6 hours and raise an alert (see deadLetterAfter)
 
 /** Vendure order state -> domain event. Only states that matter to the buyer or merchant produce an event. */
