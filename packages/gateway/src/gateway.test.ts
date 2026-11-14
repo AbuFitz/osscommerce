@@ -23,8 +23,8 @@ function world(over: { cells?: any; registry?: any } = {}) {
     upstream: { post: async (url, init) => {
       calls.push({ url, headers: init.headers, body: init.body });
       const key = `${init.headers['vendure-token']}|${init.headers.authorization ?? 'new'}`;
-      if (!init.headers.authorization) { const tok = `raw-${++n}`; carts.set(`${init.headers['vendure-token']}|Bearer ${tok}`, 1); return { status: 200, headers: { 'vendure-auth-token': tok }, body: '{"data":{"ok":1}}' }; }
-      return carts.has(key) ? { status: 200, headers: {}, body: '{"data":{"activeOrder":{"id":"1"}}}' } : { status: 200, headers: {}, body: '{"data":{"activeOrder":null}}' };
+      if (!init.headers.authorization) { const tok = `raw-${++n}`; carts.set(`${init.headers['vendure-token']}|Bearer ${tok}`, 1); return { status: 200, headers: { 'vendure-auth-token': tok } as Record<string, string>, body: '{"data":{"ok":1}}' }; }
+      return carts.has(key) ? { status: 200, headers: {}, body: '{"data":{"activeOrder":{"id":"1"}}}' } : { status: 200, headers: {} as Record<string, string>, body: '{"data":{"activeOrder":null}}' };
     } },
   });
   return { g, calls, audit };

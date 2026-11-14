@@ -99,3 +99,5 @@ test('platform-built event verifies end to end at the storefront', async () => {
   const { d, hit } = revDeps(); const r = buildRevalidationRequest(d.secret, { eventId: 'evt-abcdef01', storeId: 'store_a', storefrontId: 'sf_a', sequence: 1, tags: tagsFor('store_a', { type: 'content.published', entry: 'home' }) });
   const out = await handleRevalidation(d, r.body, r.headers['oss-signature']); assert.equal(out.status, 200); assert.deepEqual(hit, ['store_a:content:home']);
 });
+
+test('signing vector is shared with the cell dispatcher', () => assert.equal(sign('k'.repeat(40), '{"a":1}', 1700000000), 't=1700000000,v1=65bc88d8b5a50339be3468ec13d7cadb91095faf49ecf51063403f667356507d'));

@@ -1,4 +1,22 @@
-{ "name": "@oss-commerce/gateway", "version": "0.1.0", "private": true, "type": "module", "main": "src/index.ts", "types": "src/index.ts",
-  "scripts": { "test": "tsx --test src/*.test.ts", "typecheck": "tsc --noEmit" },
-  "dependencies": { "graphql": "^16.9.0" },
-  "devDependencies": { "@types/node": "^22.0.0", "tsx": "^4.19.0", "typescript": "~5.8.0" } }
+{
+ "name": "@oss-commerce/gateway",
+ "version": "0.1.0",
+ "private": true,
+ "type": "module",
+ "main": "src/index.ts",
+ "types": "src/index.ts",
+ "scripts": {
+  "test": "tsx --test src/*.test.ts",
+  "typecheck": "tsc --noEmit"
+ },
+ "dependencies": {
+  "graphql": "^16.9.0",
+  "pg": "^8.13.0"
+ },
+ "devDependencies": {
+  "@types/node": "^22.0.0",
+  "tsx": "^4.19.0",
+  "typescript": "~5.8.0",
+  "@types/pg": "^8.11.0"
+ }
+}

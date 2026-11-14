@@ -107,3 +107,27 @@ test('webhook route: bad signature 400, valid signed event 200 and applied once'
     assert.deepEqual(x.log, ['state:paid']);
   } finally { srv.close(); }
 });
+
+import { MemOutbox, flush, fromOrderState, sign as cellSign } from './outbox.ts';
+const ord = { id: '1', code: 'A1', totalWithTax: 7495, currencyCode: 'GBP', customer: { emailAddress: 'maya@example.com', firstName: 'Maya' } };
+test('outbox: only buyer/merchant-relevant states become events; id is stable and unique per transition', () => {
+  assert.equal(fromOrderState('store_a', ord, 'AddingItems', '1'), null);
+  const e = fromOrderState('store_a', ord, 'PaymentSettled', '7')!; assert.equal(e.type, 'order.paid'); assert.equal(e.storeId, 'store_a'); assert.equal(e.data.totalMinor, 7495);
+  assert.equal(e.id, fromOrderState('store_a', ord, 'PaymentSettled', '7')!.id); assert.notEqual(e.id, fromOrderState('store_a', ord, 'Shipped', '8')!.id);
+});
+test('signing format matches the control plane (shared vector)', () => assert.equal(cellSign('k'.repeat(40), '{"a":1}', 1700000000), 't=1700000000,v1=65bc88d8b5a50339be3468ec13d7cadb91095faf49ecf51063403f667356507d'));
+test('dispatcher: delivered on 2xx; the same event added twice is one row; nothing re-sent after delivery', async () => {
+  const s = new MemOutbox(); const e = fromOrderState('store_a', ord, 'PaymentSettled', '1')!; await s.add(e); await s.add(e); const posts: any[] = [];
+  const d = { store: s, cellId: 'cell_a', secret: 's'.repeat(43), url: 'https://cp/ingest', post: async (_u: string, i: any) => { posts.push(i); return { status: 200 }; }, now: () => 1_000_000 };
+  assert.deepEqual(await flush(d), { sent: 1, failed: 0 }); assert.deepEqual(await flush(d), { sent: 0, failed: 0 }); assert.equal(posts.length, 1); assert.match(posts[0].headers['oss-signature'], /^t=\d+,v1=[0-9a-f]{64}$/);
+});
+test('dispatcher: outage backs off exponentially, keeps the event, and succeeds when the control plane returns', async () => {
+  const s = new MemOutbox(); await s.add(fromOrderState('store_a', ord, 'PaymentSettled', '1')!); let t = 1_000_000, up = false; const alerts: string[] = [];
+  const d = { store: s, cellId: 'cell_a', secret: 's'.repeat(43), url: 'u', post: async () => { if (!up) throw new Error('down'); return { status: 200 }; }, now: () => t, onAlert: (m: string) => alerts.push(m), deadLetterAfter: 3 };
+  await flush(d); assert.equal((await flush(d)).sent, 0, 'not due yet: backoff'); t += 31_000; await flush(d); t += 121_000; await flush(d);
+  assert.ok(alerts.length >= 1, 'long outage alerts'); up = true; t += 700_000; assert.equal((await flush(d)).sent, 1);
+});
+test('dispatcher: a 401 raises an alert (bad credential) and keeps the events', async () => {
+  const s = new MemOutbox(); await s.add(fromOrderState('store_a', ord, 'PaymentSettled', '1')!); const alerts: string[] = [];
+  await flush({ store: s, cellId: 'c', secret: 's'.repeat(43), url: 'u', post: async () => ({ status: 401 }), now: () => 5, onAlert: m => alerts.push(m) }); assert.equal(alerts.length, 1); assert.equal([...s.rows.values()][0].deliveredAt, undefined);
+});
