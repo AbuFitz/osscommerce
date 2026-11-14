@@ -1,92 +1,125 @@
 import Link from 'next/link';
-import { ArrowRight, Bell, Check, CreditCard, LayoutTemplate, ShieldCheck, Store } from 'lucide-react';
-import { BrowserFrame, PhoneFrame } from '@/components/Frames';
-import { Tour } from '@/components/Tour';
-import { Concept } from '@/components/Concepts';
-import { Faq } from '@/components/Faq';
+import { ArrowRight } from 'lucide-react';
+import { HeroScene } from '@/components/HeroScene';
+import { Stage } from '@/components/Stage';
+import { OrdersReel, ContentReel, CheckoutReel } from '@/components/Reels';
+import { PricingTable, FeeExample } from '@/components/Pricing';
 import { StartButton } from '@/components/Start';
-import { PRICING, SITE } from '@/config';
+import { WidgetStage } from '@/components/WidgetStage';
+import { Reveal } from '@/components/Reveal';
 
-const QS = [
-  { q: 'Do you add a fee on every sale, on top of card fees?', a: `Yes, and we say so up front: a platform fee set out in your order form (${(PRICING.platformFeeBp / 100).toFixed(1)}% in the pilot), plus a flat monthly fee. Card fees are charged by Stripe to your own account, not by us.` },
-  { q: 'Who holds the money?', a: 'Stripe pays you directly. Customers pay your Stripe account and we never hold your balance or your customers\' payments.' },
-  { q: 'Who owns the domain, customer list and storefront?', a: 'You do. The domain and customer list are yours throughout. The storefront design and code are yours once the build is paid for, as set out in your quotation.' },
-  { q: 'Can I leave and take everything with me?', a: 'Yes. You get an export of products, orders and customers, help moving your domain, and no notice-period games. Ending is 30 days\' notice.' },
-  { q: 'Who do I speak to when something goes wrong?', a: 'A small UK team that built your shop. Support hours and response targets are written into your order form, so you know what to expect before you sign.' },
-  { q: 'Can you move my existing Shopify or IONOS shop?', a: 'We can rebuild it and import your products. Migrations are quoted individually and never done without your say-so.' },
+const WE = ['Storefront design and build', 'Hosting, security and monitoring', 'Payment set-up with Stripe', 'Updates and platform maintenance', 'Technical support'];
+const YOU = ['Products, stock and pricing', 'Orders, shipping and refunds', 'Content, pages and legal policies', 'Discounts, emails and automations', 'Your team and their access'];
+const TECH = [
+  ['Hosting', 'Your storefront and shop run on managed infrastructure. You never touch a server.'],
+  ['Security', 'Every shop’s data is kept apart from every other shop’s, with access controls and an audit record of anything we do on your behalf.'],
+  ['Monitoring', 'We watch checkout, payments and your domain, and tell you if something affects your customers.'],
+  ['Backups', 'Regular backups, with restores tested before your shop launches.'],
+  ['Payments', 'Stripe Connect, set up in your own Stripe account. The money goes to you.'],
+  ['Updates', 'Platform improvements reach every shop without you installing a thing.'],
+  ['Support', 'Defined technical support through the portal. Hours and response times are written into your order form.'],
+];
+const STEPS = [['Brief and quote', 'Tell us about your business, products and customers. We agree the scope and a fixed price before anything starts.'], ['Design', 'We design a storefront around your brand, phone first, and show you before we build.'], ['Build and configure', 'We build it, import your products and set up shipping, VAT, payments and your domain.'], ['Launch and hand over', 'We check payments, domain and a test order. You get a walkthrough, and the portal to run it from.']];
+const TRUST = [['Your business.', 'Your domain, brand, products and customer relationships belong to you.'], ['Your money.', 'Payments connect to your own Stripe account. We never hold your customers’ money or your balance.'], ['Your data.', 'Export your products, orders and customers whenever you like.'], ['Your exit.', 'Leave on 30 days’ notice. We help move your domain, close access and delete data as the contract says.']];
+const FAQ = [
+  ['Are you a cheaper Shopify?', 'No, and we won’t claim to be. Shopify is a mature platform with a huge ecosystem. We offer something different: a storefront designed and built for you, a platform we run on your behalf, and a team you can talk to.'],
+  ['What do I manage myself?', 'Day to day, nearly everything: products, stock, orders, shipping, discounts, content, legal pages, emails and your team. You should not need to contact us to run your shop.'],
+  ['Can you do things for me?', 'Yes. Ask through the portal for product uploads, a redesigned section, new content or an extra integration. These are separate services, quoted before we start.'],
+  ['How do payments work?', 'Customers pay through your own Stripe account. Express checkout such as Apple Pay, Google Pay and Link appears where the customer’s device and region support it.'],
+  ['What about VAT, shipping and legal pages?', 'We set sensible defaults during onboarding and give you tools and editable templates. You are the seller, so the policies and tax decisions are yours. We provide the tools, not legal advice.'],
+  ['Can I move my existing shop?', 'We can rebuild it and import your products. Migrations are quoted individually and never done without your say-so.'],
+  ['What is ready now?', 'Commerce is opening to a small number of pilot shops. Some features are still being finished, and we will tell you exactly what is ready before you sign.'],
 ];
 
 export default function Home() {
   return (
     <>
-      <section className="hero">
-        <div className="wrap">
-          <div className="hero-copy">
-            <span className="pill"><b aria-hidden />Now taking pilot shops</span>
-            <h1>Online shops that <em>make sense.</em></h1>
-            <p className="lede">A storefront designed and built for your business, with the shop engine behind it run for you. One monthly price, your own Stripe account and no app-store sprawl.</p>
-            <div className="acts"><StartButton>Join the pilot</StartButton><Link className="btn" href="/pricing">See pricing <ArrowRight size={16} aria-hidden /></Link></div>
+      <section className="hero" aria-labelledby="h1">
+        <div className="hero-grid">
+          <div>
+            <h1 id="h1"><span>Your store.</span><span>Your brand.</span><span className="g">Built for you.</span></h1>
+            <p className="lede">A bespoke online shop with everything you need to sell, manage and grow. <span className="hide-m"> Designed around your business, powered by OSS Commerce, and looked after by our technical team.</span></p>
+            <div className="acts"><StartButton className="btn white">Start your store</StartButton><a className="btn ghost" href="#dashboard">See it working <ArrowRight size={16} aria-hidden /></a></div>
+            <div className="hero-note"><span>Custom-built storefront</span><span>Your own Stripe account</span><span>We run the technology</span></div>
           </div>
-          <div className="stage only-d">
-            <BrowserFrame src="/showcase/overview-desk.jpg" alt="The Commerce dashboard overview showing orders, sales and order status" priority />
-            <div className="float a"><span className="ic"><Check size={18} aria-hidden /></span><div><b>Payments connected</b><span>Stripe · paid out directly to you</span></div></div>
-            <div className="float b"><span className="ic"><Bell size={18} aria-hidden /></span><div><b>New order · £21.15</b><span>Ready to fulfil</span></div></div>
-          </div>
-          <div className="stage phone only-m"><PhoneFrame src="/showcase/overview-mob.jpg" alt="The Commerce dashboard on a phone" priority /></div>
         </div>
+        <HeroScene />
+        <div className="grain" aria-hidden />
       </section>
 
-      <section className="sect"><div className="wrap">
-        <div className="head"><span className="eyebrow">Not a template shop</span><h2>A web agency&rsquo;s way of doing online shops.</h2><p className="lede" style={{ margin: 0 }}>Most platforms hand you a theme and a pile of apps. We design your storefront around your brand, then run the engine so you can get on with selling. <a href={SITE.agencyUrl} style={{ textDecoration: 'underline' }}>OneSimpleSite</a> already builds fixed-price websites for UK businesses. Commerce is the shop side of the same promise.</p></div>
-        <div className="pillars">
-          <div className="card"><span className="ic mint"><LayoutTemplate size={22} aria-hidden /></span><h3>A storefront made for you</h3><p>Designed around your brand and products, not a theme with your logo dropped in. Fixed price, agreed before we start.</p></div>
-          <div className="card"><span className="ic sun"><Store size={22} aria-hidden /></span><h3>A shop that runs itself</h3><p>Orders, stock, discounts, shipping and VAT on receipts in one calm dashboard, built for phones as much as desktops.</p></div>
-          <div className="card"><span className="ic sky"><CreditCard size={22} aria-hidden /></span><h3>Your money, your customers</h3><p>Customers pay your own Stripe account. Your domain and customer list stay yours, and you can export everything any time.</p></div>
+      <section className="sect light state"><div className="wrap">
+        <Reveal><h2>We build the store. <em>You run the business.</em></h2></Reveal>
+        <div className="state-grid">
+          <p className="lede">Most platforms hand you a template and a list of plugins to assemble. We design a storefront around your brand, set up and look after the technology, then give you a dashboard that lets you run the shop yourself.</p>
+          <div className="two">
+            <div className="who"><h3>We look after</h3><ul>{WE.map(x => <li key={x}>{x}</li>)}</ul></div>
+            <div className="who you"><h3>You run</h3><ul>{YOU.map(x => <li key={x}>{x}</li>)}</ul></div>
+          </div>
         </div>
       </div></section>
 
-      <section className="sect" id="tour" style={{ background: 'linear-gradient(#fff,#eef5ef)', borderBlock: '1px solid var(--line)' }}><div className="wrap">
-        <div className="head" style={{ marginBottom: 44 }}><span className="eyebrow">The platform</span><h2>Calm, clear and quick on a phone.</h2></div>
-        <Tour />
+      <section className="sect pine" id="showcase"><div className="wrap">
+        <h2 style={{ maxWidth: '14ch' }}>Not a template. A shop that looks like you.</h2>
+        <p className="lede sub" style={{ marginTop: 24, maxWidth: '46ch' }}>Five concept directions for five kinds of business. Each one starts from the brand, the products and how customers like to shop.</p>
+        <Stage />
       </div></section>
 
-      <section className="sect"><div className="wrap">
-        <div className="head"><span className="eyebrow">It adapts to you</span><h2>Only what you need, when you need it.</h2><p className="lede" style={{ margin: 0 }}>The dashboard changes with your shop. A brand-new store is not buried in empty charts, and a live store is not nagged with setup steps.</p></div>
-        <div className="states">
-          <div className="state s1"><span className="tag">A new shop</span><h3>Start with the one next step.</h3>
-            <ul><li><Check size={16} aria-hidden />Add your first product</li><li className="off">Sales charts</li><li className="off">Analytics and customers</li></ul></div>
-          <div className="state s2"><span className="tag">Getting ready</span><h3>A launch checklist that earns its space.</h3>
-            <ul><li><Check size={16} aria-hidden />Connect payments</li><li><Check size={16} aria-hidden />Verify your domain</li><li><Check size={16} aria-hidden />Place a test order</li></ul></div>
-          <div className="state s3"><span className="tag">Live</span><h3>Orders that need you come first.</h3>
-            <ul><li><Check size={16} aria-hidden />Failed payments surface at the top</li><li><Check size={16} aria-hidden />Charts once there is something to chart</li><li className="off">Setup checklist</li></ul></div>
+      <section className="sect dark" id="dashboard"><div className="wrap">
+        <h2 style={{ maxWidth: '14ch' }}>The dashboard that runs the shop.</h2>
+        <p className="lede sub" style={{ marginTop: 24, maxWidth: '46ch' }}>Orders, products, content, emails and automations in one calm place. It works as well on a phone as on a desk.</p>
+        <WidgetStage />
+        <dl className="rules cap3">{[['Orders', 'Payment and fulfilment tracked separately, so nothing looks done when it is not.'], ['Settings', 'Switches that warn before they bite, with a save bar and no silent losses.'], ['Refunds', 'The exact amount and the consequence, confirmed once.']].map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+      </div></section>
+
+      <section className="sect pine"><div className="wrap">
+        <h2 style={{ maxWidth: '12ch' }}>A day in the shop.</h2>
+        <p className="lede sub" style={{ marginTop: 24, maxWidth: '44ch' }}>Two things you will do all the time, done without calling anyone.</p>
+        <div className="reels two"><OrdersReel /><ContentReel /></div>
+      </div></section>
+
+      <section className="sect dark"><div className="wrap" style={{ display: 'grid', gap: 'clamp(32px,6vw,96px)', gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,380px),1fr))', alignItems: 'center' }}>
+        <div><h2 style={{ maxWidth: '11ch' }}>A checkout customers trust.</h2>
+          <p className="lede sub" style={{ marginTop: 24 }}>One reliable checkout foundation across every storefront, in your branding. Phone first, accessible, and built to recover when things go wrong.</p>
+          <ul className="who" style={{ listStyle: 'none', padding: 0, margin: '32px 0 0' }}>{['Guest checkout, with optional accounts and saved addresses', 'Express checkout where the device supports it', 'Accurate delivery, tax and discounts, recalculated on the server', 'Clear confirmation, tracking and receipts by email', 'Failed payments and stock changes handled gracefully'].map(x => <li key={x} style={{ borderColor: 'var(--line-d)' }}>{x}</li>)}</ul></div>
+        <div style={{ maxWidth: 440, width: '100%', justifySelf: 'center' }}><CheckoutReel /></div>
+      </div></section>
+
+      <section className="sect bone"><div className="wrap">
+        <h2 style={{ maxWidth: '14ch' }}>The technical side is our job.</h2>
+        <dl className="rules" style={{ marginTop: 56 }}>{TECH.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+      </div></section>
+
+      <section className="sect light"><div className="wrap">
+        <h2 style={{ maxWidth: '12ch' }}>From first call to live shop.</h2>
+        <div className="steps">{STEPS.map(([h, p], i) => <Reveal key={h} i={i} className="step"><i>0{i + 1}</i><h3>{h}</h3><p>{p}</p></Reveal>)}</div>
+      </div></section>
+
+      <section className="sect bone" id="pricing"><div className="wrap">
+        <h2 style={{ maxWidth: '14ch' }}>Clear pricing. Clearly separate.</h2>
+        <p className="lede" style={{ marginTop: 24, maxWidth: '48ch' }}>A one-off fee for the storefront we build, a monthly fee for the platform we run, and a small fee on sales.</p>
+        <PricingTable />
+        <div className="notin">
+          <div><b>Not included</b><p>Payment processing fees are charged by Stripe to your account. Your domain renewal and VAT are separate.</p></div>
+          <div><b>Extra work is separate</b><p>Design changes, product uploads, content creation and additional integrations are services we quote before we start. Request them in the portal.</p></div>
         </div>
+        <FeeExample />
       </div></section>
 
-      <section className="sect" style={{ paddingTop: 0 }}><div className="wrap split">
-        <div className="tour-copy"><span className="eyebrow">Popups done properly</span><h3 style={{ marginTop: 14 }}>Every action says what will happen first.</h3>
-          <p>Refunds show the exact amount and what happens to fees. Risky switches ask once. On a phone, pop-ups become sheets you can reach with a thumb. If something fails, it tells you nothing changed.</p>
-          <ul className="ticks"><li><ShieldCheck size={18} aria-hidden /><span>Confirm once, with the real consequence</span></li><li><ShieldCheck size={18} aria-hidden />Pending until the payment provider confirms</li><li><ShieldCheck size={18} aria-hidden />Keyboard and screen-reader friendly</li></ul></div>
-        <div><div className="only-d"><BrowserFrame src="/showcase/refund-desk.jpg" alt="A refund confirmation pop-up in the dashboard" /></div><div className="only-m"><PhoneFrame src="/showcase/refund-mob.jpg" alt="The same refund confirmation as a bottom sheet on a phone" /></div></div>
+      <section className="sect dark"><div className="wrap">
+        <h2 style={{ maxWidth: '16ch' }}>It is your business. We keep it that way.</h2>
+        <div className="trust">{TRUST.map(([h, p], i) => <Reveal key={h} i={i}><h3>{h}</h3><p>{p}</p></Reveal>)}</div>
+        <p className="sub" style={{ marginTop: 28, color: 'var(--on-dark-2)', maxWidth: '58ch' }}>Pilot shop stories will appear here once those shops are live and their owners are happy for us to share them.</p>
       </div></section>
 
-      <section className="sect" style={{ background: 'var(--forest)', color: '#fff' }}><div className="wrap">
-        <div className="head"><span className="eyebrow" style={{ color: 'var(--olive-300)' }}>Storefronts</span><h2>Three shops, three moods. None of them a template.</h2><p className="lede" style={{ margin: 0, color: '#b9d8c8' }}>Concept layouts we might build, drawn with abstract shapes rather than product photos. Your storefront starts from your brand, your products and how your customers like to shop.</p></div>
-        <div className="cgrid">
-          {(['editorial', 'bold', 'calm'] as const).map(v => <div key={v}><Concept v={v} /><div className="cap"><b style={{ textTransform: 'capitalize' }}>{v}</b><span style={{ color: '#9fc4b1' }}>Concept design</span></div></div>)}
-        </div>
-        <div className="acts" style={{ marginTop: 40 }}><Link className="btn" href="/storefronts" style={{ color: 'var(--ink)' }}>See how we design them <ArrowRight size={16} aria-hidden /></Link></div>
+      <section className="sect light"><div className="wrap">
+        <h2 style={{ maxWidth: '12ch' }}>Questions, answered straight.</h2>
+        <div className="qa">{FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}</div>
       </div></section>
 
-      <section className="sect"><div className="wrap">
-        <div className="head"><span className="eyebrow">Straight answers</span><h2>Questions worth asking any shop platform.</h2></div>
-        <div className="qtable">{QS.map(x => <div key={x.q} className="qrow"><b>{x.q}</b><p>{x.a}</p></div>)}</div>
-      </div></section>
-
-      <section><div className="wrap"><div className="cta">
-        <span className="eyebrow" style={{ color: 'var(--olive-300)' }}>Pilot</span>
-        <h2>Let&rsquo;s build your shop properly.</h2>
-        <p>We are opening Commerce to a small number of pilot shops. Tell us about yours and we will reply personally.</p>
-        <div className="acts"><StartButton>Join the pilot</StartButton><Link className="btn" href="/pricing" style={{ color: 'var(--ink)' }}>See pricing</Link></div>
+      <section className="light" style={{ paddingBottom: 'clamp(40px,6vw,80px)' }}><div className="wrap"><div className="cta">
+        <h2>Let&rsquo;s build your store.</h2>
+        <p>We&rsquo;re opening Commerce to a small number of pilot shops. Tell us about yours and we&rsquo;ll reply personally.</p>
+        <div className="acts"><StartButton className="btn white">Start your store</StartButton><Link className="btn ghost" href="/pricing">See pricing</Link></div>
       </div></div></section>
     </>
   );

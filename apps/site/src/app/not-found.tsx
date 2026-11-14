@@ -1,4 +1,4 @@
 import Link from 'next/link';
 export default function NotFound() {
-  return <section className="hero"><div className="wrap"><div className="hero-copy"><span className="eyebrow">404</span><h1 style={{ fontSize: 'clamp(42px,6.4vw,92px)' }}>That page is not here.</h1><p className="lede">It may have moved. Try the home page.</p><Link className="btn primary" href="/">Back to home</Link></div></div></section>;
+  return <section className="dark" style={{ minHeight: '80svh' }}><div className="wrap ph"><h1>That page is not here.</h1><p className="lede sub">It may have moved. Try the home page.</p><div className="acts" style={{ marginTop: 32 }}><Link className="btn white" href="/">Back to home</Link></div></div></section>;
 }

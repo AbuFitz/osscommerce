@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
-import { GeistSans } from 'geist/font/sans';
+import '@fontsource-variable/hanken-grotesk';
+import '@fontsource-variable/inter';
 import { ToastProvider } from '@oss-commerce/ui';
 import '@oss-commerce/ui/ui.css';
 import './globals.css';
@@ -8,20 +9,20 @@ import { SiteHeader } from '@/components/SiteHeader';
 import { Footer } from '@/components/Footer';
 import { StartProvider } from '@/components/Start';
 
-const desc = 'A storefront designed and built for your business, with the shop engine behind it run for you. One monthly price, your own Stripe account, no app-store sprawl.';
+const desc = 'A bespoke online shop with everything you need to sell, manage and grow. Designed around your business, powered by OSS Commerce, and looked after by our technical team.';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
-  title: { default: `Online shops that make sense | ${SITE.name} ${SITE.product}`, template: `%s | ${SITE.name} ${SITE.product}` },
+  title: { default: `Your store. Your brand. Built for you. | ${SITE.name} ${SITE.product}`, template: `%s | ${SITE.name} ${SITE.product}` },
   description: desc,
   openGraph: { type: 'website', siteName: `${SITE.name} ${SITE.product}`, locale: 'en_GB', description: desc },
   twitter: { card: 'summary_large_image' },
 };
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#3BA875' };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#0b0f0d' };
 
 export default function Root({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-GB" className={GeistSans.variable}>
-      <body style={{ fontFamily: 'var(--font-geist-sans), system-ui, sans-serif' }}>
+    <html lang="en-GB">
+      <body>
         <a className="skip" href="#main">Skip to content</a>
         <ToastProvider><StartProvider>
           <SiteHeader />
