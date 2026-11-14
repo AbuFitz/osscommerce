@@ -12,6 +12,7 @@ for (const name of ['ceramics', 'apothecary', 'coffee', 'audio', 'stationery']) 
   const url = await p.evaluate(n => window.renderSet(n, 1600, 1200), name);
   fs.writeFileSync(path.join(out, name + '.jpg'), Buffer.from(url.split(',')[1], 'base64')); console.log('rendered', name);
 }
+{ const url = await p.evaluate(() => window.renderSet('ceramics', 1500, 1000, true)); fs.writeFileSync(path.join(out, 'ceramics-cutout.png'), Buffer.from(url.split(',')[1], 'base64')); console.log('rendered ceramics cutout'); }
 await b.close(); srv.close();
 
 })();

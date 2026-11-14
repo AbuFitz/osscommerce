@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3200",
     "build": "next build",
-    "start": "next start -p 3200"
+    "start": "next start -p 3200",
+    "render": "NODE_PATH=$(npm root -g):../../node_modules node scripts/render-sets.cjs"
   },
   "dependencies": {
     "@fontsource-variable/hanken-grotesk": "^5.3.0",
@@ -16,14 +17,14 @@
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "three": "^0.187.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "esbuild": "^0.28.2",
-    "typescript": "~5.8.0"
+    "typescript": "~5.8.0",
+    "three": "^0.187.0"
   }
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { HeroScene } from '@/components/HeroScene';
+import { HeroShot } from '@/components/HeroShot';
 import { Stage } from '@/components/Stage';
 import { OrdersReel, ContentReel, CheckoutReel } from '@/components/Reels';
 import { PricingTable, FeeExample } from '@/components/Pricing';
@@ -43,7 +43,7 @@ export default function Home() {
             <div className="hero-note"><span>Custom-built storefront</span><span>Your own Stripe account</span><span>We run the technology</span></div>
           </div>
         </div>
-        <HeroScene />
+        <HeroShot />
         <div className="grain" aria-hidden />
       </section>
 
