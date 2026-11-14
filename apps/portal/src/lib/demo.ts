@@ -154,6 +154,63 @@ export const demoGateway: CommerceGateway = {
       payments: { account: 'acct_••••3F2A', capabilities: [{ label: 'Card payments', ok: true }, { label: 'Payouts', ok: true }, { label: 'Identity verification', ok: true }], applicationFeeBp: 50, payouts: 'Weekly, Fridays' },
     };
   },
+  async content(): Promise<import('./gateway').ContentView> {
+    return {
+      page: { id: 'home', title: 'Homepage', path: '/' }, publishedAt: '2026-11-12T16:20:00Z', previewUrl: 'https://preview.kilnandthread.example/?preview=1',
+      sections: [
+        { id: 's1', type: 'announcement' as const, label: 'Announcement bar', changed: false, fields: { text: 'Free UK delivery on orders over £50', link: '/shipping' } },
+        { id: 's2', type: 'hero' as const, label: 'Hero', changed: true, fields: { headline: 'Made by hand, slowly.', subheading: 'Small-batch ceramics, glazed in the studio.', buttonLabel: 'Shop the collection', buttonLink: '/collections/all' } },
+        { id: 's3', type: 'image_text' as const, label: 'Our studio', changed: false, fields: { heading: 'From the studio', body: 'Every piece is thrown, glazed and fired in our Bristol studio.', imageAlt: '' } },
+        { id: 's4', type: 'product_row' as const, label: 'Featured products', changed: true, fields: { heading: 'Newly arrived', collection: 'new-in' } },
+        { id: 's5', type: 'faq' as const, label: 'Delivery questions', changed: false, fields: { heading: 'Delivery and returns', body: 'We dispatch within 2 working days. Returns are accepted within 30 days.' } },
+      ],
+      versions: [{ id: 'v12', at: '2026-11-12T16:20:00Z', note: 'Published: new hero', current: true }, { id: 'v11', at: '2026-11-05T10:02:00Z', note: 'Published: announcement bar', current: false }, { id: 'v10', at: '2026-10-28T09:40:00Z', note: 'Published: seasonal collection', current: false }],
+    };
+  },
+  async legalPages() {
+    const t = (n: string) => `This ${n} is provided by Kiln & Thread ({{business address}}). Contact us at {{support email}}.\n\nWrite your policy here, then check it suits your business.`;
+    return [
+      { slug: 'privacy' as const, title: 'Privacy policy', status: 'published' as const, updatedAt: '2026-10-02T10:00:00Z', body: t('privacy policy') },
+      { slug: 'terms' as const, title: 'Terms and conditions', status: 'draft' as const, updatedAt: '2026-11-10T09:00:00Z', body: t('terms and conditions') },
+      { slug: 'shipping' as const, title: 'Shipping policy', status: 'not_set_up' as const, body: t('shipping policy') },
+      { slug: 'returns' as const, title: 'Returns and refunds policy', status: 'not_set_up' as const, body: t('returns policy') },
+    ];
+  },
+  async automations() {
+    return {
+      runsLimit: 1000,
+      rules: [
+        { id: 'a1', name: 'Order confirmation email', trigger: 'Order paid', action: 'Email the customer', kind: 'transactional' as const, enabled: true, runsMonth: 86, lastRun: '2026-11-14T08:12:00Z' },
+        { id: 'a2', name: 'Dispatch email with tracking', trigger: 'Order fulfilled', action: 'Email the customer', kind: 'transactional' as const, enabled: true, runsMonth: 79, lastRun: '2026-11-14T07:40:00Z' },
+        { id: 'a3', name: 'Low stock alert', trigger: 'Stock at alert level', action: 'Email you', kind: 'operational' as const, enabled: true, runsMonth: 6, lastRun: '2026-11-13T15:00:00Z' },
+        { id: 'a4', name: 'Fulfilment reminder', trigger: 'Order unfulfilled for 48 hours', action: 'Email you', kind: 'operational' as const, enabled: false, runsMonth: 0 },
+        { id: 'a5', name: 'Abandoned checkout reminder', trigger: 'Checkout left for 2 hours', action: 'Email the customer', kind: 'marketing' as const, enabled: false, runsMonth: 0, needsConsent: true },
+      ],
+      runs: [
+        { id: 'r1', at: '2026-11-14T08:12:00Z', automation: 'Order confirmation email', event: 'Order #1042 paid', outcome: 'sent' as const, detail: 'Delivered to maya@example.com' },
+        { id: 'r2', at: '2026-11-14T07:40:00Z', automation: 'Dispatch email with tracking', event: 'Order #1038 fulfilled', outcome: 'sent' as const, detail: 'Delivered to elena@example.com' },
+        { id: 'r3', at: '2026-11-13T15:00:00Z', automation: 'Low stock alert', event: 'Serving bowl at 3 units', outcome: 'sent' as const, detail: 'Sent to you' },
+        { id: 'r4', at: '2026-11-13T11:20:00Z', automation: 'Order confirmation email', event: 'Order #1036 paid', outcome: 'failed_retrying' as const, detail: 'Mailbox busy. Retrying in 10 minutes (attempt 2 of 5)' },
+      ],
+    };
+  },
+  async serviceRequests() {
+    return [
+      { id: 'sr1', kind: 'product_upload' as const, title: 'Upload 40 new products from my spreadsheet', status: 'quoted' as const, quoteMinor: 18000, createdAt: '2026-11-11T10:00:00Z', detail: 'CSV attached. Please add images from the shared folder.' },
+      { id: 'sr2', kind: 'design_change' as const, title: 'Add a gift-wrapping option to the product page', status: 'in_progress' as const, quoteMinor: 24000, createdAt: '2026-11-03T14:30:00Z', detail: 'Optional extra at checkout.' },
+      { id: 'sr3', kind: 'content' as const, title: 'Write descriptions for the winter range', status: 'done' as const, quoteMinor: 9500, createdAt: '2026-10-20T09:00:00Z', detail: '12 products.' },
+    ];
+  },
+  async emailSettings() {
+    return { brand: { shopName: 'Kiln & Thread', accent: '#2c3a15', supportEmail: 'hello@kilnandthread.example', footer: 'Thank you for supporting a small studio.' }, notifications: { newOrder: true, lowStock: true, paymentIssue: true, dailySummary: false }, sendingDomain: { host: 'mail.kilnandthread.example', verified: false } };
+  },
+  async saveSection() { return okDemo('Section saved as a draft.'); },
+  async publishContent() { return okDemo('Published to your storefront.'); },
+  async saveLegal(_s, _b, publish) { return okDemo(publish ? 'Page published.' : 'Draft saved.'); },
+  async setAutomation(_id, on) { return okDemo(on ? 'Automation turned on.' : 'Automation turned off.'); },
+  async createServiceRequest() { return okDemo('Request sent. We will reply with a quote.'); },
+  async decideQuote(_id, approve) { return okDemo(approve ? 'Quote approved. Work will be billed separately.' : 'Quote declined.'); },
+  async saveEmailSettings() { return okDemo('Email settings saved.'); },
   async fulfilOrder(id) { return okDemo(`Order marked fulfilled.`); },
   async refundOrder(i) { return okDemo(`Refund of £${(i.amountMinor / 100).toFixed(2)} requested.`); },
   async inviteMember(email) { return okDemo(`Invitation sent to ${email}.`); },

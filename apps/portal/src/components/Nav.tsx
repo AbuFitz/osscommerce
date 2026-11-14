@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { commerce, accountLink, GROUPS, type NavItem } from './nav-data';
+import { commerce, accountLink, GROUPS, SETTINGS, type NavItem } from './nav-data';
 
 const active = (p: string, h: string) => (h === '/' ? p === '/' : p === h || p.startsWith(h + '/'));
 
@@ -25,7 +25,7 @@ export function Shell({ children, initials, name, role, hidden = [], defaultExpa
         <nav aria-label="Main" className="rail-nav">
           {GROUPS.map((g, i) => { const items = g.items.filter(x => !hidden.includes(x.href)); if (!items.length) return null; return (
             <div key={i} className="rail-grp">{g.label && <div className="rail-cap" aria-hidden={!open}>{g.label}</div>}{items.map(item)}</div>); })}
-          <div className="rail-grp rail-end">{item(commerce[8])}{item(accountLink)}</div>
+          <div className="rail-grp rail-end">{item(SETTINGS)}{item(accountLink)}</div>
         </nav>
         <div className="grow" />
         <div className="rail-me">
@@ -44,7 +44,7 @@ export function Shell({ children, initials, name, role, hidden = [], defaultExpa
 export function TabBar() {
   const p = usePathname();
   const t = [commerce[0], commerce[1], commerce[2], { href: '/more', label: 'More', icon: Menu }];
-  const moreActive = ['/inventory', '/customers', '/discounts', '/analytics', '/storefront', '/settings', '/more', '/account'].some(h => active(p, h));
+  const moreActive = ['/inventory', '/customers', '/discounts', '/analytics', '/automations', '/storefront', '/content', '/support', '/settings', '/more', '/account'].some(h => active(p, h));
   return (
     <nav className="tabbar" aria-label="Main">
       {t.map(({ href, label, icon: I }) => {

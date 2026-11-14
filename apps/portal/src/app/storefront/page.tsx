@@ -13,7 +13,7 @@ export default async function Storefront() {
     <Header title="Storefront" eyebrow={`Theme ${sf.theme.name} · v${sf.theme.version}`}>
       <a className="btn" href={sf.previewUrl} target="_blank" rel="noreferrer">Open preview <ExternalLink size={15} aria-hidden /></a><button className="btn primary" type="button">Request launch</button></Header>
     <div className="grid">
-      <section className="hero solo c-8" style={{ gridColumn: 'span 8' }} aria-labelledby="th">
+      <section className="hero solo c-8"  aria-labelledby="th">
         <div><span className="glass">{sf.liveUrl ? 'Live' : 'Not live yet'}</span><h2 id="th">{sf.theme.name} theme</h2><p>Deployed {when(sf.theme.deployedAt)} · <span className={`badge ${st[sf.theme.state][1]}`} style={{ marginLeft: 4 }}>{st[sf.theme.state][0]}</span></p>
           <div className="acts" style={{ marginTop: 22 }}><a className="btn" href={sf.previewUrl} style={{ color: 'var(--ink)' }}>Preview store</a><button className="btn ghost" type="button">Request design change</button></div></div>
         <div className="stat"><b>v{sf.theme.version}</b><span>{sf.liveUrl ? 'Live theme version' : 'Preview theme version'}</span></div>

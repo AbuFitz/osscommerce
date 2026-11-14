@@ -31,6 +31,13 @@ export interface ShippingTax { zones: ShippingZone[]; pricesIncludeTax: boolean;
 export interface Readiness { gate: LaunchGate; label: string; done: boolean; hint: string }
 export interface StoreView { name: string; store: StoreRecord; readiness: Readiness[] }
 
+export interface ContentSection { id: string; type: 'hero' | 'image_text' | 'product_row' | 'announcement' | 'faq'; label: string; fields: Record<string, string>; changed: boolean }
+export interface ContentView { page: { id: string; title: string; path: string }; sections: ContentSection[]; publishedAt: string; previewUrl: string; versions: { id: string; at: string; note: string; current: boolean }[] }
+export interface LegalPage { slug: 'privacy' | 'terms' | 'shipping' | 'returns'; title: string; status: 'not_set_up' | 'draft' | 'published'; updatedAt?: string; body: string }
+export interface Automation { id: string; name: string; trigger: string; action: string; kind: 'transactional' | 'operational' | 'marketing'; enabled: boolean; lastRun?: string; runsMonth: number; needsConsent?: boolean }
+export interface AutomationRun { id: string; at: string; automation: string; event: string; outcome: 'sent' | 'skipped_no_consent' | 'failed_retrying' | 'failed'; detail: string }
+export interface ServiceRequest { id: string; kind: 'product_upload' | 'design_change' | 'content' | 'integration' | 'other'; title: string; status: 'submitted' | 'quoted' | 'in_progress' | 'done' | 'declined'; quoteMinor?: number; createdAt: string; detail: string }
+export interface EmailSettings { brand: { shopName: string; accent: string; supportEmail: string; footer: string }; notifications: Record<string, boolean>; sendingDomain: { host: string; verified: boolean } }
 export interface MutationResult { ok: boolean; message: string }
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
@@ -45,6 +52,18 @@ export interface CommerceGateway {
   storefront(): Promise<StorefrontView>;
   team(): Promise<{ members: Member[]; grants: AccessGrant[] }>;
   shippingTax(): Promise<ShippingTax>;
+  content(): Promise<ContentView>;
+  legalPages(): Promise<LegalPage[]>;
+  automations(): Promise<{ rules: Automation[]; runs: AutomationRun[]; runsLimit: number }>;
+  serviceRequests(): Promise<ServiceRequest[]>;
+  emailSettings(): Promise<EmailSettings>;
+  saveSection(sectionId: string, fields: Record<string, string>): Promise<MutationResult>;
+  publishContent(): Promise<MutationResult>;
+  saveLegal(slug: LegalPage['slug'], body: string, publish: boolean): Promise<MutationResult>;
+  setAutomation(id: string, enabled: boolean): Promise<MutationResult>;
+  createServiceRequest(kind: ServiceRequest['kind'], title: string, detail: string): Promise<MutationResult>;
+  decideQuote(id: string, approve: boolean): Promise<MutationResult>;
+  saveEmailSettings(brand: Partial<EmailSettings['brand']>, notifications: Record<string, boolean>): Promise<MutationResult>;
   fulfilOrder(orderId: string, tracking?: string): Promise<MutationResult>;
   refundOrder(i: RefundInput): Promise<MutationResult>;
   inviteMember(email: string, role: Member['role']): Promise<MutationResult>;
