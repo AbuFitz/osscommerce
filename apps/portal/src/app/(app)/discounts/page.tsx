@@ -1,3 +1,4 @@
+import { CreateDiscount } from '@/components/Dialogs';
 import { Percent, Truck, PoundSterling } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { money } from '@/lib/format';
@@ -10,7 +11,7 @@ export default async function Discounts() {
   const ds = await gateway().discounts();
   const what = (d: (typeof ds)[number]) => d.kind === 'percent' ? `${d.value}% off` : d.kind === 'fixed' ? `${money(d.value)} off` : 'Free shipping';
   return (<>
-    <Header title="Discounts" eyebrow={`${ds.filter(d => d.status === 'active').length} active`}><button className="btn primary" type="button">Create discount</button></Header>
+    <Header title="Discounts" eyebrow={`${ds.filter(d => d.status === 'active').length} active`}><CreateDiscount /></Header>
     <div className="pgrid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))' }}>{ds.map(d => { const Ic = d.kind === 'percent' ? Percent : d.kind === 'fixed' ? PoundSterling : Truck; return (
       <article key={d.code} className={`w ${d.status === 'active' ? '' : ''}`}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span className={`ic ${d.status === 'active' ? 'lime' : d.status === 'scheduled' ? 'blue' : 'peach'}`}><Ic size={18} aria-hidden /></span><span className={`badge ${tone[d.status]}`}>{label[d.status]}</span></div>

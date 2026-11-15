@@ -1,3 +1,4 @@
+import { AdjustStock } from '@/components/Dialogs';
 import { AlertTriangle, Boxes, PackageX } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { Header } from '@/components/ui';
@@ -9,7 +10,7 @@ export default async function Inventory() {
   const rows = ps.map(p => ({ ...p, avail: p.onHand - p.allocated, low: p.onHand - p.allocated <= p.threshold })).sort((a, b) => Number(b.low) - Number(a.low) || a.avail - b.avail);
   const units = rows.reduce((s, r) => s + r.onHand, 0), low = rows.filter(r => r.low && r.status === 'published').length, out = rows.filter(r => r.avail <= 0 && r.status === 'published').length;
   return (<>
-    <Header title="Inventory" eyebrow="Kiln & Thread · Main stockroom"><button className="btn primary" type="button">Adjust stock</button></Header>
+    <Header title="Inventory" eyebrow="Kiln & Thread · Main stockroom"><AdjustStock products={ps} /></Header>
     <div className="kgrid" style={{ gridTemplateColumns: 'repeat(3,minmax(0,1fr))', marginBottom: 16 }}>
       <div className="w kcard"><span className="ic lime"><Boxes size={18} aria-hidden /></span><div className="kpi">{units}</div><div className="muted" style={{ marginTop: 6 }}>Units on hand</div></div>
       <div className="w kcard"><span className="ic peach"><AlertTriangle size={18} aria-hidden /></span><div className="kpi">{low}</div><div className="muted" style={{ marginTop: 6 }}>Low stock</div></div>

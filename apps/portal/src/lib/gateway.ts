@@ -20,7 +20,7 @@ export interface Summary { netMinor: number; grossMinor: number; orders: number;
 export interface Discount { code: string; kind: 'percent' | 'fixed' | 'shipping'; value: number; status: 'active' | 'scheduled' | 'expired'; used: number; limit?: number; window: string; minSpendMinor?: number }
 export interface StorefrontView {
   theme: { name: string; version: string; deployedAt: string; state: 'healthy' | 'building' | 'failed' };
-  previewUrl: string; liveUrl: string | null;
+  previewUrl: string; liveUrl: string | null; launchRequested?: boolean;
   checks: { label: string; ok: boolean; detail: string }[];
   history: { version: string; at: string; note: string; current: boolean }[];
 }
@@ -42,6 +42,11 @@ export interface Automation { id: string; name: string; trigger: string; action:
 export interface AutomationRun { id: string; at: string; automation: string; event: string; outcome: 'sent' | 'skipped_no_consent' | 'failed_retrying' | 'failed'; detail: string }
 export interface ServiceRequest { id: string; kind: 'product_upload' | 'design_change' | 'content' | 'integration' | 'other'; title: string; status: 'submitted' | 'quoted' | 'in_progress' | 'done' | 'declined'; quoteMinor?: number; createdAt: string; detail: string }
 export interface EmailSettings { brand: { shopName: string; accent: string; supportEmail: string; footer: string }; notifications: Record<string, boolean>; sendingDomain: { host: string; verified: boolean } }
+export interface NewProduct { title: string; priceMinor: number; sku?: string; status: 'draft' | 'published'; onHand: number }
+export interface NewDiscount { code: string; kind: 'percent' | 'fixed' | 'shipping'; value: number; minSpendMinor?: number; limit?: number; endDate?: string }
+export interface ZoneInput { originalName?: string; name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
+export interface StockAdjust { productId: string; mode: 'set' | 'add'; qty: number; reason: 'recount' | 'received' | 'damaged' | 'returned' | 'other' }
+export interface DomainCheck { ok: boolean; message: string; record?: { type: string; name: string; value: string } }
 export interface MutationResult { ok: boolean; message: string }
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
@@ -76,6 +81,13 @@ export interface CommerceGateway {
   rollbackTheme(version: string): Promise<MutationResult>;
   decideGrant(id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<MutationResult>;
   savePreferences(prefs: Record<string, boolean>): Promise<MutationResult>;
+  addProduct(p: NewProduct): Promise<MutationResult>;
+  importProducts(rows: NewProduct[]): Promise<MutationResult>;
+  adjustStock(a: StockAdjust): Promise<MutationResult>;
+  createDiscount(d: NewDiscount): Promise<MutationResult>;
+  saveZone(z: ZoneInput): Promise<MutationResult>;
+  checkDomain(): Promise<DomainCheck>;
+  requestLaunch(): Promise<MutationResult>;
 }
 
 export const GATE_COPY: Record<LaunchGate, { label: string; hint: string }> = {

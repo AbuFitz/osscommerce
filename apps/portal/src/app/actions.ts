@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings } from '@/lib/gateway';
+import type { NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -48,4 +48,18 @@ export async function uploadPhotos(productId: string, form: FormData) {
   }
   revalidatePath(`/products/${productId}`);
   return { ok: added > 0, message: added ? `${added} photo${added > 1 ? 's' : ''} added${problems.length ? `. ${problems.join('. ')}.` : ''}` : problems.join('. ') || 'No photos were added.' };
+}
+
+// ---- Catalogue, stock, discounts, shipping, storefront ----
+export async function addProduct(p: NewProduct) { return run(() => gateway().addProduct(p), ['/products', '/inventory', '/']); }
+export async function importProducts(rows: NewProduct[]) { return run(() => gateway().importProducts(rows), ['/products', '/inventory', '/']); }
+export async function adjustStock(a: StockAdjust) { return run(() => gateway().adjustStock(a), ['/inventory', '/products', '/']); }
+export async function createDiscount(d: NewDiscount) { return run(() => gateway().createDiscount(d), ['/discounts']); }
+export async function saveZone(z: ZoneInput) { return run(() => gateway().saveZone(z), ['/settings/shipping']); }
+export async function checkDomain() { const r = await gateway().checkDomain(); revalidatePath('/storefront'); return r; }
+export async function requestLaunch() { return run(() => gateway().requestLaunch(), ['/storefront', '/']); }
+/** CSV of customers for the signed-in store. Marketing consent is included so a mailing list can honour it. */
+export async function exportCustomers() {
+  const { toCsv } = await import('@/lib/csv'); const cs = await gateway().customers();
+  return { filename: `customers-${new Date().toISOString().slice(0, 10)}.csv`, csv: toCsv([['Name', 'Email', 'Orders', 'Total spent (GBP)', 'Last order', 'Marketing consent'], ...cs.map(c => [c.name, c.email, c.orders, (c.spentMinor / 100).toFixed(2), c.lastOrder.slice(0, 10), c.marketing ? 'Yes' : 'No'])]), count: cs.length };
 }

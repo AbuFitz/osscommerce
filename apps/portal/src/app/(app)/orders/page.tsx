@@ -36,8 +36,8 @@ export default async function Orders({ searchParams }: { searchParams: Promise<{
           </table>
           <div className="cards">{orders.map(o => (
             <Link key={o.id} href={`/orders/${o.id}`}>
-              <b>#{o.number} <span className="muted" style={{ fontWeight: 400 }}>{o.customer}</span></b><b className="num">{money(o.totalMinor)}</b>
-              <span className="muted">{when(o.placedAt)}</span><span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}><PayBadge s={o.payment} /><FulBadge s={o.fulfilment} state={o.state} /></span>
+              <span className="oc-main"><b>{o.customer}</b><span className="muted">#{o.number} · {when(o.placedAt)}</span></span>
+              <span className="oc-side"><b className="num">{money(o.totalMinor)}</b><span className="pills">{o.payment !== 'paid' && <PayBadge s={o.payment} />}<FulBadge s={o.fulfilment} state={o.state} /></span></span>
             </Link>))}</div>
         </>}
       </div>

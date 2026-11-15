@@ -1,6 +1,7 @@
 'use client';
 import { useState, useTransition } from 'react';
 import { Dialog, useToast } from '@oss-commerce/ui';
+import { FormDialog } from './FormDialog';
 import { money } from '@/lib/format';
 import type { MutationResult, Member } from '@/lib/gateway';
 import { decideGrant, fulfilOrder, inviteMember, refundOrder, rollbackTheme } from '@/app/actions';
@@ -50,16 +51,10 @@ export function RefundAction({ orderId, number, totalMinor, refundedMinor, feeBp
 }
 
 export function InviteAction() {
-  const d = useDialog(); const { run, pending } = useRun(); const [email, setEmail] = useState(''); const [role, setRole] = useState<Member['role']>('fulfilment');
-  const ok = /^\S+@\S+\.\S+$/.test(email);
-  return (<>
-    <button className="btn primary" type="button" onClick={d.show}>Invite member</button>
-    <Dialog open={d.open} onClose={d.hide} title="Invite a team member" description="They get an email invitation. You choose exactly what they can do."
-      footer={<><button className="btn" type="button" onClick={d.hide}>Cancel</button><button className="btn primary" type="button" disabled={!ok || pending} onClick={() => run(() => inviteMember(email, role), () => { setEmail(''); d.hide(); })}>{pending ? 'Sending…' : 'Send invitation'}</button></>}>
-      <div className="field"><label htmlFor="ie">Email</label><input id="ie" type="email" autoComplete="off" value={email} onChange={e => setEmail(e.target.value)} /></div>
-      <div className="field"><label htmlFor="ir">Role</label><select id="ir" value={role} onChange={e => setRole(e.target.value as Member['role'])}><option value="manager">Manager: products, orders, discounts</option><option value="fulfilment">Fulfilment: orders and shipping</option><option value="analyst">Analyst: reports only</option></select></div>
-    </Dialog>
-  </>);
+  return <FormDialog trigger="Invite member" triggerClass="btn primary" title="Invite a team member" description="They get an email invitation. You choose exactly what they can do."
+    fields={[{ name: 'email', label: 'Email', type: 'email', required: true, placeholder: 'name@example.com' },
+      { name: 'role', label: 'Role', type: 'select', required: true, value: 'fulfilment', hint: 'You can change this later. Owners cannot be invited here.', options: [{ value: 'manager', label: 'Manager: products, orders, discounts' }, { value: 'fulfilment', label: 'Fulfilment: orders and stock' }, { value: 'analyst', label: 'Analyst: read-only reports' }] }]}
+    submit="Send invitation" onSubmit={v => inviteMember(v.email.trim(), v.role as Member['role'])} />;
 }
 
 export function RollbackAction({ version }: { version: string }) {

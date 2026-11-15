@@ -81,6 +81,12 @@ export default async function Overview() {
           ) : (
             <section className="w flat" aria-labelledby="empty-s"><h2 id="empty-s" style={{ marginBottom: 6 }}>Sales</h2><p className="muted" style={{ margin: 0 }}>Sales and top products appear here after your first few orders. Until then there is nothing useful to chart.</p></section>
           )}
+          {P.showCustomers && customers.length > 0 && (
+            <section className="w" aria-labelledby="cust">
+              <div className="wh"><h2 id="cust">Top customers</h2><Link className="link" href="/customers">See all</Link></div>
+              <div className="rows">{[...customers].sort((a, b) => b.spentMinor - a.spentMinor).slice(0, 3).map((c, i) => (
+                <div key={c.id} className="row"><Avatar name={c.name} i={i + 1} /><span className="t"><b>{c.name}</b><span>{c.orders} order{c.orders > 1 ? 's' : ''}</span></span><span className="num">{money(c.spentMinor)}</span></div>))}</div>
+            </section>)}
         </div>
 
         <div className="stack">
@@ -114,12 +120,6 @@ export default async function Overview() {
             <section className="w" aria-labelledby="live"><div className="wh"><h2 id="live">Your store is live</h2><span className="badge ok">Live</span></div>
               <p className="muted" style={{ margin: 0 }}><PartyPopper size={14} style={{ verticalAlign: '-2px' }} aria-hidden /> {host.host} is taking orders. Checks run every few minutes. <Link className="link" href="/storefront">View status</Link></p></section>)}
 
-          {P.showCustomers && customers.length > 0 && (
-            <section className="w" aria-labelledby="cust">
-              <div className="wh"><h2 id="cust">Top customers</h2><Link className="link" href="/customers">See all</Link></div>
-              <div className="rows">{[...customers].sort((a, b) => b.spentMinor - a.spentMinor).slice(0, 3).map((c, i) => (
-                <div key={c.id} className="row"><Avatar name={c.name} i={i + 1} /><span className="t"><b>{c.name}</b><span>{c.orders} order{c.orders > 1 ? 's' : ''}</span></span><span className="num">{money(c.spentMinor)}</span></div>))}</div>
-            </section>)}
 
           {store.store.paymentReadiness === 'not_started' && P.hero !== 'connect_payments' && (
             <Link href="/settings/payments" className="w kcard"><span className="ic lime"><CreditCard size={18} aria-hidden /></span><div style={{ fontWeight: 600, marginTop: 14 }}>Connect payments</div><div className="muted">Needed before customers can check out.</div></Link>)}

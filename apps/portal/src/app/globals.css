@@ -263,3 +263,25 @@ table.t tbody tr:hover td{background:rgba(30,40,15,.075)}
 .qr-status{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:99px;background:rgba(40,50,20,.07);font-weight:550;font-size:14px}.qr-status[data-state=connected]{background:var(--lime);color:var(--olive-950)}
 .qr-fine{margin:0;font-size:12.5px;max-width:320px}.qr-warn{margin:0;padding:10px 12px;border-radius:14px;background:#f8ebb8;color:#5b4408;font-size:12.5px;max-width:340px}
 .qr-alt{width:100%;font-size:13px}.qr-alt summary{cursor:pointer;color:var(--muted)}.qr-alt input{width:100%;margin-top:8px;font:12px var(--font-geist-mono),monospace;padding:10px 12px;border-radius:12px;border:1px solid rgba(40,50,20,.16);background:#fff}
+
+/* ---- Form dialogs, motion tokens ---- */
+:root{--ease:cubic-bezier(.2,.9,.3,1);--dur-1:.12s;--dur-2:.22s;--dur-3:.36s}
+.fd{display:grid;gap:16px}.fd .field{display:grid;gap:6px}.fd label{font-weight:600;font-size:14px}.fd .req{color:#a3321f}
+.fd input,.fd select,.fd textarea{width:100%;font:inherit;padding:12px 14px;border-radius:14px;border:1px solid rgba(40,50,20,.18);background:#fff;color:var(--ink);transition:border-color var(--dur-1),box-shadow var(--dur-1)}
+.fd input:focus,.fd select:focus,.fd textarea:focus{outline:none;border-color:var(--olive-700,#4a5f1f);box-shadow:0 0 0 3px rgba(130,160,50,.28)}
+.fd .field.bad input,.fd .field.bad select,.fd .field.bad textarea{border-color:#c0462f;box-shadow:0 0 0 3px rgba(192,70,47,.14)}
+.fd .ferr{margin:0;color:#a3321f;font-size:13px}.fd .fhint{margin:0;font-size:12.5px}
+.adorn{position:relative}.adorn span{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}.adorn input{padding-left:28px}
+.seg-field{display:flex;margin:0}.seg-field button{flex:1;border:0;background:none;font:inherit;font-weight:550;padding:9px 6px;border-radius:999px;color:var(--muted);cursor:pointer;transition:background var(--dur-1),color var(--dur-1)}.seg-field button[data-on=true]{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(30,40,10,.18)}
+@media(prefers-reduced-motion:no-preference){
+  .dlg[open]{animation:dlgin var(--dur-3) var(--ease)}.dlg[open]::backdrop{animation:bdin var(--dur-2) ease-out}
+  @keyframes dlgin{from{opacity:0;transform:translateY(14px) scale(.97)}}@keyframes bdin{from{opacity:0}}
+  .btn:active{transform:scale(.97)}
+}
+@media(max-width:900px) and (prefers-reduced-motion:no-preference){.dlg[open]{animation:sheetin var(--dur-3) var(--ease)}@keyframes sheetin{from{transform:translateY(100%)}}}
+.drop{display:grid;justify-items:center;gap:4px;padding:22px 16px;border-radius:18px;border:1.5px dashed rgba(40,50,20,.28);background:rgba(255,255,255,.6);font:inherit;color:var(--ink);cursor:pointer;text-align:center;transition:background var(--dur-1),border-color var(--dur-1)}.drop:hover,.drop:focus-visible{background:#fff;border-color:var(--olive-700,#4a5f1f)}.drop span{font-size:12.5px;color:var(--muted)}
+.imp{padding:12px 14px;border-radius:14px;background:rgba(40,50,20,.06)}.imp p{margin:0;line-height:1.5}.imp p svg{display:inline;vertical-align:-2px;margin-right:4px}.imp ul{margin:8px 0 0;padding-left:18px;font-size:13px;color:#7a2d1a}
+.rates{border:0;padding:0;margin:0;display:grid;gap:10px}.rates legend{font-weight:600;font-size:14px;margin-bottom:6px}.rate{display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:8px;align-items:end;padding:10px;border-radius:16px;background:rgba(40,50,20,.05)}@media(max-width:700px){.rate{grid-template-columns:1fr 1fr;position:relative;padding-top:14px}.rate .field:first-child{grid-column:1/-1;padding-right:40px}.rate>.iconbtn{position:absolute;right:8px;top:8px}}
+.dns{margin-top:12px;padding:12px;border-radius:14px;background:rgba(255,255,255,.1)}.dns p{margin:0 0 8px;font-size:13px}
+.blockers{list-style:none;margin:0;padding:0;display:grid;gap:8px}.blockers li{display:flex;gap:8px;align-items:center;padding:10px 12px;border-radius:12px;background:#f8ebb8;color:#5b4408}
+@media(max-width:900px){.cards>a{align-items:start;gap:10px}.cards .oc-main{display:grid;gap:2px;min-width:0}.cards .oc-main b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15.5px}.cards .oc-main .muted{font-size:13px}.cards .oc-side{display:grid;justify-items:end;gap:6px}.cards .oc-side .num{font-size:16px}.cards .pills{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}}

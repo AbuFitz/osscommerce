@@ -77,3 +77,18 @@ jobs:
           psql -h localhost -U postgres -d cp_test -v ON_ERROR_STOP=1 -q -f infra/control-plane/tests/storefronts.test.sql
           psql -h localhost -U postgres -d cp_test -v ON_ERROR_STOP=1 -q -f infra/control-plane/tests/payments.test.sql
           TEST_DATABASE_URL=postgres://postgres:test@localhost:5432/cp_test npm test -w @oss-commerce/gateway
+  portal-interactions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm i -g playwright@1.49 && npx playwright install --with-deps chromium
+      - run: NEXT_PUBLIC_OSS_DEMO=1 npm run build -w @oss-commerce/portal
+      - name: Drive every action in a real browser (desktop and phone)
+        run: |
+          (cd apps/portal && NEXT_PUBLIC_OSS_DEMO=1 npx next start -p 3100 &) 
+          npx wait-on http://localhost:3100 --timeout 60000
+          cd apps/portal && NODE_PATH=$(npm root -g) node scripts/interactions.cjs

@@ -1,7 +1,7 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
-import { StoreId, OrganisationId } from '@oss-commerce/contracts';
+import { GATE_COPY, LAUNCH_GATES, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
+import { StoreId, OrganisationId, feeMinor, feeRefundMinor } from '@oss-commerce/contracts';
 
 /**
  * Deterministic synthetic fixtures (no real merchant data). Swap for HttpGateway
@@ -51,13 +51,55 @@ const ORDERS = Array.from({ length: 24 }, (_, i) => mk(i));
 const CUSTOMERS: Customer[] = names.map((n, i) => ({ id: `c${i}`, name: n, email: `${n.split(' ')[0].toLowerCase()}@example.com`, orders: 1 + (i % 5), spentMinor: 2400 + i * 1850, lastOrder: ORDERS[i].placedAt, marketing: i % 3 !== 0 }));
 
 
+const DISCOUNTS: Discount[] = [
+      { code: 'WELCOME10', kind: 'percent', value: 10, status: 'active', used: 14, limit: 200, window: 'No end date' },
+      { code: 'FREESHIP50', kind: 'shipping', value: 0, status: 'active', used: 31, window: 'Until 31 Dec', minSpendMinor: 5000 },
+      { code: 'BLACKFRIDAY', kind: 'percent', value: 20, status: 'scheduled', used: 0, limit: 500, window: '27–30 Nov' },
+      { code: 'SUMMER5', kind: 'fixed', value: 500, status: 'expired', used: 88, limit: 100, window: 'Ended 31 Aug' },
+    ];
+const ZONES: ShippingZone[] = [
+        { name: 'United Kingdom', regions: 'England, Scotland, Wales, Northern Ireland', rates: [{ label: 'Standard, 2–4 days', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Next day', priceMinor: 795 }] },
+        { name: 'Highlands and Islands', regions: 'IV, KW, HS, ZE, PA20–80', rates: [{ label: 'Standard, 3–6 days', priceMinor: 895 }] },
+      ];
+const MEMBERS: Member[] = [
+        { name: 'Maya Okafor', email: 'maya@example.com', role: 'owner' as const, status: 'active' as const },
+        { name: 'Tom Hendry', email: 'tom@example.com', role: 'fulfilment' as const, status: 'active' as const },
+        { name: 'Priya Nair', email: 'priya@example.com', role: 'analyst' as const, status: 'invited' as const },
+      ];
+const GRANTS: AccessGrant[] = [
+        { id: 'g1', who: 'OSS Support', purpose: 'Ticket 2041: checkout page error', scopes: ['Read orders'], write: false, state: 'pending' as const, expires: '2026-11-14T12:00:00Z' },
+        { id: 'g2', who: 'OSS Engineering', purpose: 'Domain verification', scopes: ['Read settings'], write: false, state: 'active' as const, expires: '2026-11-15T09:00:00Z' },
+      ];
+const REQUESTS: ServiceRequest[] = [
+      { id: 'sr1', kind: 'product_upload' as const, title: 'Upload 40 new products from my spreadsheet', status: 'quoted' as const, quoteMinor: 18000, createdAt: '2026-11-11T10:00:00Z', detail: 'CSV attached. Please add images from the shared folder.' },
+      { id: 'sr2', kind: 'design_change' as const, title: 'Add a gift-wrapping option to the product page', status: 'in_progress' as const, quoteMinor: 24000, createdAt: '2026-11-03T14:30:00Z', detail: 'Optional extra at checkout.' },
+      { id: 'sr3', kind: 'content' as const, title: 'Write descriptions for the winter range', status: 'done' as const, quoteMinor: 9500, createdAt: '2026-10-20T09:00:00Z', detail: '12 products.' },
+    ];
+
+const AUTOMATIONS_BASE: Automation[] = [
+        { id: 'a1', name: 'Order confirmation email', trigger: 'Order paid', action: 'Email the customer', kind: 'transactional' as const, enabled: true, runsMonth: 86, lastRun: '2026-11-14T08:12:00Z' },
+        { id: 'a2', name: 'Dispatch email with tracking', trigger: 'Order fulfilled', action: 'Email the customer', kind: 'transactional' as const, enabled: true, runsMonth: 79, lastRun: '2026-11-14T07:40:00Z' },
+        { id: 'a3', name: 'Low stock alert', trigger: 'Stock at alert level', action: 'Email you', kind: 'operational' as const, enabled: true, runsMonth: 6, lastRun: '2026-11-13T15:00:00Z' },
+        { id: 'a4', name: 'Fulfilment reminder', trigger: 'Order unfulfilled for 48 hours', action: 'Email you', kind: 'operational' as const, enabled: false, runsMonth: 0 },
+        { id: 'a5', name: 'Abandoned checkout reminder', trigger: 'Checkout left for 2 hours', action: 'Email the customer', kind: 'marketing' as const, enabled: false, runsMonth: 0, needsConsent: true },
+      ];
+
 /** Demo-only view switch (cookie set by /demo). Lets reviewers see how the portal adapts: new store, setting up, live. */
 export type DemoState = 'new' | 'setup' | 'live';
 async function state(): Promise<DemoState> {
   try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
 }
-const ordersFor = (st: DemoState) => (st === 'new' ? [] : ORDERS);
-const productsFor = (st: DemoState) => (st === 'new' ? [] : P);
+/** Per-browser scratch copy of the demo data (keyed by the oss_sid cookie). Actions really change it, so every page reflects what you did. */
+interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
+const G = globalThis as unknown as { __oss_demo?: Map<string, Scratch> };
+async function S(): Promise<Scratch> {
+  const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
+  const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
+  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  return x;
+}
+const ordersFor = async (st: DemoState) => (st === 'new' ? [] : (await S()).orders);
+const productsFor = async (st: DemoState) => (st === 'new' ? [] : (await S()).products);
 const NOTE = ' Demo data: nothing was changed.';
 const okDemo = (m: string) => ({ ok: true, message: m + NOTE });
 export const demoGateway: CommerceGateway = {
@@ -73,7 +115,7 @@ export const demoGateway: CommerceGateway = {
     };
   },
   async summary(): Promise<Summary> {
-    const st = await state(); const ALL = ordersFor(st);
+    const st = await state(); const ALL = await ordersFor(st);
     const paid = ALL.filter(o => o.payment !== 'failed');
     const gross = paid.reduce((s, o) => s + o.totalMinor, 0);
     const refunded = paid.reduce((s, o) => s + o.refundedMinor, 0);
@@ -90,32 +132,27 @@ export const demoGateway: CommerceGateway = {
     return {
       netMinor: gross - refunded, grossMinor: gross, orders: paid.length, aovMinor: paid.length ? Math.round(gross / paid.length) : 0, refundedMinor: refunded,
       toFulfil: count(o => o.state === 'open'), fulfilled: count(o => o.state === 'completed'), paidOrders: paid.length,
-      lowStock: productsFor(st).filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length, series, topProducts,
+      lowStock: (await productsFor(st)).filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length, series, topProducts,
       statusMix: [{ label: 'Fulfilled', count: count(o => o.state === 'completed') }, { label: 'To fulfil', count: count(o => o.state === 'open') }, { label: 'Cancelled', count: count(o => o.state === 'cancelled') }],
       asOf: AS_OF,
     };
   },
   async orders(q) {
-    let r = ordersFor(await state());
+    let r = await ordersFor(await state());
     if (q?.filter === 'unfulfilled') r = r.filter(o => o.state === 'open');
     if (q?.filter === 'attention') r = r.filter(o => o.payment === 'failed' || o.payment === 'disputed');
     if (q?.filter === 'refunded') r = r.filter(o => o.refundedMinor > 0);
     if (q?.q) { const s = q.q.toLowerCase(); r = r.filter(o => `${o.number} ${o.customer} ${o.email}`.toLowerCase().includes(s)); }
     return r;
   },
-  async order(id) { return ordersFor(await state()).find(o => o.id === id) ?? null; },
+  async order(id) { return (await ordersFor(await state())).find(o => o.id === id) ?? null; },
   async products() { return productsFor(await state()); },
   async customers() { return (await state()) === 'new' ? [] : CUSTOMERS; },
-  async discounts() {
-    return [
-      { code: 'WELCOME10', kind: 'percent', value: 10, status: 'active', used: 14, limit: 200, window: 'No end date' },
-      { code: 'FREESHIP50', kind: 'shipping', value: 0, status: 'active', used: 31, window: 'Until 31 Dec', minSpendMinor: 5000 },
-      { code: 'BLACKFRIDAY', kind: 'percent', value: 20, status: 'scheduled', used: 0, limit: 500, window: '27–30 Nov' },
-      { code: 'SUMMER5', kind: 'fixed', value: 500, status: 'expired', used: 88, limit: 100, window: 'Ended 31 Aug' },
-    ];
-  },
+  async discounts() { return (await S()).discounts; },
   async storefront() {
+    const x = await S();
     return {
+      launchRequested: x.launchRequested,
       theme: { name: 'Kiln', version: '1.4.2', deployedAt: '2026-11-12T16:20:00Z', state: 'healthy' as const },
       previewUrl: 'https://preview.kilnandthread.example', liveUrl: null,
       checks: [
@@ -131,19 +168,7 @@ export const demoGateway: CommerceGateway = {
       ],
     };
   },
-  async team() {
-    return {
-      members: [
-        { name: 'Maya Okafor', email: 'maya@example.com', role: 'owner' as const, status: 'active' as const },
-        { name: 'Tom Hendry', email: 'tom@example.com', role: 'fulfilment' as const, status: 'active' as const },
-        { name: 'Priya Nair', email: 'priya@example.com', role: 'analyst' as const, status: 'invited' as const },
-      ],
-      grants: [
-        { id: 'g1', who: 'OSS Support', purpose: 'Ticket 2041: checkout page error', scopes: ['Read orders'], write: false, state: 'pending' as const, expires: '2026-11-14T12:00:00Z' },
-        { id: 'g2', who: 'OSS Engineering', purpose: 'Domain verification', scopes: ['Read settings'], write: false, state: 'active' as const, expires: '2026-11-15T09:00:00Z' },
-      ],
-    };
-  },
+  async team() { const x = await S(); return { members: x.members, grants: x.grants }; },
   /** Demo only: every state the real platform can report, selectable with ?state= so each can be reviewed. */
   async paymentSetup(preview?: string): Promise<PaymentSetup> {
     const base = { applicationFeeBp: 50, account: 'acct_••••3F2A', payoutSchedule: 'Weekly, Fridays', chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [] as string[], pending: [] as string[] };
@@ -162,10 +187,7 @@ export const demoGateway: CommerceGateway = {
   async startPaymentSetup(): Promise<StartPaymentSetup> { return { ok: false, message: 'Stripe onboarding opens here once the store is connected to the live platform. This is a demo.' }; },
   async shippingTax() {
     return {
-      zones: [
-        { name: 'United Kingdom', regions: 'England, Scotland, Wales, Northern Ireland', rates: [{ label: 'Standard, 2–4 days', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Next day', priceMinor: 795 }] },
-        { name: 'Highlands and Islands', regions: 'IV, KW, HS, ZE, PA20–80', rates: [{ label: 'Standard, 3–6 days', priceMinor: 895 }] },
-      ],
+      zones: (await S()).zones,
       pricesIncludeTax: true, vatRegistered: null,
       payments: { account: 'acct_••••3F2A', capabilities: [{ label: 'Card payments', ok: true }, { label: 'Payouts', ok: true }, { label: 'Identity verification', ok: true }], applicationFeeBp: 50, payouts: 'Weekly, Fridays' },
     };
@@ -193,15 +215,10 @@ export const demoGateway: CommerceGateway = {
     ];
   },
   async automations() {
+    const on = (await S()).automationOn;
     return {
       runsLimit: 1000,
-      rules: [
-        { id: 'a1', name: 'Order confirmation email', trigger: 'Order paid', action: 'Email the customer', kind: 'transactional' as const, enabled: true, runsMonth: 86, lastRun: '2026-11-14T08:12:00Z' },
-        { id: 'a2', name: 'Dispatch email with tracking', trigger: 'Order fulfilled', action: 'Email the customer', kind: 'transactional' as const, enabled: true, runsMonth: 79, lastRun: '2026-11-14T07:40:00Z' },
-        { id: 'a3', name: 'Low stock alert', trigger: 'Stock at alert level', action: 'Email you', kind: 'operational' as const, enabled: true, runsMonth: 6, lastRun: '2026-11-13T15:00:00Z' },
-        { id: 'a4', name: 'Fulfilment reminder', trigger: 'Order unfulfilled for 48 hours', action: 'Email you', kind: 'operational' as const, enabled: false, runsMonth: 0 },
-        { id: 'a5', name: 'Abandoned checkout reminder', trigger: 'Checkout left for 2 hours', action: 'Email the customer', kind: 'marketing' as const, enabled: false, runsMonth: 0, needsConsent: true },
-      ],
+      rules: AUTOMATIONS_BASE.map(r => ({ ...r, enabled: on[r.id] ?? r.enabled })),
       runs: [
         { id: 'r1', at: '2026-11-14T08:12:00Z', automation: 'Order confirmation email', event: 'Order #1042 paid', outcome: 'sent' as const, detail: 'Delivered to maya@example.com' },
         { id: 'r2', at: '2026-11-14T07:40:00Z', automation: 'Dispatch email with tracking', event: 'Order #1038 fulfilled', outcome: 'sent' as const, detail: 'Delivered to elena@example.com' },
@@ -210,27 +227,86 @@ export const demoGateway: CommerceGateway = {
       ],
     };
   },
-  async serviceRequests() {
-    return [
-      { id: 'sr1', kind: 'product_upload' as const, title: 'Upload 40 new products from my spreadsheet', status: 'quoted' as const, quoteMinor: 18000, createdAt: '2026-11-11T10:00:00Z', detail: 'CSV attached. Please add images from the shared folder.' },
-      { id: 'sr2', kind: 'design_change' as const, title: 'Add a gift-wrapping option to the product page', status: 'in_progress' as const, quoteMinor: 24000, createdAt: '2026-11-03T14:30:00Z', detail: 'Optional extra at checkout.' },
-      { id: 'sr3', kind: 'content' as const, title: 'Write descriptions for the winter range', status: 'done' as const, quoteMinor: 9500, createdAt: '2026-10-20T09:00:00Z', detail: '12 products.' },
-    ];
-  },
+  async serviceRequests() { return (await S()).requests; },
   async emailSettings() {
     return { brand: { shopName: 'Kiln & Thread', accent: '#2c3a15', supportEmail: 'hello@kilnandthread.example', footer: 'Thank you for supporting a small studio.' }, notifications: { newOrder: true, lowStock: true, paymentIssue: true, dailySummary: false }, sendingDomain: { host: 'mail.kilnandthread.example', verified: false } };
   },
   async saveSection() { return okDemo('Section saved as a draft.'); },
   async publishContent() { return okDemo('Published to your storefront.'); },
   async saveLegal(_s, _b, publish) { return okDemo(publish ? 'Page published.' : 'Draft saved.'); },
-  async setAutomation(_id, on) { return okDemo(on ? 'Automation turned on.' : 'Automation turned off.'); },
-  async createServiceRequest() { return okDemo('Request sent. We will reply with a quote.'); },
-  async decideQuote(_id, approve) { return okDemo(approve ? 'Quote approved. Work will be billed separately.' : 'Quote declined.'); },
+  async setAutomation(id, on) {
+    const x = await S(); const r = AUTOMATIONS_BASE.find(a => a.id === id); if (!r) return { ok: false, message: 'That automation no longer exists.' };
+    if (r.kind === 'transactional' && !on) return { ok: false, message: 'Order emails cannot be turned off. Customers need them.' };
+    x.automationOn[id] = on; return { ok: true, message: `${r.name} is ${on ? 'on' : 'off'}.` };
+  },
+  async createServiceRequest(kind, title, detail) {
+    const x = await S(); x.requests.unshift({ id: `sr${Date.now().toString(36)}`, kind, title, status: 'submitted', createdAt: new Date().toISOString(), detail }); return { ok: true, message: 'Request sent. We will reply with a quote before any work starts.' };
+  },
+  async decideQuote(id, approve) {
+    const x = await S(); const r = x.requests.find(q => q.id === id); if (!r || r.status !== 'quoted') return { ok: false, message: 'This quote is no longer open.' };
+    r.status = approve ? 'in_progress' : 'declined'; return { ok: true, message: approve ? 'Quote approved. The work is billed separately, as quoted.' : 'Quote declined. Nothing will be charged.' };
+  },
   async saveEmailSettings() { return okDemo('Email settings saved.'); },
-  async fulfilOrder(id) { return okDemo(`Order marked fulfilled.`); },
-  async refundOrder(i) { return okDemo(`Refund of £${(i.amountMinor / 100).toFixed(2)} requested.`); },
-  async inviteMember(email) { return okDemo(`Invitation sent to ${email}.`); },
+  async fulfilOrder(id, tracking) {
+    const x = await S(); const o = x.orders.find(q => q.id === id); if (!o) return { ok: false, message: 'Order not found.' };
+    if (o.state === 'cancelled' || o.payment === 'failed') return { ok: false, message: 'This order was not paid, so it cannot be fulfilled.' };
+    if (o.fulfilment === 'fulfilled') return { ok: false, message: 'This order is already fulfilled.' };
+    o.fulfilment = 'fulfilled'; o.state = 'completed'; o.timeline.push({ at: new Date().toISOString(), text: tracking ? `Fulfilled. Tracking ${tracking} emailed to ${o.email}.` : `Fulfilled. Confirmation emailed to ${o.email}.` });
+    return { ok: true, message: `Order #${o.number} marked fulfilled. ${o.customer.split(' ')[0]} has been emailed.` };
+  },
+  async refundOrder(i) {
+    const x = await S(); const o = x.orders.find(q => q.id === i.orderId); if (!o) return { ok: false, message: 'Order not found.' };
+    const left = o.totalMinor - o.refundedMinor; if (o.payment === 'failed') return { ok: false, message: 'Nothing was charged, so there is nothing to refund.' };
+    if (i.amountMinor <= 0) return { ok: false, message: 'Enter an amount to refund.' }; if (i.amountMinor > left) return { ok: false, message: `You can refund up to £${(left / 100).toFixed(2)} on this order.` };
+    o.refundedMinor += i.amountMinor; const full = o.refundedMinor >= o.totalMinor; o.payment = full ? 'refunded' : 'partially_refunded'; if (full) o.state = 'cancelled';
+    const fee = i.refundFee ? feeRefundMinor({ chargeMinor: o.totalMinor, feeMinor: feeMinor(o.totalMinor, 50), refundMinor: i.amountMinor, refundsReturnFee: true }) : 0;
+    if (i.restock && full) for (const l of o.lines) { const p = x.products.find(q => q.sku === l.sku); if (p) p.onHand += l.qty; }
+    o.timeline.push({ at: new Date().toISOString(), text: `Refund of £${(i.amountMinor / 100).toFixed(2)} confirmed${i.reason ? ` (${i.reason})` : ''}.` });
+    return { ok: true, message: `Refunded £${(i.amountMinor / 100).toFixed(2)} to ${o.customer.split(' ')[0]}.${i.refundFee ? ` Our fee on it (£${(fee / 100).toFixed(2)}) is returned to you.` : ''}${i.restock && full ? ' Items are back in stock.' : ''}` };
+  },
+  async inviteMember(email, role) {
+    const x = await S(); if (x.members.some(m => m.email.toLowerCase() === email.toLowerCase())) return { ok: false, message: `${email} is already on your team.` };
+    x.members.push({ name: email.split('@')[0], email, role, status: 'invited' }); return { ok: true, message: `Invitation sent to ${email}. It expires in 7 days.` };
+  },
   async rollbackTheme(v) { return okDemo(`Rollback to v${v} requested.`); },
-  async decideGrant(_id, dec) { return okDemo(dec === 'approve' ? 'Access approved for the time shown.' : dec === 'decline' ? 'Request declined.' : 'Access revoked.'); },
+  async decideGrant(id, dec) {
+    const x = await S(); const g = x.grants.find(q => q.id === id); if (!g) return { ok: false, message: 'That request no longer exists.' };
+    g.state = dec === 'approve' ? 'active' : 'revoked'; return { ok: true, message: dec === 'approve' ? `Access approved until ${new Date(g.expires).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Everything they do is logged.` : dec === 'decline' ? 'Request declined.' : 'Access revoked immediately.' };
+  },
   async savePreferences() { return okDemo('Preferences saved.'); },
+  async addProduct(p) {
+    const x = await S(); const sku = (p.sku || p.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 8).toUpperCase()).toUpperCase();
+    if (x.products.some(q => q.sku === sku)) return { ok: false, message: `SKU ${sku} is already used by another product.` };
+    x.products.unshift({ id: `p${Date.now().toString(36)}`, title: p.title.trim(), status: p.status, sku, priceMinor: p.priceMinor, onHand: p.onHand, allocated: 0, threshold: 5, variants: 1 });
+    return { ok: true, message: p.status === 'published' ? `${p.title} is published. Add photos next.` : `${p.title} saved as a draft.` };
+  },
+  async importProducts(rows) {
+    const x = await S(); let added = 0, skipped = 0; for (const r of rows) { const sku = (r.sku || r.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 8)).toUpperCase(); if (!r.title || x.products.some(q => q.sku === sku)) { skipped++; continue; } x.products.push({ id: `p${Date.now().toString(36)}${added}`, title: r.title, status: r.status, sku, priceMinor: r.priceMinor, onHand: r.onHand, allocated: 0, threshold: 5, variants: 1 }); added++; }
+    return added ? { ok: true, message: `${added} product${added > 1 ? 's' : ''} imported${skipped ? `. ${skipped} skipped (duplicate or empty SKU/title)` : ''}.` } : { ok: false, message: 'Nothing was imported. Every row was empty or used an existing SKU.' };
+  },
+  async adjustStock(a) {
+    const x = await S(); const p = x.products.find(q => q.id === a.productId); if (!p) return { ok: false, message: 'Product not found.' };
+    const to = a.mode === 'set' ? a.qty : p.onHand + a.qty; if (to < 0) return { ok: false, message: `That would take stock below zero (you have ${p.onHand}).` }; if (to < p.allocated) return { ok: false, message: `${p.allocated} are reserved for open orders, so stock cannot go below that.` };
+    const from = p.onHand; p.onHand = to; x.stockLog.unshift({ at: new Date().toISOString(), product: p.title, from, to, reason: a.reason });
+    return { ok: true, message: `${p.title}: ${from} to ${to} on hand. Logged as ${a.reason}.` };
+  },
+  async createDiscount(d) {
+    const x = await S(); const code = d.code.trim().toUpperCase(); if (x.discounts.some(q => q.code === code)) return { ok: false, message: `The code ${code} already exists.` };
+    x.discounts.unshift({ code, kind: d.kind, value: d.value, status: 'active', used: 0, limit: d.limit, window: d.endDate ? `Until ${new Date(d.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'No end date', minSpendMinor: d.minSpendMinor });
+    return { ok: true, message: `${code} is live. Customers can use it at checkout now.` };
+  },
+  async saveZone(z) {
+    const x = await S(); const name = z.name.trim(); const i = z.originalName ? x.zones.findIndex(q => q.name === z.originalName) : -1;
+    if (x.zones.some((q, k) => q.name.toLowerCase() === name.toLowerCase() && k !== i)) return { ok: false, message: `A zone called ${name} already exists.` };
+    if (!z.rates.length) return { ok: false, message: 'Add at least one delivery option.' };
+    const zone = { name, regions: z.regions.trim(), rates: z.rates }; if (i >= 0) x.zones[i] = zone; else x.zones.push(zone); return { ok: true, message: i >= 0 ? `${name} updated.` : `${name} added. Customers there can now check out.` };
+  },
+  async checkDomain() {
+    const x = await S(); x.domainChecks++; const rec = { type: 'CNAME', name: 'shop', value: 'cname.oss-commerce.example' };
+    return x.domainChecks < 3 ? { ok: false, message: 'We cannot see the DNS record yet. Changes can take up to an hour to spread. Check again in a few minutes.', record: rec } : { ok: true, message: 'Domain verified. We are issuing the SSL certificate now.' };
+  },
+  async requestLaunch() {
+    const x = await S(); if (x.launchRequested) return { ok: false, message: 'You have already requested launch. We will be in touch.' };
+    x.launchRequested = true; return { ok: true, message: 'Launch requested. We will run the final checks and confirm within one working day.' };
+  },
 };
