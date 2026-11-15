@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Browser, Phone, Shot } from '@/components/Frames';
 import { StoreDemo } from '@/components/StoreDemo';
-import { LiveDemo } from '@/components/LiveDemo';
-import { PayCalc } from '@/components/PayCalc';
+import { FeatureStack } from '@/components/FeatureStack';
+import { Orbit } from '@/components/Orbit';
 import { Reveal } from '@/components/Reveal';
 import { Cta } from '@/components/Cta';
 import { Showcase } from '@/components/Showcase';
@@ -18,7 +18,7 @@ export default function Home() {
           <p className="lede">A bespoke online store, a powerful commerce platform, and a team that takes care of the technology.</p>
           <div className="acts"><Link className="btn bone" href="/start">Start your store</Link><Link className="btn glass" href="/how-it-works">How it works</Link></div>
         </div>
-        <LiveDemo />
+        <FeatureStack />
       </div>
     </section>
 
@@ -26,7 +26,7 @@ export default function Home() {
       <div className="wrap">
         <h2 className="statement">Sell with a store made for you. <span>Run it from one dashboard.</span></h2>
         <div className="bento">
-          <Reveal className="b b-store"><Link href="/features/online-store" className="b-in"><div className="b-txt"><p className="mono">Online store</p><h3>Designed for your brand, built by us.</h3></div><div className="b-vis"><Browser url="kilnandthread.example"><StoreDemo /></Browser></div><ArrowRight className="b-go" size={20} aria-hidden /></Link></Reveal>
+          <Reveal className="b b-store"><Link href="/features/online-store" className="b-in"><div className="b-txt"><p className="mono">Online store</p><h3>Designed for your brand, built by us.</h3></div><div className="b-vis"><Browser url="yourbrand.co.uk"><StoreDemo /></Browser></div><ArrowRight className="b-go" size={20} aria-hidden /></Link></Reveal>
           <Reveal className="b b-orders" i={1}><Link href="/features/orders" className="b-in"><div className="b-txt"><p className="mono">Orders</p><h3>Send it or refund it in a couple of taps.</h3></div><div className="b-vis ph"><Phone><Shot name="m-order" alt="An order open on a phone, ready to mark as fulfilled" mobile /></Phone></div><ArrowRight className="b-go" size={20} aria-hidden /></Link></Reveal>
           <Reveal className="b b-prod" i={1}><Link href="/features/products" className="b-in"><div className="b-txt"><p className="mono">Products and stock</p><h3>Variants, collections and stock you can trust.</h3></div><div className="b-vis crop"><Shot name="inventory" alt="Stock levels in the dashboard" /></div><ArrowRight className="b-go" size={20} aria-hidden /></Link></Reveal>
           <Reveal className="b b-an" i={2}><Link href="/features/analytics" className="b-in"><div className="b-txt"><p className="mono">Analytics</p><h3>Know how the shop is doing.</h3></div><div className="b-vis crop"><Shot name="analytics" alt="Sales by day in the dashboard" /></div><ArrowRight className="b-go" size={20} aria-hidden /></Link></Reveal>
@@ -42,10 +42,10 @@ export default function Home() {
     </section>
 
     <section className="sec bone">
-      <div className="wrap">
-        <div className="head split"><h2>Payments, built in.</h2><p className="lede">Take cards and wallets from day one. Every payment shows what it cost and what you received, and payouts go straight to your bank. Try your own numbers.</p></div>
-        <PayCalc />
-        <p style={{ marginTop: 32 }}><Link className="lnk" href="/features/payments">How payments work <ArrowRight size={16} aria-hidden /></Link></p>
+      <div className="wrap duo">
+        <div><h2 className="h2">Payments, built in.</h2><p className="lede" style={{ marginTop: 18 }}>Take cards and wallets from day one. See every payment as it lands, refund in a couple of taps, and follow each payout to your bank. The money is always yours.</p>
+          <p style={{ marginTop: 28 }}><Link className="lnk" href="/features/payments">How payments work <ArrowRight size={16} aria-hidden /></Link></p></div>
+        <div className="orbit-wrap"><Orbit /></div>
       </div>
     </section>
 

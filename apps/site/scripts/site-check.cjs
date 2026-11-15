@@ -21,14 +21,10 @@ const PAGES = ['/', '/platform', '/features/online-store', '/features/checkout',
     const nf = await p.goto(BASE + '/nope'); ok(`[${name}] unknown page returns a 404 page`, nf.status() === 404 && (await p.getByText('That page is not here').count()) === 1);
     if (name === 'phone') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Open menu' }).click(); await p.locator('#hd-menu').getByRole('link', { name: /^Payments/ }).click(); await p.waitForURL('**/features/payments'); await p.waitForTimeout(400); ok('[phone] menu opens and navigates', (await p.locator('#hd-menu').isHidden())); }
     if (name === 'desktop') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Product' }).click(); ok('[desktop] product menu opens and lists every capability', (await p.locator('#mega a').count()) >= 8); await p.keyboard.press('Escape'); ok('[desktop] product menu closes with Escape', await p.locator('#mega').isHidden()); }
-    for (const u of ['/', '/features/orders', '/platform', '/how-it-works', '/start']) { await p.goto(BASE + u); ok(`[${name}] ${u} shows no price (prices live on the pricing page)`, !/£479|£39\b/.test(await p.locator('main').innerText())); }
+    for (const u of ['/', '/features/orders', '/features/payments', '/platform', '/how-it-works', '/start']) { await p.goto(BASE + u); ok(`[${name}] ${u} shows no price or fee (those live on the pricing page)`, !/£479|£39\b/.test(await p.locator('main').innerText())); }
     for (const [from, to] of [['/storefronts', '/features/online-store'], ['/payments', '/features/payments'], ['/integrations', '/platform']]) { await p.goto(BASE + from); ok(`[${name}] old link ${from} redirects`, p.url().endsWith(to)); }
-    // the working demo on the home page
-    await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Chalk' }).click(); await p.getByRole('button', { name: 'Add to bag' }).click(); await p.getByRole('button', { name: /^Pay/ }).click();
-    ok(`[${name}] demo: paying creates an order in the dashboard cards`, (await p.locator('.fc-order').innerText()).includes('#1043') && (await p.locator('.fc-order').innerText()).includes('chalk'));
-    await p.getByRole('button', { name: 'Mark as fulfilled' }).click(); const rc = await p.locator('.scene .rcpt').innerText();
-    ok(`[${name}] demo: receipt shows £24.00 paid, £0.68 cost, £23.32 received`, rc.includes('£24.00') && rc.includes('£0.68') && rc.includes('£23.32'), rc.replace(/\n/g, ' '));
-    await p.getByRole('button', { name: 'Start again' }).click(); ok(`[${name}] demo: Start again resets it`, (await p.getByRole('button', { name: 'Add to bag' }).count()) === 1);
+    await p.goto(BASE + '/'); ok(`[${name}] hero showcase is a described picture with nothing to operate`, (await p.locator('.stack[role=img]').count()) === 1 && (await p.locator('.stack button, .stack a').count()) === 0);
+    ok(`[${name}] no vase imagery anywhere on the home page`, (await p.locator('img[src*="vase"]').count()) === 0 && !/vase/i.test(await p.locator('main').innerText()));
     await p.goto(BASE + '/pricing'); await p.getByLabel('Order value').fill('100'); await p.getByText('International cards', { exact: true }).first().click();
     ok(`[${name}] calculator: £100 on an international card costs £3.85`, (await p.locator('.rcpt.big').innerText()).includes('£3.85') && (await p.locator('.rcpt.big').innerText()).includes('£96.15'));
     await p.getByLabel('Order value').fill('abc'); ok(`[${name}] calculator: nonsense is refused with a reason`, (await p.getByText('Enter an amount between').count()) === 1);
