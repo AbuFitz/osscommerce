@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { commerce, accountLink, GROUPS, SETTINGS, type NavItem } from './nav-data';
+import { commerce, GROUPS, SETTINGS, HELP, type NavItem } from './nav-data';
+import { ProfileMenu } from './ProfileMenu';
 
 const active = (p: string, h: string) => (h === '/' ? p === '/' : p === h || p.startsWith(h + '/'));
 
@@ -29,13 +30,10 @@ export function Shell({ children, initials, name, role, hidden = [], defaultExpa
         <nav aria-label="Main" className="rail-nav">
           {GROUPS.map((g, i) => { const items = g.items.filter(x => !hidden.includes(x.href)); if (!items.length) return null; return (
             <div key={i} className="rail-grp">{g.label && <div className="rail-cap" aria-hidden={!open}>{g.label}</div>}{items.map(item)}</div>); })}
-          <div className="rail-grp rail-end">{item(SETTINGS)}{item(accountLink)}</div>
         </nav>
         <div className="grow" />
-        <div className="rail-me">
-          <div className="avatar" aria-hidden>{initials}</div>
-          <div className="who"><b>{name}</b><span>{role}</span></div>
-        </div>
+        <div className="rail-grp rail-end">{item(HELP)}{item(SETTINGS)}</div>
+        <ProfileMenu initials={initials} name={name} role={role} open={open} />
         <button type="button" className="rail-toggle" onClick={toggle} aria-expanded={open} aria-label={open ? 'Collapse menu' : 'Expand menu'} data-label={open ? 'Collapse menu' : 'Expand menu'}>
           {open ? <PanelLeftClose size={18} aria-hidden /> : <PanelLeftOpen size={18} aria-hidden />}<span className="lbl">Collapse</span>
         </button>

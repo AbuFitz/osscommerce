@@ -49,6 +49,8 @@ export interface NewDiscount { code: string; kind: 'percent' | 'fixed' | 'shippi
 export interface ZoneInput { originalName?: string; name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
 export interface StockAdjust { productId: string; mode: 'set' | 'add'; qty: number; reason: 'recount' | 'received' | 'damaged' | 'returned' | 'other' }
 export interface DomainCheck { ok: boolean; message: string; record?: { type: string; name: string; value: string } }
+/** One thing that needs the merchant's attention. The same list feeds the Overview alerts and the notification centre, so they never disagree. */
+export interface Notice { id: string; tone: 'danger' | 'warn' | 'info' | 'success'; title: string; body: string; href: string; action: string; at: string; read: boolean; kind: 'payment' | 'stock' | 'order' | 'access' | 'quote' | 'setup' }
 export interface MutationResult { ok: boolean; message: string }
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
@@ -83,6 +85,8 @@ export interface CommerceGateway {
   rollbackTheme(version: string): Promise<MutationResult>;
   decideGrant(id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<MutationResult>;
   savePreferences(prefs: Record<string, boolean>): Promise<MutationResult>;
+  notices(): Promise<Notice[]>;
+  markNoticesRead(ids: string[] | 'all'): Promise<MutationResult>;
   addProduct(p: NewProduct): Promise<MutationResult>;
   importProducts(rows: NewProduct[]): Promise<MutationResult>;
   adjustStock(a: StockAdjust): Promise<MutationResult>;

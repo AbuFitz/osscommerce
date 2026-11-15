@@ -12,7 +12,7 @@ export const commerce: NavItem[] = [
   { href: '/automations', label: 'Automations', icon: Workflow },
   { href: '/storefront', label: 'Storefront', icon: Store },
   { href: '/content', label: 'Content', icon: PenLine },
-  { href: '/support', label: 'Support', icon: LifeBuoy },
+  { href: '/support', label: 'Help', icon: LifeBuoy },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 const by = (h: string) => commerce.find(c => c.href === h)!;
@@ -21,8 +21,10 @@ export const GROUPS: { label?: string; items: NavItem[] }[] = [
   { items: [by('/')] },
   { label: 'Sell', items: [by('/orders'), by('/products'), by('/inventory'), by('/customers')] },
   { label: 'Grow', items: [by('/discounts'), by('/analytics'), by('/automations')] },
-  { label: 'Store', items: [by('/storefront'), by('/content'), by('/support')] },
+  { label: 'Website', items: [by('/storefront'), by('/content')] },
 ];
+/** Pinned to the bottom of the menu, in this order: help, settings, then the profile menu (which holds the OSS account links). */
+export const HELP = by('/support');
 const SETTINGS = by('/settings');
 export { SETTINGS };
 export const accountLink: NavItem = { href: '/account', label: 'Your OSS account', icon: LayoutGrid };
@@ -31,5 +33,5 @@ export const account: NavItem[] = [
   { href: '/account/billing', label: 'Billing', icon: FileText },
   { href: '/account/support', label: 'Support', icon: LifeBuoy },
 ];
-export const MORE_LINKS = [by('/inventory'), by('/customers'), by('/discounts'), by('/analytics'), by('/automations'), by('/storefront'), by('/content'), by('/support'), SETTINGS, ...account.filter(a => a.href !== '/account/support')];
+export const MORE_LINKS = [by('/inventory'), by('/customers'), by('/discounts'), by('/analytics'), by('/automations'), by('/storefront'), by('/content'), HELP, SETTINGS, ...account.filter(a => a.href !== '/account/support')];
 export const PROGRESSIVE = ['/analytics', '/customers', '/discounts', '/inventory'];

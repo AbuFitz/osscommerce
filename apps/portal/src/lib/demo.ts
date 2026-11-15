@@ -1,6 +1,6 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { GATE_COPY, LAUNCH_GATES, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
+import { GATE_COPY, LAUNCH_GATES, type Notice, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor } from '@oss-commerce/contracts';
 
 /**
@@ -91,12 +91,12 @@ async function state(): Promise<DemoState> {
   try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
 }
 /** Per-browser scratch copy of the demo data (keyed by the oss_sid cookie). Actions really change it, so every page reflects what you did. */
-interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
+interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
 const G = globalThis as unknown as { __oss_demo?: Map<string, Scratch> };
 async function S(): Promise<Scratch> {
   const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
   const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
-  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
   return x;
 }
 const ordersFor = async (st: DemoState) => (st === 'new' ? [] : (await S()).orders);
@@ -275,6 +275,17 @@ export const demoGateway: CommerceGateway = {
     g.state = dec === 'approve' ? 'active' : 'revoked'; return { ok: true, message: dec === 'approve' ? `Access approved until ${new Date(g.expires).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Everything they do is logged.` : dec === 'decline' ? 'Request declined.' : 'Access revoked immediately.' };
   },
   async savePreferences() { return okDemo('Preferences saved.'); },
+  async notices() {
+    const st = await state(); const x = await S(); const out: Notice[] = []; if (st === 'new') return out;
+    for (const o of x.orders.filter(q => q.payment === 'failed').slice(0, 3)) out.push({ id: `pay-${o.id}`, tone: 'danger', kind: 'payment', title: `Payment failed on order #${o.number}`, body: `${o.customer}'s card was declined. No charge was made, so there is nothing to refund.`, href: `/orders/${o.id}`, action: 'View order', at: o.placedAt, read: false });
+    const open = x.orders.filter(q => q.state === 'open' && q.payment === 'paid'); if (open.length) out.push({ id: `ship-${open.length}`, tone: 'warn', kind: 'order', title: `${open.length} order${open.length > 1 ? 's' : ''} waiting to ship`, body: `The oldest was placed ${new Date(open[open.length - 1].placedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}. Customers are told when you mark an order fulfilled.`, href: '/orders?filter=unfulfilled', action: 'Review orders', at: open[0].placedAt, read: false });
+    for (const p of x.products.filter(q => q.status === 'published' && q.onHand - q.allocated <= q.threshold).slice(0, 2)) out.push({ id: `stock-${p.id}-${p.onHand}`, tone: 'warn', kind: 'stock', title: `${p.title} is running low`, body: `${Math.max(p.onHand - p.allocated, 0)} available, and your alert level is ${p.threshold}.`, href: '/inventory', action: 'Adjust stock', at: AS_OF, read: false });
+    for (const g of x.grants.filter(q => q.state === 'pending')) out.push({ id: `grant-${g.id}`, tone: 'info', kind: 'access', title: `${g.who} is asking for access`, body: g.purpose + '. Nothing is shared until you approve.', href: '/settings/team', action: 'Review request', at: AS_OF, read: false });
+    for (const r of x.requests.filter(q => q.status === 'quoted')) out.push({ id: `quote-${r.id}`, tone: 'info', kind: 'quote', title: 'A quote is ready', body: `${r.title}. Nothing is built or billed until you approve it.`, href: '/support', action: 'View quote', at: r.createdAt, read: false });
+    if (st === 'setup') out.push({ id: 'domain', tone: 'info', kind: 'setup', title: 'Verify your domain to launch', body: 'Add the DNS record we show you. Apple Pay and Google Pay also need it.', href: '/storefront', action: 'Check domain', at: AS_OF, read: false });
+    return out.map(n => ({ ...n, read: x.read.has(n.id) })).sort((a, b) => Number(a.read) - Number(b.read) || b.at.localeCompare(a.at));
+  },
+  async markNoticesRead(ids) { const x = await S(); const all = ids === 'all' ? (await demoGateway.notices()).map(n => n.id) : ids; all.forEach(i => x.read.add(i)); return { ok: true, message: all.length > 1 ? 'All caught up.' : 'Marked as read.' }; },
   async addProduct(p) {
     const x = await S(); const sku = (p.sku || p.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 8).toUpperCase()).toUpperCase();
     if (x.products.some(q => q.sku === sku)) return { ok: false, message: `SKU ${sku} is already used by another product.` };

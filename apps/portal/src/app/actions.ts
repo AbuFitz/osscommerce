@@ -63,3 +63,5 @@ export async function exportCustomers() {
   const { toCsv } = await import('@/lib/csv'); const cs = await gateway().customers();
   return { filename: `customers-${new Date().toISOString().slice(0, 10)}.csv`, csv: toCsv([['Name', 'Email', 'Orders', 'Total spent (GBP)', 'Last order', 'Marketing consent'], ...cs.map(c => [c.name, c.email, c.orders, (c.spentMinor / 100).toFixed(2), c.lastOrder.slice(0, 10), c.marketing ? 'Yes' : 'No'])]), count: cs.length };
 }
+
+export async function markNoticesRead(ids: string[] | 'all') { const r = await gateway().markNoticesRead(ids); revalidatePath('/', 'layout'); return r; }

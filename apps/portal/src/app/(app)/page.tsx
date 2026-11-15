@@ -4,6 +4,7 @@ import { gateway } from '@/lib/gateway-instance';
 import { plan, type Plan } from '@/lib/smart';
 import { money, when, day } from '@/lib/format';
 import { SalesBars, Dial, Donut } from '@/components/charts';
+import { AlertStack } from '@/components/Notices';
 import { Header, Avatar } from '@/components/ui';
 
 const KPI = {
@@ -14,7 +15,7 @@ const KPI = {
 
 export default async function Overview() {
   const g = gateway();
-  const [s, store, orders, customers, products] = await Promise.all([g.summary(), g.store(), g.orders(), g.customers(), g.products()]);
+  const [s, store, orders, customers, products, notices] = await Promise.all([g.summary(), g.store(), g.orders(), g.customers(), g.products(), g.notices()]);
   const failed = orders.filter(o => o.payment === 'failed').length;
   const P: Plan = plan({ store, summary: s, products: products.length, orders: orders.length, failed });
   const todo = orders.filter(o => o.state === 'open');
@@ -41,9 +42,7 @@ export default async function Overview() {
         {P.hero !== 'first_product' && <Link className="btn primary" href="/products">Add product</Link>}
       </Header>
 
-      {P.attention.length > 0 && (
-        <section className="w flat" style={{ marginBottom: 16 }} aria-labelledby="att"><h2 id="att" className="sr">Needs attention</h2>
-          {P.attention.map(a => <p key={a} style={{ margin: 0 }}><span className="badge bad">Needs attention</span> <span style={{ marginLeft: 8 }}>{a}</span> <Link className="link" href="/orders?filter=attention">Review</Link></p>)}</section>)}
+      <AlertStack notices={notices.filter(n => !n.read && (n.tone === 'danger' || n.tone === 'warn'))} total={notices.filter(n => !n.read).length} />
 
       <div className="ov">
         <div className="stack">
