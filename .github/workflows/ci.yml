@@ -67,8 +67,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: npm run typecheck -w @oss-commerce/storefront-sdk && npm run typecheck -w @oss-commerce/gateway && npm run typecheck -w @oss-commerce/provisioning && npm run typecheck -w @oss-commerce/payments && npm run typecheck -w @oss-commerce/integrations && npm run typecheck -w @oss-commerce/handoff
-      - run: npm test -w @oss-commerce/storefront-sdk && npm test -w @oss-commerce/provisioning && npm test -w @oss-commerce/payments && npm test -w @oss-commerce/integrations && npm test -w @oss-commerce/handoff
+      - run: npm run typecheck -w @oss-commerce/storefront-sdk && npm run typecheck -w @oss-commerce/gateway && npm run typecheck -w @oss-commerce/provisioning && npm run typecheck -w @oss-commerce/payments && npm run typecheck -w @oss-commerce/integrations && npm run typecheck -w @oss-commerce/handoff && npm run typecheck -w @oss-commerce/checkout
+      - run: npm test -w @oss-commerce/storefront-sdk && npm test -w @oss-commerce/provisioning && npm test -w @oss-commerce/payments && npm test -w @oss-commerce/integrations && npm test -w @oss-commerce/handoff && npm test -w @oss-commerce/checkout
       - name: Control-plane migrations and registry tests
         env: { PGPASSWORD: test }
         run: |
