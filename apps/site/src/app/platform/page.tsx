@@ -1,33 +1,17 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { Browser, Shot } from '@/components/Frames';
+import { FEATURES } from '@/content/features';
+import { Showcase } from '@/components/Showcase';
 import { Cta } from '@/components/Cta';
-export const metadata: Metadata = { title: 'Platform', description: 'The OneSimpleCommerce dashboard: orders, products, stock, customers, discounts, sales, delivery and content, in one place.' };
-
-const F = [
-  { s: 'orders', k: 'ORDERS', h: 'See every order and what it needs.', p: 'A single list with payment and fulfilment status, filters for what is waiting, and search by order, name or email.', l: ['Filter to orders waiting to ship or refunded', 'Open an order for items, customer, payment and timeline'] },
-  { s: 'order', k: 'FULFILMENT AND REFUNDS', h: 'Send it, or refund it, in a couple of taps.', p: 'Mark an order as fulfilled with a tracking number, or refund all or part of it and choose whether to put the stock back.', l: ['Full and partial refunds', 'A timeline of what happened and when'] },
-  { s: 'product', k: 'PRODUCTS', h: 'Products with real options.', p: 'Sizes, colours and other choices become variants, each with its own SKU, price, stock, VAT class and weight.', l: ['Add products one at a time or import a CSV', 'Add photos from your computer, or straight from your phone with a QR code', 'Group products into collections'] },
-  { s: 'inventory', k: 'STOCK', h: 'Know what you have.', p: 'On-hand, reserved and available stock for every product, with low-stock levels you set.', l: ['Adjust stock with a reason, so there is a record', 'Low-stock notifications'] },
-  { s: 'discounts', k: 'DISCOUNTS', h: 'Run offers without a developer.', p: 'Percentage, fixed-amount and free-delivery codes, with minimum spend, usage limits and end dates.', l: [] },
-  { s: 'analytics', k: 'SALES', h: 'A clear view of how the shop is doing.', p: 'Sales by day net of refunds, average order value, best sellers and order status. View the chart or the figures as a table.', l: [] },
-  { s: 'shipping', k: 'DELIVERY AND VAT', h: 'Your delivery rules.', p: 'Zones by country or postcode area, with prices and free-delivery thresholds. Check which zone any postcode falls in.', l: ['VAT classes per variant: standard, reduced or zero'] },
-  { s: 'content', k: 'CONTENT', h: 'Keep the words on your store up to date.', p: 'Edit the text on your storefront and your policy pages from the dashboard.', l: [] },
-  { s: 'automations', k: 'AUTOMATION', h: 'Routine jobs that run themselves.', p: 'Rules such as emailing you when stock is low or when an order has waited too long.', l: [] },
-] as const;
-
+export const metadata: Metadata = { title: 'Platform', description: 'Everything in OneSimpleCommerce: the storefront we build for you and the dashboard you run it from.' };
 export default function Platform() {
   return (<>
-    <section className="phd"><div className="wrap"><h1>The dashboard you run your shop from.</h1><p className="lede">Everything below is the real OneSimpleCommerce dashboard, shown with demo data. It works on a phone as well as it does on a desk.</p>
-      <div className="acts"><Link className="btn ink" href="/start">Start your store <ArrowRight size={18} aria-hidden /></Link></div></div></section>
-    <section className="sec tight"><div className="wrap">
-      {F.map(f => (<article className="feature" key={f.s}>
-        <div><span className="mono muted">{f.k}</span><h2>{f.h}</h2><p>{f.p}</p>{f.l.length > 0 && <ul>{f.l.map(x => <li key={x}>{x}</li>)}</ul>}</div>
-        <Browser><Shot name={f.s} alt={`${f.h} Screen from the OneSimpleCommerce dashboard.`} /></Browser>
-      </article>))}
-      <p className="note" style={{ marginTop: 32 }}>Team roles, a notification centre, keyboard search (Ctrl or ⌘ K) and a help area for service requests are part of the dashboard too.</p>
-    </div></section>
+    <section className="fh"><div className="wrap"><p className="kicker">The platform</p><h1>One place to sell, and one place to run it.</h1><p className="lede">A storefront made for your brand, and a dashboard for everything behind it. It works as well on a phone as it does at a desk.</p>
+      <div className="fh-vis"><Showcase /><p className="cap">A recording of the real dashboard, with demo data.</p></div></div></section>
+    {(['Sell', 'Manage'] as const).map(g => <section className="sec tight" key={g}><div className="wrap"><div className="head"><h2>{g}</h2></div>
+      <ul className="index">{FEATURES.filter(f => f.group === g).map((f, i) => <li key={f.slug}><Link href={`/features/${f.slug}`}><span className="mono">0{i + 1}</span><b>{f.nav}</b><span>{f.blurb}</span><ArrowRight size={20} aria-hidden /></Link></li>)}</ul></div></section>)}
+    <section className="sec"><div className="wrap"><div className="head"><h2>Also in the dashboard.</h2></div><ul className="built"><li><b>Discounts</b><span>Percentage, fixed-amount and free-delivery codes with limits and end dates.</span></li><li><b>Customers</b><span>Who has ordered, how often and how much.</span></li><li><b>Team and roles</b><span>Invite people and choose what each can do.</span></li><li><b>Notifications</b><span>Failed payments, waiting orders and low stock in one place.</span></li><li><b>Search</b><span>Find any order, product or customer from anywhere.</span></li><li><b>Help and requests</b><span>Ask for design changes or support from inside the dashboard.</span></li></ul></div></section>
     <Cta />
   </>);
 }

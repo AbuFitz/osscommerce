@@ -5,12 +5,12 @@ import '@fontsource-variable/inter';
 import '@fontsource/dm-mono/400.css';
 import '@fontsource/dm-mono/500.css';
 import './globals.css';
-import { SITE, PRICE } from '@/config';
+import { SITE } from '@/config';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Footer } from '@/components/Footer';
 import { WhatsApp } from '@/components/WhatsApp';
 
-const desc = `A custom-built online shop and the dashboard to run it. We design, build and host the store; you manage products, orders and payments. ${PRICE.build} to build, ${PRICE.monthly} a month.`;
+const desc = 'A bespoke online store, a powerful commerce platform, and a team that takes care of the technology. We build the store. You run the business.';
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: { default: `${SITE.name}: we build the store, you run the business`, template: `%s | ${SITE.name}` },

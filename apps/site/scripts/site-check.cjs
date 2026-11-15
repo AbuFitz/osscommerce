@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 const BASE = process.env.BASE || 'http://localhost:3200';
 const res = []; const ok = (n, c, d = '') => { res.push(c); console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${d ? ' — ' + d : ''}`); };
-const PAGES = ['/', '/platform', '/storefronts', '/payments', '/pricing', '/integrations', '/start', '/contact', '/legal', '/legal/terms'];
+const PAGES = ['/', '/platform', '/features/online-store', '/features/checkout', '/features/payments', '/features/orders', '/features/products', '/features/analytics', '/features/delivery', '/how-it-works', '/pricing', '/start', '/contact', '/legal', '/legal/terms'];
 (async () => {
   const b = await chromium.launch();
   for (const [name, vp] of [['desktop', { width: 1440, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
@@ -19,7 +19,10 @@ const PAGES = ['/', '/platform', '/storefronts', '/payments', '/pricing', '/inte
     }
     await p.goto(BASE + '/pricing'); const pt = await p.locator('main').innerText(); ok(`[${name}] pricing shows £479 and £39`, pt.includes('£479') && pt.includes('£39'));
     const nf = await p.goto(BASE + '/nope'); ok(`[${name}] unknown page returns a 404 page`, nf.status() === 404 && (await p.getByText('That page is not here').count()) === 1);
-    if (name === 'phone') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Open menu' }).click(); await p.locator('#hd-menu').getByRole('link', { name: 'Pricing', exact: true }).click(); await p.waitForURL('**/pricing'); await p.waitForTimeout(400); ok('[phone] menu opens and navigates', (await p.locator('#hd-menu').isHidden())); }
+    if (name === 'phone') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Open menu' }).click(); await p.locator('#hd-menu').getByRole('link', { name: /^Payments/ }).click(); await p.waitForURL('**/features/payments'); await p.waitForTimeout(400); ok('[phone] menu opens and navigates', (await p.locator('#hd-menu').isHidden())); }
+    if (name === 'desktop') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Product' }).click(); ok('[desktop] product menu opens and lists every capability', (await p.locator('#mega a').count()) >= 8); await p.keyboard.press('Escape'); ok('[desktop] product menu closes with Escape', await p.locator('#mega').isHidden()); }
+    for (const u of ['/', '/features/orders', '/platform', '/how-it-works', '/start']) { await p.goto(BASE + u); ok(`[${name}] ${u} shows no price (prices live on the pricing page)`, !/£479|£39\b/.test(await p.locator('main').innerText())); }
+    for (const [from, to] of [['/storefronts', '/features/online-store'], ['/payments', '/features/payments'], ['/integrations', '/platform']]) { await p.goto(BASE + from); ok(`[${name}] old link ${from} redirects`, p.url().endsWith(to)); }
     // the working demo on the home page
     await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Chalk' }).click(); await p.getByRole('button', { name: 'Add to bag' }).click(); await p.getByRole('button', { name: /^Pay/ }).click();
     ok(`[${name}] demo: paying creates an order in the dashboard cards`, (await p.locator('.fc-order').innerText()).includes('#1043') && (await p.locator('.fc-order').innerText()).includes('chalk'));
