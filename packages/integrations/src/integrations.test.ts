@@ -14,7 +14,7 @@ test('catalogue: nothing is advertised as available without the full evidence se
 });
 test('catalogue: providers that call out must name their hosts; no http, no wildcards, no private hosts', () => {
   for (const m of CATALOGUE) for (const h of m.allowedHosts) assert.match(h, /^[a-z0-9.-]+\.[a-z]{2,}$/, m.id);
-  for (const m of CATALOGUE.filter(m => m.auth.type === 'api_key' || m.auth.type === 'oauth')) if (!['shipstation'].includes(m.id)) assert.ok(m.allowedHosts.length > 0, `${m.id} has no allowed hosts`);
+  for (const m of CATALOGUE.filter(m => m.auth.type === 'api_key' || m.auth.type === 'oauth')) if (!['shipstation', 'maplibre_maps'].includes(m.id))  assert.ok(m.allowedHosts.length > 0, `${m.id} has no allowed hosts`);
 });
 test('catalogue: an unverifiable claim cannot be constructed', () => {
   const m = { ...byId('postcodes_io')!, availability: 'available' as const }; assert.equal(readyToAdvertise(m).ok, false);

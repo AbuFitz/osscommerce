@@ -218,7 +218,6 @@ table.t tbody tr:hover td{background:rgba(30,40,15,.075)}
 .stat span{display:block;margin-top:8px;color:rgba(255,255,255,.8);font-size:13px}
 @media (max-width:900px){.hero.solo{grid-template-columns:1fr}.stat{max-width:none;justify-self:stretch;display:flex;align-items:baseline;gap:12px;padding:14px 18px}.stat b{font-size:30px}.stat span{margin:0}}
 
-@media (min-width:901px) and (max-height:980px){.frame[data-rail=closed] .rail a,.frame[data-rail=closed] .rail-toggle{width:40px;height:40px}.frame[data-rail=closed] .rail-grp{gap:6px}.frame[data-rail=closed] .rail{gap:6px;padding-top:14px}.frame[data-rail=open] .rail a,.frame[data-rail=open] .rail-toggle{height:38px}.frame[data-rail=open] .rail-cap{padding-top:2px}}
 
 .steps.four{grid-template-columns:repeat(4,1fr)}.steps.four li{min-width:0}@media(max-width:700px){.steps.four{grid-template-columns:1fr 1fr}}
 
@@ -267,7 +266,7 @@ table.t tbody tr:hover td{background:rgba(30,40,15,.075)}
 /* ---- Form dialogs, motion tokens ---- */
 :root{--ease:cubic-bezier(.2,.9,.3,1);--dur-1:.12s;--dur-2:.22s;--dur-3:.36s}
 .fd{display:grid;gap:16px}.fd .field{display:grid;gap:6px}.fd label{font-weight:600;font-size:14px}.fd .req{color:#a3321f}
-.fd input,.fd select,.fd textarea{width:100%;font:inherit;padding:12px 14px;border-radius:14px;border:1px solid rgba(40,50,20,.18);background:#fff;color:var(--ink);transition:border-color var(--dur-1),box-shadow var(--dur-1)}
+.fd input,.fd select,.fd textarea{width:100%;font:inherit;padding:12px 14px;border-radius:14px;border:1px solid rgba(40,50,20,.18);background-color:#fff;color:var(--ink);transition:border-color var(--dur-1),box-shadow var(--dur-1)}
 .fd input:focus,.fd select:focus,.fd textarea:focus{outline:none;border-color:var(--olive-700,#4a5f1f);box-shadow:0 0 0 3px rgba(130,160,50,.28)}
 .fd .field.bad input,.fd .field.bad select,.fd .field.bad textarea{border-color:#c0462f;box-shadow:0 0 0 3px rgba(192,70,47,.14)}
 .fd .ferr{margin:0;color:#a3321f;font-size:13px}.fd .fhint{margin:0;font-size:12.5px}
@@ -288,3 +287,36 @@ table.t tbody tr:hover td{background:rgba(30,40,15,.075)}
 
 /* Rail stays above the page widgets (they create their own stacking contexts via backdrop-filter), so hover labels are never covered. */
 @media(min-width:901px){.rail{z-index:50;overflow:visible}.rail a::after,.rail-toggle::after{z-index:60;pointer-events:none}.stage{position:relative;z-index:1}}
+
+/* ---- Brand tiles and payment method rows ---- */
+
+.methods{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}.methods li{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:18px;background:rgba(40,50,20,.05)}.methods li[data-on=false]{opacity:.62}
+.methods .mname{display:grid;min-width:0;flex:1}.methods .mname b{font-size:14.5px;font-weight:600}.methods .mname span{font-size:12.5px;color:var(--muted)}.methods .dot{width:9px;height:9px;border-radius:50%;background:rgba(40,50,20,.22)}.methods .dot.on{background:#5f8a1f;box-shadow:0 0 0 4px rgba(95,138,31,.18)}
+.pm{display:inline-flex;align-items:center;gap:8px}
+.chips{display:flex!important}
+.igrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-top:6px}
+.icard{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"b t" "f f";gap:12px 14px;text-align:left;padding:16px;font:inherit;color:inherit;cursor:pointer;border:0;align-items:start}.icard>.brand{grid-area:b}.icard-t{grid-area:t;display:grid;gap:3px;min-width:0}.icard-t b{font-size:16px}.icard-t span{font-size:13.5px;color:var(--muted);line-height:1.4}.icard-f{grid-area:f;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12.5px}
+.icard:hover{transform:translateY(-2px)}.icard:focus-visible{outline:2px solid var(--olive-700,#4a5f1f);outline-offset:2px}
+.idetail{display:grid;gap:14px}.idh{display:flex;gap:14px;align-items:center}.why{padding:12px 14px;border-radius:14px;background:rgba(40,50,20,.06)}.why ul{margin:6px 0 8px;padding-left:18px;font-size:13.5px}.why p{margin:0;font-size:12.5px}
+.btn.only-d{display:inline-flex}@media(max-width:900px){.btn.only-m{display:inline-flex}}
+.mark{display:inline-grid;place-items:center;flex:none;overflow:hidden}.mark img,.mark svg{display:block}.methods li{padding:10px 14px}.methods .mark{width:64px!important}
+
+/* ---- Icons: one stroke weight everywhere; dropdowns with a properly placed chevron ---- */
+svg.lucide{stroke-width:1.75}
+select{appearance:none;-webkit-appearance:none;background-color:#fff;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235b6648' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 14px center!important;background-size:16px!important;padding-right:42px!important;text-overflow:ellipsis;cursor:pointer}
+select:disabled{opacity:.6;cursor:not-allowed}
+input[type=date]{min-height:46px}input[type=date]::-webkit-calendar-picker-indicator{opacity:.6;cursor:pointer;margin-left:6px}
+
+/* ---- Scaling: everything in the rail and frame follows the window height, so it fits from small laptops to large monitors ---- */
+@media(min-width:901px){
+  .frame{--fm:clamp(8px,2.2vh,22px);--ri:clamp(32px,calc((100dvh - 230px) / 16),46px);margin:var(--fm) auto;min-height:calc(100dvh - 2 * var(--fm));width:calc(100% - 2 * var(--fm))}
+  .rail{top:calc(var(--fm) + 12px);height:calc(100dvh - 2 * (var(--fm) + 12px));gap:calc(var(--ri) * .2);padding:clamp(10px,2.4vh,18px) 0 clamp(8px,1.8vh,14px)}
+  .rail-grp{gap:calc(var(--ri) * .16)}.rail-grp+.rail-grp{margin-top:calc(var(--ri) * .08);padding-top:calc(var(--ri) * .22)}
+  .rail a,.rail-toggle{width:var(--ri);height:var(--ri)}.rail .avatar{width:var(--ri);height:var(--ri)}
+  .frame[data-rail=open] .rail{padding:clamp(10px,2.4vh,18px) 12px clamp(8px,1.8vh,12px)}
+  .frame[data-rail=open] .rail a,.frame[data-rail=open] .rail-toggle{width:100%;height:clamp(34px,calc((100dvh - 330px) / 14),44px)}
+}
+@media(max-height:640px) and (min-width:901px){.rail{overflow-y:auto;overflow-x:hidden;scrollbar-width:none}.rail::-webkit-scrollbar{display:none}}
+@media(min-width:1800px){.frame{max-width:1680px}}
+@media(min-width:2400px){.frame{max-width:1900px}}
+@media(min-width:901px){.rail>*,.rail-grp,.rail-nav>*,.rail a,.rail-toggle{flex-shrink:0}}

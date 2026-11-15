@@ -38,6 +38,7 @@ const mk = (i: number): Order => {
     shippingMinor: ship, discountMinor: disc, taxMinor: Math.round(total / 6), totalMinor: total,
     payment: failed ? 'failed' : refunded === total ? 'refunded' : refunded ? 'partially_refunded' : 'paid',
     fulfilment: failed ? 'unfulfilled' : fulfilment, state: failed || refunded === total ? 'cancelled' : fulfilment === 'fulfilled' ? 'completed' : 'open',
+    method: ([{ brand: 'visa', last4: '4242' }, { brand: 'mastercard', last4: '4444', wallet: 'applepay' }, { brand: 'visa', last4: '0005', wallet: 'googlepay' }, { brand: 'amex', last4: '1005' }, { brand: 'mastercard', last4: '5100' }] as const)[i % 5],
     refundedMinor: refunded, shipTo: `${12 + i} Mill Lane, Bristol BS${1 + (i % 9)} 4${'ABCDEFG'[i % 7]}${'XYZ'[i % 3]}`,
     timeline: [
       { at: iso, text: 'Order placed.' },

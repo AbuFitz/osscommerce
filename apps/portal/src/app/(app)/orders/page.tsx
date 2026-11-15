@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Search } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { money, when } from '@/lib/format';
+import { PayMethod } from '@/components/Brand';
 import { Header, PayBadge, FulBadge, Avatar } from '@/components/ui';
 
 export const metadata = { title: 'Orders' };
@@ -25,12 +26,12 @@ export default async function Orders({ searchParams }: { searchParams: Promise<{
       <div className="w tw">
         {orders.length === 0 ? <div className="empty">{q || filter ? 'No orders match. Clear the filter to see all orders.' : 'No orders yet. Orders will appear here when customers check out.'}</div> : <>
           <table className="t">
-            <thead><tr><th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Date</th><th scope="col">Payment</th><th scope="col">Fulfilment</th><th scope="col" className="r">Total</th></tr></thead>
+            <thead><tr><th scope="col">Order</th><th scope="col">Customer</th><th scope="col">Date</th><th scope="col">Payment</th><th scope="col">Method</th><th scope="col">Fulfilment</th><th scope="col" className="r">Total</th></tr></thead>
             <tbody>{orders.map((o, i) => (
               <tr key={o.id}>
                 <td><Link className="link" href={`/orders/${o.id}`}>#{o.number}</Link></td>
                 <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={o.customer} i={i} />{o.customer}</span></td>
-                <td className="muted">{when(o.placedAt)}</td><td><PayBadge s={o.payment} /></td><td><FulBadge s={o.fulfilment} state={o.state} /></td>
+                <td className="muted">{when(o.placedAt)}</td><td><PayBadge s={o.payment} /></td><td><PayMethod m={o.method} compact /></td><td><FulBadge s={o.fulfilment} state={o.state} /></td>
                 <td className="r num">{money(o.totalMinor)}</td>
               </tr>))}</tbody>
           </table>

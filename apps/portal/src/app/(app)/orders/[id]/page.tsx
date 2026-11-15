@@ -1,3 +1,4 @@
+import { Brand } from '@/components/Brand';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
@@ -46,6 +47,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           </dl>
         </section>
         <aside className="c-4" style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
+          <section className="w" aria-labelledby="pay"><h2 id="pay" style={{ marginBottom: 12 }}>Payment</h2>
+            <div className="row"><Brand name={o.method?.wallet ?? o.method?.brand ?? 'stripe'} label={o.method ? undefined : 'Stripe'} size={44} title /><span className="t"><b>{o.method ? `${({ visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex' } as Record<string, string>)[o.method.brand]} ···· ${o.method.last4}` : 'Not recorded'}</b><span>{o.method?.wallet ? `Paid with ${({ applepay: 'Apple Pay', googlepay: 'Google Pay', link: 'Link' } as Record<string, string>)[o.method.wallet]} · ` : ''}{o.payment === 'failed' ? 'Declined. Nothing was charged.' : 'Paid to your Stripe account'}</span></span><Brand name="stripe" size={30} title /></div></section>
           <section className="w" aria-labelledby="cust"><h2 id="cust" style={{ marginBottom: 12 }}>Customer</h2>
             <div className="row"><Avatar name={o.customer} /><span className="t"><b>{o.customer}</b><span>{o.email}</span></span></div>
             <div className="muted" style={{ marginTop: 12 }}>{o.shipTo}</div></section>

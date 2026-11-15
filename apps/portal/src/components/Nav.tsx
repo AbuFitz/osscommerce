@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { commerce, accountLink, GROUPS, SETTINGS, type NavItem } from './nav-data';
 
@@ -11,11 +11,15 @@ const active = (p: string, h: string) => (h === '/' ? p === '/' : p === h || p.s
 export function Shell({ children, initials, name, role, hidden = [], defaultExpanded }: {
   children: React.ReactNode; initials: string; name: string; role: string; hidden?: string[]; defaultExpanded: boolean;
 }) {
-  const [open, setOpen] = useState(defaultExpanded);
+  const [pref, setOpen] = useState(defaultExpanded);
+  // On narrower desktop windows the labelled rail would squeeze the page, so it folds to icons there (the saved preference is kept).
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => { const m = window.matchMedia('(max-width:1099px)'); const f = () => setNarrow(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  const open = pref && !narrow;
   const p = usePathname();
-  const toggle = () => { const v = !open; setOpen(v); document.cookie = `oss_rail=${v ? 'open' : 'closed'}; path=/; max-age=31536000; samesite=lax`; };
+  const toggle = () => { const v = !pref; setOpen(v); document.cookie = `oss_rail=${v ? 'open' : 'closed'}; path=/; max-age=31536000; samesite=lax`; };
   const item = (it: NavItem) => (
-    <Link key={it.href} href={it.href} data-label={it.label} aria-label={open ? undefined : it.label} aria-current={active(p, it.href) ? 'page' : undefined}>
+    <Link key={it.href} href={it.href} data-label={it.label} title={open ? undefined : it.label} aria-label={open ? undefined : it.label} aria-current={active(p, it.href) ? 'page' : undefined}>
       <it.icon size={19} aria-hidden /><span className="lbl">{it.label}</span>
     </Link>
   );

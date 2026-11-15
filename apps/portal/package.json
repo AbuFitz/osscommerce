@@ -10,24 +10,27 @@
   },
   "dependencies": {
     "@oss-commerce/contracts": "*",
+    "@oss-commerce/emails": "*",
+    "@oss-commerce/handoff": "*",
+    "@oss-commerce/integrations": "*",
     "@oss-commerce/ui": "*",
     "geist": "^1.3.1",
-    "lucide-react": "^0.468.0",
+    "lucide-react": "^1.73.0",
     "next": "^15.1.0",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",
-    "zod": "^3.24.0",
-    "@oss-commerce/emails": "*",
-    "@oss-commerce/handoff": "*",
-    "qrcode": "^1.5.4"
+    "simple-icons": "^16.37.0",
+    "svg-path-bbox": "^2.1.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "tsx": "^4.23.15",
-    "typescript": "~5.8.0",
-    "@types/qrcode": "^1.5.5"
+    "typescript": "~5.8.0"
   }
 }

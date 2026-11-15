@@ -92,3 +92,5 @@ jobs:
           (cd apps/portal && NEXT_PUBLIC_OSS_DEMO=1 npx next start -p 3100 &) 
           npx wait-on http://localhost:3100 --timeout 60000
           cd apps/portal && NODE_PATH=$(npm root -g) node scripts/interactions.cjs
+          NODE_PATH=$(npm root -g) node scripts/alignment.cjs
+          NODE_PATH=$(npm root -g) node scripts/scaling.cjs

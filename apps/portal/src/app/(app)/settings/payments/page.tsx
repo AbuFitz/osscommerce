@@ -2,6 +2,7 @@ import { Check } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { DEMO } from '@/lib/env';
 import { Header } from '@/components/ui';
+import { Brand, MethodRow } from '@/components/Brand';
 import { PaymentSetupActions } from '@/components/PaymentSetupActions';
 import type { PaymentSetupStatus } from '@/lib/gateway';
 export const metadata = { title: 'Payments' };
@@ -18,7 +19,7 @@ const when = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-GB', 
 
 export default async function Payments({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
   const { state } = await searchParams; const g = gateway();
-  const p = await g.paymentSetup(DEMO ? state : undefined);
+  const [p, store] = await Promise.all([g.paymentSetup(DEMO ? state : undefined), g.store()]); const domainOk = store.store.hostnames[0]?.verified ?? false;
   const tone = TONE[p.status], step = stepIndex(p.status, p.payoutsEnabled, p.chargesEnabled), cta = CTA[p.status], deadline = when(p.deadline);
   return (<><Header title="Payments" back={{ href: '/settings', label: 'Settings' }}>{p.account && <a className="btn only-d" href="https://dashboard.stripe.com/" target="_blank" rel="noreferrer">Open Stripe dashboard</a>}</Header>
     <div className="grid">
@@ -32,6 +33,12 @@ export default async function Payments({ searchParams }: { searchParams: Promise
       <section className="w c-5" aria-labelledby="req"><div className="wh"><h2 id="req">What Stripe needs</h2></div>
         {p.due.length ? <ul className="check">{p.due.map(d => <li key={d}><span className="tick" /><div style={{ fontWeight: 550 }}>{d}</div></li>)}</ul> : <p className="muted" style={{ margin: 0 }}>{p.pending.length ? `Stripe is reviewing: ${p.pending.join(', ')}.` : 'Nothing is needed from you right now.'}</p>}
         <p className="muted" style={{ marginBottom: 0, fontSize: 12.5, marginTop: 16 }}>You enter business, identity and bank details in Stripe, not in OSS. We never see or store them.</p></section>
+      <section className="w c-12" aria-labelledby="pmx"><div className="wh"><h2 id="pmx">What customers can pay with</h2><span className="pm"><Brand name="stripe" size={28} title /><span className="muted">via Stripe</span></span></div>
+        <MethodRow items={[{ key: 'visa', label: 'Visa', on: p.chargesEnabled }, { key: 'mastercard', label: 'Mastercard', on: p.chargesEnabled }, { key: 'amex', label: 'Amex', on: p.chargesEnabled },
+          { key: 'applepay', label: 'Apple Pay', on: p.chargesEnabled && domainOk, note: p.chargesEnabled && !domainOk ? 'Needs domain' : undefined }, { key: 'googlepay', label: 'Google Pay', on: p.chargesEnabled && domainOk, note: p.chargesEnabled && !domainOk ? 'Needs domain' : undefined },
+          { key: 'link', label: 'Link', on: p.chargesEnabled && domainOk, note: p.chargesEnabled && !domainOk ? 'Needs domain' : undefined },
+          { key: 'paypal', label: 'PayPal', on: false, note: 'Not yet' }, { key: 'klarna', label: 'Klarna', on: false, note: 'Not yet' }, { key: 'clearpay', label: 'Clearpay', on: false, note: 'Not yet' }]} />
+        <p className="muted" style={{ margin: '14px 0 0', fontSize: 12.5 }}>Wallets need your domain verified so Apple and Google can confirm it is yours. Buy-now-pay-later and PayPal are added only after they are proven for UK accounts.</p></section>
       <section className="w c-6" aria-labelledby="av"><div className="wh"><h2 id="av">Availability</h2></div>
         <ul className="check">{[{ l: 'Customers can pay', ok: p.chargesEnabled }, { l: 'Payouts to your bank', ok: p.payoutsEnabled }, { l: 'Checkout on your website', ok: p.checkoutAllowed }].map(c => <li key={c.l}><span className={`tick ${c.ok ? 'on' : ''}`}>{c.ok && <Check size={12} aria-hidden />}</span><div style={{ fontWeight: 550 }}>{c.l}<span className="sr">{c.ok ? ' — available' : ' — not available'}</span></div></li>)}</ul>
         <p className="muted" style={{ marginBottom: 0, fontSize: 12.5 }}>When checkout is off, existing orders, refunds and your reports stay available.</p></section>

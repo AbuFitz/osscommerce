@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CreditCard, Truck, Users, Store, Receipt, SlidersHorizontal, Mail, Scale, ArrowUpRight, ChevronRight } from 'lucide-react';
+import { CreditCard, Truck, Users, Store, Receipt, SlidersHorizontal, Mail, Scale, ArrowUpRight, ChevronRight, Plug } from 'lucide-react';
 import { Header } from '@/components/ui';
 export const metadata = { title: 'Settings' };
 const items = [
@@ -8,12 +8,13 @@ const items = [
   { href: '/settings/preferences', t: 'Preferences', d: 'Alerts, checkout and pausing orders', i: SlidersHorizontal, c: 'blue' },
   { href: '/settings/emails', t: 'Emails', d: 'Templates, branding and notifications', i: Mail, c: 'lilac' },
   { href: '/settings/legal', t: 'Legal pages', d: 'Privacy, terms, shipping and returns', i: Scale, c: 'peach' },
+  { href: '/settings/integrations', t: 'Integrations', d: 'Shipping, search, maps and more', i: Plug, c: 'blue' },
   { href: '/settings/team', t: 'Team and access', d: 'Members, roles and support access', i: Users, c: 'lilac' },
   { href: '/storefront', t: 'Storefront', d: 'Theme, domain and versions', i: Store, c: 'peach' },
   { href: '/account/billing', t: 'Plan and billing', d: 'Managed in your OSS account', i: Receipt, c: 'lime' },
 ];
 const groups = [
-  { h: 'Store', rows: ['/settings/payments', '/settings/shipping', '/settings/preferences', '/settings/emails', '/settings/legal'] },
+  { h: 'Store', rows: ['/settings/payments', '/settings/shipping', '/settings/integrations', '/settings/preferences', '/settings/emails', '/settings/legal'] },
   { h: 'People and plan', rows: ['/settings/team', '/storefront', '/account/billing'] },
 ];
 export default function Settings() {

@@ -3,7 +3,7 @@ import { z } from 'zod';
 /** Every provider is described by a manifest before any code for it exists. The portal renders discovery, wizards and status from it,
  *  and the catalogue refuses to mark a provider `available` until the evidence below is true: real docs, sandbox proof, provider
  *  approval where needed, supported regions and pricing checked. */
-export const Category = z.enum(['payments', 'tax', 'shipping', 'address', 'search', 'media', 'fulfilment', 'print_on_demand', 'identifiers', 'automation']);
+export const Category = z.enum(['payments', 'tax', 'shipping', 'address', 'search', 'media', 'fulfilment', 'print_on_demand', 'identifiers', 'automation', 'maps', 'email']);
 export const Auth = z.discriminatedUnion('type', [
   z.object({ type: z.literal('platform') }),                                                     // OSS holds the platform credential (Stripe Connect)
   z.object({ type: z.literal('oauth'), scopes: z.array(z.string()) }),
@@ -17,7 +17,7 @@ export const Evidence = z.object({
 export const Manifest = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]{1,40}$/), name: z.string(), category: Category, summary: z.string().max(160), docsUrl: z.string().url(),
   regions: z.array(z.string().length(2)).min(1), auth: Auth,
-  capabilities: z.array(z.enum(['accept_payment', 'wallets', 'bnpl', 'tax_calculation', 'rates', 'labels', 'tracking', 'address_lookup', 'postcode_validation', 'product_search', 'image_transform', 'inventory_sync', 'order_submission', 'barcodes'])).min(1),
+  capabilities: z.array(z.enum(['accept_payment', 'wallets', 'bnpl', 'tax_calculation', 'rates', 'labels', 'tracking', 'address_lookup', 'postcode_validation', 'product_search', 'image_transform', 'inventory_sync', 'order_submission', 'barcodes', 'maps', 'email_sending'])).min(1),
   cost: z.object({ payer: z.enum(['merchant', 'oss', 'none']), note: z.string() }),                // provider costs are disclosed, never absorbed silently
   webhooks: z.boolean(), entitlement: z.string().optional(), dependsOn: z.array(z.string()).default([]),
   /** Hosts the adapter may call. Anything else is refused (SSRF guard). */
