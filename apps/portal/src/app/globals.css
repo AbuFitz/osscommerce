@@ -368,3 +368,9 @@ input[type=date]{min-height:46px}input[type=date]::-webkit-calendar-picker-indic
 .vrow label{white-space:nowrap}.vrow .field>label{font-size:12.5px}.vrow input,.vrow select{min-width:0}
 .vrow .vname{grid-column:1/-1}.vrow .f-sku,.vrow .f-price{grid-column:span 3}.vrow .f-stock,.vrow .f-vat,.vrow .f-weight{grid-column:span 2}
 @media(max-width:520px){.vrow{grid-template-columns:repeat(2,minmax(0,1fr))}.vrow .f-sku,.vrow .f-price,.vrow .f-stock,.vrow .f-vat,.vrow .f-weight{grid-column:auto}.vrow .f-sku,.vrow .f-vat{grid-column:1/-1}}
+
+/* ---- Postcode check ---- */
+.pcheck{display:flex;gap:10px;align-items:flex-end}.pcheck .field{flex:1;margin:0}.pres{margin-top:12px}.pres:empty{display:none}
+.pres p{display:flex;gap:10px;align-items:flex-start;margin:0;font-size:14px}.pres p svg{flex:none;margin-top:2px}.pbad{color:#7a1f12}.pok>p{color:#2f4a12}
+.pok ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}.pok li{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-radius:14px;background:rgba(40,50,20,.06);font-size:14px}.pok li small{font-weight:400;color:var(--muted);margin-left:8px}
+@media(max-width:520px){.pcheck{flex-direction:column;align-items:stretch}}

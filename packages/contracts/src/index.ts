@@ -60,3 +60,4 @@ export type LaunchGate = (typeof LAUNCH_GATES)[number];
 
 export * from './plans';
 export * from './catalogue.ts';
+export * from './postcode.ts';

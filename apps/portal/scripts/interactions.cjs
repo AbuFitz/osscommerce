@@ -69,6 +69,11 @@ async function run(name, vp) {
   await go('/orders/o1042'); ok(S('fulfil: order becomes fulfilled and the button goes'), (await p.getByRole('button', { name: 'Mark as fulfilled' }).count()) === 0);
   await go('/orders/o1041'); const rb = p.getByRole('button', { name: /^Refund/ }); if (await rb.count()) { await rb.first().click(); await dlg().getByRole('button', { name: /^Refund/ }).last().click(); await p.waitForTimeout(1000); await go('/orders/o1041'); ok(S('refund: order shows a refund afterwards'), /refund/i.test(await p.locator('main').innerText())); }
 
+  // Postcode check
+  await go('/settings/shipping'); const pc = p.getByRole('textbox', { name: 'Postcode' }); await pc.fill('hello'); await p.getByRole('button', { name: 'Check' }).click(); ok(S('postcode: nonsense is refused'), (await p.getByText('does not look like a UK postcode').count()) > 0);
+  await pc.fill('IV2 3AB'); await p.getByRole('button', { name: 'Check' }).click(); ok(S('postcode: Highlands zone and its price'), (await p.locator('.pok').innerText()).includes('Highlands and Islands') && (await p.locator('.pok').innerText()).includes('£8.95'));
+  await pc.fill('M1 1AA'); await p.getByRole('button', { name: 'Check' }).click(); ok(S('postcode: unlisted area falls back to the catch-all zone'), (await p.locator('.pok').innerText()).includes('United Kingdom'));
+
   // Team
   await go('/settings/team'); await p.getByRole('button', { name: 'Invite member' }).click(); await dlg().getByRole('button', { name: 'Send invitation' }).click(); ok(S('invite: empty email is refused with a reason'), (await dlg().locator('.ferr').count()) === 1); await dlg().getByLabel('Email').fill('new.person@example.com'); await dlg().getByRole('button', { name: 'Send invitation' }).click(); await p.waitForTimeout(900); await go('/settings/team'); ok(S('invite: person appears as invited'), (await p.getByText('new.person@example.com').count()) > 0);
   const ap = p.getByRole('button', { name: 'Approve' }); if (await ap.count()) { await ap.first().click(); await p.waitForTimeout(900); await go('/settings/team'); ok(S('grant: approving moves it to active'), (await p.getByText('Needs your approval').count()) === 0); }
