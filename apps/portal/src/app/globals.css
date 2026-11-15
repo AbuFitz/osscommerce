@@ -374,3 +374,60 @@ input[type=date]{min-height:46px}input[type=date]::-webkit-calendar-picker-indic
 .pres p{display:flex;gap:10px;align-items:flex-start;margin:0;font-size:14px}.pres p svg{flex:none;margin-top:2px}.pbad{color:#7a1f12}.pok>p{color:#2f4a12}
 .pok ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}.pok li{display:flex;justify-content:space-between;gap:12px;padding:10px 14px;border-radius:14px;background:rgba(40,50,20,.06);font-size:14px}.pok li small{font-weight:400;color:var(--muted);margin-left:8px}
 @media(max-width:520px){.pcheck{flex-direction:column;align-items:stretch}}
+
+/* ---- Phone layout v2: header scrolls away, bar is docked, lists are single-level ---- */
+@media (max-width:900px){
+  .topbar{position:static;margin:0 -12px;padding:calc(8px + env(safe-area-inset-top)) 12px 4px;background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none}
+  .stage{padding:0 12px calc(76px + env(safe-area-inset-bottom))}
+  .ph{margin:6px 0 14px;gap:10px}.ph h1{font-size:30px}.ph .eyebrow{font-size:12.5px}
+  .ph .acts>.btn{flex:0 1 auto}.ph .acts>.btn.primary{flex:1 1 auto}
+  .w{padding:16px;border-radius:22px}
+  /* docked bottom bar: full width, hairline on top, nothing floating over the content */
+  .tabbar{left:0;right:0;bottom:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom));border-radius:0;border:0;border-top:1px solid rgba(40,50,20,.1);background:rgba(247,248,240,.92);box-shadow:none}
+  .tabbar a{min-height:50px;border-radius:14px;gap:3px}
+  .tabbar a[aria-current=page]{background:transparent;color:var(--ink);font-weight:650}
+  .tabbar a{position:relative}.tabbar a[aria-current=page]::before{content:"";position:absolute;top:1px;left:50%;width:56px;height:32px;margin-left:-28px;border-radius:99px;background:#d9e8a4;z-index:-1}.tabbar{isolation:isolate}
+  /* a list inside a card is not a card inside a card: drop the outer frame, keep hairlines */
+  .w:has(>.cards),.w:has(>div>.cards){padding:0;background:rgba(255,255,255,.72);overflow:hidden}
+  .cards{gap:0}
+  .cards>*{background:transparent;border-radius:0;padding:14px 16px;border-top:1px solid rgba(40,50,20,.08);grid-template-columns:minmax(0,1fr) auto}
+  .cards>*:first-child{border-top:0}
+  .cards .oc-side{display:contents}.cards .oc-side>.num{grid-column:2;grid-row:1;text-align:right}
+  .cards .pills{grid-column:1/-1;grid-row:2;display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start;margin-top:4px}
+}
+
+/* ---- Rail: flat, no shade. Icons sit unframed; only the current page gets a solid marker ---- */
+@media(min-width:901px){
+  .rail{background:#141a0c;box-shadow:none}
+  .rail a{background:transparent;border-radius:14px;color:#b4bda4}
+  .rail a:hover{background:rgba(255,255,255,.09);color:#fff}
+  .rail a[aria-current=page]{background:var(--lime);color:var(--olive-950);box-shadow:none}
+}
+
+/* ---- Expanded rail v2: tighter rows, scrolls in the middle, footer always visible ---- */
+@media(min-width:901px){
+  .frame[data-rail=open] .rail{padding:14px 10px 10px;gap:6px}
+  .frame[data-rail=open] .rail-nav{display:flex;flex-direction:column;gap:14px;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;padding-bottom:6px}
+  .frame[data-rail=open] .rail-nav::-webkit-scrollbar{display:none}
+  .frame[data-rail=open] .rail .grow{display:none}
+  .frame[data-rail=open] .rail-grp{gap:2px}
+  .frame[data-rail=open] .rail-end{border-top:1px solid rgba(255,255,255,.08);padding-top:8px;margin-top:2px;flex:none}
+  .frame[data-rail=open] .rail-cap{color:#98a384;padding:2px 12px 4px;font-size:10.5px}
+  .frame[data-rail=open] .rail a,.frame[data-rail=open] .rail-toggle{height:38px;border-radius:12px;padding:0 12px;gap:12px;color:#c3cbb3}
+  .frame[data-rail=open] .rail a:hover,.frame[data-rail=open] .rail-toggle:hover{background:rgba(255,255,255,.08);color:#fff}
+  .frame[data-rail=open] .rail a[aria-current=page]{background:var(--lime);color:var(--olive-950);box-shadow:none;font-weight:600}
+  .frame[data-rail=open] .rail-me{padding:8px;border-radius:14px;flex:none}
+  .frame[data-rail=open] .rail-toggle{flex:none;color:#98a384}
+}
+
+/* ---- Sheets on phones: opaque, scroll locked behind, scrim already from the dialog ---- */
+@media(max-width:900px){
+  dialog.dlg{background:#f7f8f0;-webkit-backdrop-filter:none;backdrop-filter:none}
+  dialog.dlg::backdrop{background:rgba(20,26,10,.5)}
+  html:has(dialog[open]){overflow:hidden}
+  .pop-sheet{display:grid;gap:2px;padding-bottom:8px}.pop-sheet .pop-item{min-height:52px;font-size:16px}
+}
+@media(min-width:901px) and (max-height:860px){
+  .frame[data-rail=open] .rail a,.frame[data-rail=open] .rail-toggle{height:34px}
+  .frame[data-rail=open] .rail-nav{gap:8px}.frame[data-rail=open] .rail-me{padding:6px 8px}
+}
