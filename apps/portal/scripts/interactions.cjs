@@ -28,6 +28,17 @@ async function run(name, vp) {
   await p.waitForTimeout(300); const sum = await dlg().locator('.imp').innerText(); ok(S('import: previews good rows and names the problems before importing'), /1\s*ready/.test(sum.replace(/\n/g, ' ')) && /Line 3/.test(sum) && /Line 4/.test(sum), sum.replace(/\n/g, ' ').slice(0, 90));
   await dlg().getByRole('button', { name: /Import 1 product/ }).click(); await p.waitForTimeout(900); ok(S('import: the good row is added'), (await p.getByText('Imported vase').count()) > 0);
 
+  // Variants and collections
+  await go('/products/p1'); ok(S('variants: the product shows its four real variants'), (await p.locator('.vtr').count()) === 4);
+  await p.getByRole('button', { name: 'Edit variants' }).click(); await dlg().getByLabel('Values, separated by commas').first().fill('Small, Large, Giant'); await dlg().getByRole('button', { name: 'Update variants from options' }).click();
+  ok(S('variants: changing an option generates the new combinations and keeps existing ones'), (await dlg().locator('.vrow').count()) === 6 && (await dlg().locator('.vrow input[id^=s]').first().inputValue()) === 'MUG-SS');
+  await dlg().locator('.vrow').last().locator('input[id^=p]').fill('abc'); await dlg().getByRole('button', { name: 'Save variants' }).click(); await p.waitForTimeout(300); ok(S('variants: a bad price is refused with the SKU named'), /enter a price/.test(await dlg().locator('.ferr').innerText()));
+  await dlg().locator('.vrow').last().locator('input[id^=p]').fill('24.00'); await dlg().locator('.vrow').last().locator('input[id^=t]').fill('7'); await dlg().getByRole('button', { name: 'Save variants' }).click(); await p.waitForTimeout(1000);
+  await go('/products/p1'); ok(S('variants: six variants saved, stock total updated'), (await p.locator('.vtr').count()) === 6);
+  await go('/collections'); await p.getByRole('button', { name: 'Create collection' }).click(); await dlg().getByLabel(/^Name/).fill('Giants'); await dlg().getByLabel(/contains/).fill('giant'); await p.waitForTimeout(700); ok(S('collections: shows what the rule would hold before saving'), /2 variants/.test(await dlg().locator('.cprev').innerText()));
+  await dlg().getByRole('button', { name: 'Create collection' }).click(); await p.waitForTimeout(900); ok(S('collections: created and listed'), (await p.getByText('Giants').count()) > 0);
+  await p.getByRole('button', { name: 'Create collection' }).click(); await dlg().getByLabel(/^Name/).fill('Empty'); await dlg().getByLabel(/contains/).fill('zzzz'); await dlg().getByRole('button', { name: 'Create collection' }).click(); await p.waitForTimeout(700); ok(S('collections: an empty rule is refused with a reason'), /Nothing matches/.test(await toast(p))); await p.keyboard.press('Escape');
+
   // Stock
   await go('/inventory'); await p.getByRole('button', { name: 'Adjust stock' }).click(); await dlg().getByLabel('Product').selectOption({ label: /Tea towel set/ }.toString() ? undefined : undefined).catch(() => {});
   await dlg().getByLabel('Product').selectOption({ index: 0 }); const opt = await dlg().getByLabel('Product').inputValue(); await dlg().getByLabel('Quantity').fill('-9999'); await dlg().getByRole('button', { name: 'Save change' }).click(); await p.waitForTimeout(600);

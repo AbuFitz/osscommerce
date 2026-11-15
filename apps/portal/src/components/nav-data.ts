@@ -1,10 +1,11 @@
-import { Home, Inbox, Tag, Boxes, Users, Percent, BarChart3, Store, Settings, LayoutGrid, Globe, FileText, LifeBuoy, Workflow, PenLine } from 'lucide-react';
+import { Home, Inbox, Tag, Boxes, Users, Percent, BarChart3, Store, Settings, LayoutGrid, Globe, FileText, LifeBuoy, Workflow, PenLine, Layers } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: React.ComponentType<{ size?: number; 'aria-hidden'?: boolean }> };
 export const commerce: NavItem[] = [
   { href: '/', label: 'Overview', icon: Home },
   { href: '/orders', label: 'Orders', icon: Inbox },
   { href: '/products', label: 'Products', icon: Tag },
+  { href: '/collections', label: 'Collections', icon: Layers },
   { href: '/inventory', label: 'Inventory', icon: Boxes },
   { href: '/customers', label: 'Customers', icon: Users },
   { href: '/discounts', label: 'Discounts', icon: Percent },
@@ -19,7 +20,7 @@ const by = (h: string) => commerce.find(c => c.href === h)!;
 /** Grouping shown when the menu is expanded. The same order is used when collapsed. */
 export const GROUPS: { label?: string; items: NavItem[] }[] = [
   { items: [by('/')] },
-  { label: 'Sell', items: [by('/orders'), by('/products'), by('/inventory'), by('/customers')] },
+  { label: 'Sell', items: [by('/orders'), by('/products'), by('/collections'), by('/inventory'), by('/customers')] },
   { label: 'Grow', items: [by('/discounts'), by('/analytics'), by('/automations')] },
   { label: 'Website', items: [by('/storefront'), by('/content')] },
 ];
@@ -33,5 +34,5 @@ export const account: NavItem[] = [
   { href: '/account/billing', label: 'Billing', icon: FileText },
   { href: '/account/support', label: 'Support', icon: LifeBuoy },
 ];
-export const MORE_LINKS = [by('/inventory'), by('/customers'), by('/discounts'), by('/analytics'), by('/automations'), by('/storefront'), by('/content'), HELP, SETTINGS, ...account.filter(a => a.href !== '/account/support')];
+export const MORE_LINKS = [by('/collections'), by('/inventory'), by('/customers'), by('/discounts'), by('/analytics'), by('/automations'), by('/storefront'), by('/content'), HELP, SETTINGS, ...account.filter(a => a.href !== '/account/support')];
 export const PROGRESSIVE = ['/analytics', '/customers', '/discounts', '/inventory'];

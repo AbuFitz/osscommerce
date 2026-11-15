@@ -46,7 +46,7 @@ export function Shell({ children, initials, name, role, hidden = [], defaultExpa
 export function TabBar() {
   const p = usePathname();
   const t = [commerce[0], commerce[1], commerce[2], { href: '/more', label: 'More', icon: Menu }];
-  const moreActive = ['/inventory', '/customers', '/discounts', '/analytics', '/automations', '/storefront', '/content', '/support', '/settings', '/more', '/account'].some(h => active(p, h));
+  const moreActive = ['/collections', '/inventory', '/customers', '/discounts', '/analytics', '/automations', '/storefront', '/content', '/support', '/settings', '/more', '/account'].some(h => active(p, h));
   return (
     <nav className="tabbar" aria-label="Main">
       {t.map(({ href, label, icon: I }) => {

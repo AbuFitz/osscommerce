@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings } from '@/lib/gateway';
+import type { OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -65,3 +65,7 @@ export async function exportCustomers() {
 }
 
 export async function markNoticesRead(ids: string[] | 'all') { const r = await gateway().markNoticesRead(ids); revalidatePath('/', 'layout'); return r; }
+
+export async function saveVariants(productId: string, d: { optionGroups: OptionGroup[]; variants: VariantInput[] }) { try { return await run(() => gateway().saveVariants(productId, d), [`/products/${productId}`, '/products', '/inventory', '/']); } catch (e) { return { ok: false, message: e instanceof Error ? e.message : 'Could not save variants.' }; } }
+export async function previewCollection(contains: string) { return gateway().previewCollection(contains); }
+export async function createCollection(name: string, contains: string) { return run(() => gateway().createCollection(name, contains), ['/collections']); }

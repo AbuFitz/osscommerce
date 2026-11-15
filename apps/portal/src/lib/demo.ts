@@ -1,7 +1,7 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { GATE_COPY, LAUNCH_GATES, type Notice, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
-import { StoreId, OrganisationId, feeMinor, feeRefundMinor } from '@oss-commerce/contracts';
+import { GATE_COPY, LAUNCH_GATES, type Notice, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
+import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
 
 /**
  * Deterministic synthetic fixtures (no real merchant data). Swap for HttpGateway
@@ -91,13 +91,22 @@ async function state(): Promise<DemoState> {
   try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
 }
 /** Per-browser scratch copy of the demo data (keyed by the oss_sid cookie). Actions really change it, so every page reflects what you did. */
-interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
+interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; collections: { id: string; name: string; contains: string }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
 const G = globalThis as unknown as { __oss_demo?: Map<string, Scratch> };
 async function S(): Promise<Scratch> {
   const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
   const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
-  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
   return x;
+}
+/** Every product has at least one variant. The mug is seeded with two option groups so the editor has something real to show. */
+function detail(x: Scratch, p: Product): { groups: OptionGroup[]; list: Variant[] } {
+  if (!x.variants[p.id]) {
+    if (p.id === 'p1') { const groups = [{ name: 'Size', options: ['Small', 'Large'] }, { name: 'Glaze', options: ['Speckled', 'Ocean'] }]; const stock = [12, 10, 11, 9], alloc = [1, 1, 1, 0];
+      x.variants.p1 = { groups, list: [['Small', 'Speckled'], ['Small', 'Ocean'], ['Large', 'Speckled'], ['Large', 'Ocean']].map((o, i) => ({ id: `p1v${i}`, options: o, sku: `MUG-${o[0][0]}${o[1][0]}`.toUpperCase(), priceMinor: p.priceMinor + (o[0] === 'Large' ? 400 : 0), onHand: stock[i], allocated: alloc[i], taxClass: 'standard' as const, enabled: true, weightGrams: o[0] === 'Large' ? 420 : 320 })) }; }
+    else x.variants[p.id] = { groups: [], list: [{ id: `${p.id}v0`, options: [], sku: p.sku, priceMinor: p.priceMinor, onHand: p.onHand, allocated: p.allocated, taxClass: 'standard', enabled: true }] };
+  }
+  return x.variants[p.id];
 }
 const ordersFor = async (st: DemoState) => (st === 'new' ? [] : (await S()).orders);
 const productsFor = async (st: DemoState) => (st === 'new' ? [] : (await S()).products);
@@ -275,6 +284,23 @@ export const demoGateway: CommerceGateway = {
     g.state = dec === 'approve' ? 'active' : 'revoked'; return { ok: true, message: dec === 'approve' ? `Access approved until ${new Date(g.expires).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Everything they do is logged.` : dec === 'decline' ? 'Request declined.' : 'Access revoked immediately.' };
   },
   async savePreferences() { return okDemo('Preferences saved.'); },
+  async product(id) { const x = await S(); const p = x.products.find(q => q.id === id); if (!p) return null; const d = detail(x, p); return { ...p, optionGroups: d.groups, variantList: d.list } as ProductDetail; },
+  async saveVariants(productId, d) {
+    const x = await S(); const p = x.products.find(q => q.id === productId); if (!p) return { ok: false, message: 'Product not found.' };
+    const problems = validateDraft({ title: p.title, optionGroups: d.optionGroups, variants: d.variants }); if (problems.length) return { ok: false, message: problems[0] };
+    const taken = x.products.filter(q => q.id !== productId).flatMap(q => detail(x, q).list.map(v => v.sku)); const clash = d.variants.find(v => taken.includes(v.sku)); if (clash) return { ok: false, message: `SKU ${clash.sku} is used by another product.` };
+    const old = detail(x, p).list; const next: Variant[] = d.variants.map((v, i) => { const o = old.find(q => q.sku === v.sku); const onHand = v.stock; if (o && onHand < o.allocated) throw new Error(`${v.sku}: ${o.allocated} are reserved for open orders, so stock cannot go below that.`); return { id: o?.id ?? `${productId}n${Date.now().toString(36)}${i}`, options: v.options, sku: v.sku, priceMinor: v.priceMinor, onHand, allocated: o?.allocated ?? 0, taxClass: v.taxClass, enabled: v.enabled, weightGrams: v.weightGrams }; });
+    x.variants[productId] = { groups: d.optionGroups, list: next }; const on = next.filter(v => v.enabled);
+    p.onHand = next.reduce((a, v) => a + v.onHand, 0); p.allocated = next.reduce((a, v) => a + v.allocated, 0); p.variants = next.length; p.priceMinor = on.length ? Math.min(...on.map(v => v.priceMinor)) : p.priceMinor; p.sku = next[0]?.sku ?? p.sku;
+    return { ok: true, message: `${next.length} variant${next.length > 1 ? 's' : ''} saved. Total in stock: ${p.onHand}.` };
+  },
+  async previewCollection(contains) { const x = await S(); const t = contains.trim().toLowerCase(); if (!t) return { count: 0, products: [] }; const hit = x.products.filter(p => p.status === 'published').flatMap(p => detail(x, p).list.filter(v => `${p.title} ${v.options.join(' ')}`.toLowerCase().includes(t)).map(() => p.title)); return { count: hit.length, products: [...new Set(hit)] }; },
+  async collections() { const x = await S(); return Promise.all(x.collections.map(async c => { const r = await demoGateway.previewCollection(c.contains); return { ...c, count: r.count, products: r.products } as Collection; })); },
+  async createCollection(name, contains) {
+    const x = await S(); if (x.collections.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) return { ok: false, message: `A collection called ${name.trim()} already exists.` }; const r = await demoGateway.previewCollection(contains);
+    if (!r.count) return { ok: false, message: 'Nothing matches that rule yet. A collection with no products would show an empty page on your website.' };
+    x.collections.push({ id: `c${Date.now().toString(36)}`, name: name.trim(), contains: contains.trim() }); return { ok: true, message: `${name.trim()} created with ${r.count} variant${r.count > 1 ? 's' : ''} from ${r.products.length} product${r.products.length > 1 ? 's' : ''}.` };
+  },
   async notices() {
     const st = await state(); const x = await S(); const out: Notice[] = []; if (st === 'new') return out;
     for (const o of x.orders.filter(q => q.payment === 'failed').slice(0, 3)) out.push({ id: `pay-${o.id}`, tone: 'danger', kind: 'payment', title: `Payment failed on order #${o.number}`, body: `${o.customer}'s card was declined. No charge was made, so there is nothing to refund.`, href: `/orders/${o.id}`, action: 'View order', at: o.placedAt, read: false });

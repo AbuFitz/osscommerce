@@ -51,6 +51,12 @@ export interface StockAdjust { productId: string; mode: 'set' | 'add'; qty: numb
 export interface DomainCheck { ok: boolean; message: string; record?: { type: string; name: string; value: string } }
 /** One thing that needs the merchant's attention. The same list feeds the Overview alerts and the notification centre, so they never disagree. */
 export interface Notice { id: string; tone: 'danger' | 'warn' | 'info' | 'success'; title: string; body: string; href: string; action: string; at: string; read: boolean; kind: 'payment' | 'stock' | 'order' | 'access' | 'quote' | 'setup' }
+export type TaxClass = 'standard' | 'reduced' | 'zero';
+export interface OptionGroup { name: string; options: string[] }
+export interface Variant { id: string; options: string[]; sku: string; priceMinor: number; onHand: number; allocated: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number }
+export interface ProductDetail extends Product { optionGroups: OptionGroup[]; variantList: Variant[] }
+export interface VariantInput { options: string[]; sku: string; priceMinor: number; stock: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number }
+export interface Collection { id: string; name: string; contains: string; count: number; products: string[] }
 export interface MutationResult { ok: boolean; message: string }
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
@@ -85,6 +91,11 @@ export interface CommerceGateway {
   rollbackTheme(version: string): Promise<MutationResult>;
   decideGrant(id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<MutationResult>;
   savePreferences(prefs: Record<string, boolean>): Promise<MutationResult>;
+  product(id: string): Promise<ProductDetail | null>;
+  saveVariants(productId: string, d: { optionGroups: OptionGroup[]; variants: VariantInput[] }): Promise<MutationResult>;
+  collections(): Promise<Collection[]>;
+  previewCollection(contains: string): Promise<{ count: number; products: string[] }>;
+  createCollection(name: string, contains: string): Promise<MutationResult>;
   notices(): Promise<Notice[]>;
   markNoticesRead(ids: string[] | 'all'): Promise<MutationResult>;
   addProduct(p: NewProduct): Promise<MutationResult>;
