@@ -1,28 +1,36 @@
 import type { Metadata } from 'next';
-import { PricingTable, FeeExample } from '@/components/Pricing';
-import { StartButton } from '@/components/Start';
-export const metadata: Metadata = { title: 'Pricing', description: 'A one-off fee for your custom storefront, a monthly fee for the platform we run, and a small fee on sales.' };
+import { PriceBlock } from '@/components/PriceBlock';
+import { Cta } from '@/components/Cta';
+import { PRICE } from '@/config';
+export const metadata: Metadata = { title: 'Pricing', description: `One plan: ${PRICE.build} to design and build your store, then ${PRICE.monthly} a month for the platform, hosting and technical upkeep.` };
+
 const FAQ = [
-  ['What does the monthly fee cover?', 'Access to the platform and dashboard, managed hosting, security, monitoring and maintenance, payment infrastructure, essential integrations, defined technical support and standard updates.'],
-  ['What is the storefront build?', 'A custom design and build of your shop, scoped and quoted as a fixed price before work starts. The prices shown are starting points.'],
-  ['What is not included?', 'Stripe’s payment processing fees, domain renewals, VAT, and extra work such as design changes, product uploads, content creation and additional integrations, which are quoted separately.'],
-  ['Is there a contract?', 'The platform runs month to month on 30 days’ notice. The storefront build is a fixed-price project with its own terms.'],
-];
+  ['Why is there a build fee and a monthly fee?', `They pay for different things. The ${PRICE.build} is for designing and building a storefront that is yours. The ${PRICE.monthly} a month is for the dashboard, hosting and the technical work that keeps the shop running.`],
+  ['When does the monthly fee start?', 'Your order form states the start date. It is agreed with you before any work begins.'],
+  ['Are there transaction fees?', 'Stripe charges its processing fees to your Stripe account. If a platform fee applies to your transactions, it is written in your order form before you commit.'],
+  ['What counts as extra work?', 'New design work, additional page types, custom features and connecting services beyond the agreed scope. We quote first; nothing is built or billed until you approve.'],
+  ['Who adds the products?', 'You do, from your dashboard, one at a time or by importing a spreadsheet. If you would like us to load a catalogue for you, ask for a quote.'],
+  ['Can I leave?', 'Yes. When the service ends we give you an export of your products, orders and customers, and help you move your domain. The terms set out the notice period.'],
+] as const;
+
 export default function Pricing() {
-  return (
-    <>
-      <section className="dark"><div className="wrap ph"><h1>Clear pricing. Clearly separate.</h1><p className="lede sub">A one-off fee for the storefront we build, a monthly fee for the platform we run, and a small fee on sales.</p></div></section>
-      <section className="sect bone" style={{ paddingTop: 'clamp(48px,6vw,88px)' }}><div className="wrap">
-        <PricingTable />
-        <div className="notin">
-          <div><b>Not included</b><p>Payment processing fees are charged by Stripe to your account. Your domain renewal and VAT are separate.</p></div>
-          <div><b>Extra work is separate</b><p>Design changes, product uploads, content creation and additional integrations are services we quote before we start. Request them in the portal.</p></div>
-        </div>
-        <FeeExample />
-      </div></section>
-      <section className="sect light"><div className="wrap"><h2 style={{ maxWidth: '12ch' }}>Pricing questions.</h2>
-        <div className="qa">{FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}</div>
-        <div className="acts" style={{ marginTop: 40 }}><StartButton>Start your store</StartButton></div></div></section>
-    </>
-  );
+  return (<>
+    <section className="phd"><div className="wrap"><h1>Built for you once. Looked after every month.</h1><p className="lede">{PRICE.build} gets you a shop designed and built around your business, with no template and no developer to hire. {PRICE.monthly} a month then covers the platform, hosting and upkeep.</p></div></section>
+    <section className="sec tight"><div className="wrap"><PriceBlock /></div></section>
+    <section className="sec"><div className="wrap">
+      <div className="head split"><h2>What the build fee replaces.</h2><p className="lede">Getting a shop made properly usually means finding and managing several people. Here it is one team and one price.</p></div>
+      <ul className="cols"><li><b>A designer</b><span>Your storefront is designed for your brand, not adapted from a theme.</span></li><li><b>A developer</b><span>We build it, connect it to your dashboard and make it fast on phones.</span></li><li><b>Someone to set it all up</b><span>Payments, delivery and VAT settings are configured with you before launch.</span></li><li><b>Someone to keep it running</b><span>Hosting, updates and monitoring carry on under the monthly fee.</span></li></ul>
+    </div></section>
+    <section className="sec bone"><div className="wrap">
+      <div className="head"><h2>Who does what.</h2></div>
+      <div className="tbl">
+        <div><h3>We do</h3><ul><li>Design and build the storefront</li><li>Set up payments, delivery and VAT settings with you</li><li>Host, secure, monitor and maintain the platform</li><li>Answer technical questions and fix platform faults</li></ul></div>
+        <div><h3>You do</h3><ul><li>Add and price your products</li><li>Fulfil orders and handle refunds</li><li>Look after your customers</li><li>Keep your stock, policies and content up to date</li></ul></div>
+        <div><h3>Quoted separately</h3><ul><li>New design work after launch</li><li>Custom features or page types</li><li>Loading a catalogue for you</li><li>Your domain name and optional third-party services</li></ul></div>
+      </div>
+    </div></section>
+    <section className="sec"><div className="wrap"><div className="head"><h2>Questions about pricing.</h2></div>
+      <div className="faq">{FAQ.map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}</div></div></section>
+    <Cta />
+  </>);
 }

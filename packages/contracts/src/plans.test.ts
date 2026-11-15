@@ -2,13 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SEED_PLANS, resolveAgreement, feeMinor, feeRefundMinor, hasFeature, MerchantAgreement } from './plans.ts';
 
-const [commerce, plus] = SEED_PLANS;
+const [commerce] = SEED_PLANS;
+// A tiered plan is no longer sold, but tiers and overrides stay supported, so they stay tested with a fixture.
+const plus = { ...commerce, id: 'plus', name: 'Fixture tiered plan', fee: { baseBp: 30, refundsReturnFee: true, tiers: [{ fromMonthlyVolumeMinor: 10_000_000, bp: 20 }] }, entitlements: { features: ['automation_basic', 'advanced_reporting'] as typeof commerce.entitlements.features, limits: commerce.entitlements.limits } };
 const agr = (o: Partial<MerchantAgreement> = {}): MerchantAgreement => ({ storeId: 's', planId: 'commerce', effectiveFrom: '2026-01-01', overrides: {}, promotions: [], ...o });
 const T = new Date('2026-06-01');
 
-test('standard plan: £49.99 and 0.5%', () => { const r = resolveAgreement(commerce, agr(), T); assert.equal(r.monthlyMinor, 4999); assert.equal(r.feeBp, 50); });
+test('launch plan: one plan, £39 a month and £479 build', () => { assert.equal(SEED_PLANS.length, 1); assert.equal(commerce.buildFromMinor, 47900); const r = resolveAgreement(commerce, agr(), T); assert.equal(r.monthlyMinor, 3900); assert.equal(r.feeBp, 50); });
 test('0.5% on £2,000 is £10', () => assert.equal(feeMinor(200000, 50), 1000));
-test('Plus: 0.3%, falling to 0.2% from £100,000 a month', () => { assert.equal(resolveAgreement(plus, agr({ planId: 'plus' }), T, 0).feeBp, 30); assert.equal(resolveAgreement(plus, agr({ planId: 'plus' }), T, 9_999_999).feeBp, 30); assert.equal(resolveAgreement(plus, agr({ planId: 'plus' }), T, 10_000_000).feeBp, 20); });
+test('tiered fixture: 0.3%, falling to 0.2% from £100,000 a month', () => { assert.equal(resolveAgreement(plus, agr({ planId: 'plus' }), T, 0).feeBp, 30); assert.equal(resolveAgreement(plus, agr({ planId: 'plus' }), T, 9_999_999).feeBp, 30); assert.equal(resolveAgreement(plus, agr({ planId: 'plus' }), T, 10_000_000).feeBp, 20); });
 test('custom override beats the plan', () => assert.equal(resolveAgreement(commerce, agr({ overrides: { monthlyMinor: 3999, feeBp: 25 } }), T).feeBp, 25));
 test('active fee promotion beats an override; expired promotion is ignored', () => {
   const promo = { id: 'p', kind: 'fee_bp_override' as const, value: 0, validFrom: '2026-05-01', validTo: '2026-07-01' };

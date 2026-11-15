@@ -1,6 +1,7 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
+import { LAUNCH_PLAN } from '@oss-commerce/contracts';
+import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
 
 /**
@@ -123,6 +124,12 @@ export const demoGateway: CommerceGateway = {
       store: { storeId: StoreId.parse('st_demo'), organisationId: OrganisationId.parse('org_demo'), cellId: 'cell-demo', hostnames: [{ host: 'kilnandthread.example', verified: st === 'live' }], region: 'eu-west-london', lifecycle: st === 'live' ? 'live' : 'configuring', entitlementVersion: 1, paymentReadiness: st === 'new' ? 'not_started' : 'enabled' },
       readiness: LAUNCH_GATES.map(g => ({ gate: g, done: done[g], ...GATE_COPY[g] })),
     };
+  },
+  async billing(): Promise<Billing> {
+    const st = await state(); const base = { demo: true, planName: LAUNCH_PLAN.name, monthlyMinor: LAUNCH_PLAN.monthlyMinor, buildMinor: LAUNCH_PLAN.buildFromMinor };
+    const build = { number: 'OSC-0001', description: 'Storefront design and build', issuedAt: '2026-08-04T09:00:00Z', amountMinor: LAUNCH_PLAN.buildFromMinor, status: 'paid' as const };
+    if (st !== 'live') return { ...base, status: 'not_started', invoices: st === 'new' ? [] : [build] };
+    return { ...base, status: 'active', nextInvoiceAt: '2026-12-01T09:00:00Z', invoices: [{ number: 'OSC-0004', description: 'OSS Commerce, November', issuedAt: '2026-11-01T09:00:00Z', amountMinor: LAUNCH_PLAN.monthlyMinor, status: 'paid' }, { number: 'OSC-0003', description: 'OSS Commerce, October', issuedAt: '2026-10-01T09:00:00Z', amountMinor: LAUNCH_PLAN.monthlyMinor, status: 'paid' }, { number: 'OSC-0002', description: 'OSS Commerce, September', issuedAt: '2026-09-01T09:00:00Z', amountMinor: LAUNCH_PLAN.monthlyMinor, status: 'paid' }, build] };
   },
   async live(): Promise<LiveView> {
     const st = await state(); if (st === 'new') return { demo: true, asOf: AS_OF, visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } };

@@ -1,20 +1,20 @@
 import Link from 'next/link';
-import { SITE, COMPANY } from '@/config';
-import { LEGAL_DOCS } from '@/content/legal';
-import { Wordmark } from './Wordmark';
+import { COMPANY, NAV, SITE } from '@/config';
+import { Wordmark } from './SiteHeader';
 
 export function Footer() {
   return (
-    <footer className="ftr"><div className="wrap">
-      <div className="fcols">
-        <div><Link href="/" aria-label="Home"><Wordmark /></Link>
-          <p style={{ marginTop: 18, maxWidth: '34ch', color: 'var(--on-dark-2)' }}>Custom-built online shops, managed for you. From the team behind <a href={SITE.agencyUrl} style={{ textDecoration: 'underline' }}>onesimplesite.co.uk</a>.</p>
-          <p style={{ marginTop: 16 }}><a href={`mailto:${SITE.email}`} style={{ fontWeight: 600 }}>{SITE.email}</a></p></div>
-        <div><h4>Product</h4><ul><li><Link href="/storefronts">Storefronts</Link></li><li><Link href="/#dashboard">The platform</Link></li><li><Link href="/pricing">Pricing</Link></li><li><Link href="/contact">Contact</Link></li></ul></div>
-        <div><h4>Legal</h4><ul>{LEGAL_DOCS.map(d => <li key={d.slug}><Link href={`/legal/${d.slug}`}>{d.short}</Link></li>)}</ul></div>
-        <div><h4>Follow</h4><ul>{SITE.social.map(s => <li key={s.href}><a href={s.href} rel="noopener noreferrer">{s.label}</a></li>)}</ul></div>
+    <footer className="ft">
+      <div className="wrap">
+        <div className="ft-top">
+          <div><p className="ft-lead">A shop built for your business, and the tools to run it.</p><Link className="btn bone" href="/contact">Start a store</Link></div>
+          <nav aria-label="Product"><h2>Product</h2><ul>{NAV.map(n => <li key={n.href}><Link href={n.href}>{n.label}</Link></li>)}</ul></nav>
+          <nav aria-label="Company"><h2>Company</h2><ul><li><Link href="/contact">Contact</Link></li><li><a href={SITE.makerUrl}>OneSimpleSite</a></li>{SITE.social.map(s => <li key={s.href}><a href={s.href} rel="noreferrer">{s.label}</a></li>)}</ul></nav>
+          <nav aria-label="Legal"><h2>Legal</h2><ul><li><Link href="/legal/terms">Terms</Link></li><li><Link href="/legal/privacy">Privacy</Link></li><li><Link href="/legal">All policies</Link></li></ul></nav>
+        </div>
+        <div className="ft-big" aria-hidden><Wordmark /></div>
+        <p className="ft-legal">OSS Commerce is a product of {COMPANY.legalName}, registered in {COMPANY.jurisdiction}, company number {COMPANY.companyNumber}. Registered office: {COMPANY.registeredAddress}.</p>
       </div>
-      <div className="fbase"><span>© {new Date().getFullYear()} {COMPANY.legalName}. Registered in {COMPANY.jurisdiction}, no. {COMPANY.companyNumber}. Registered office: {COMPANY.registeredAddress}.</span><span>No tracking or advertising cookies on this site.</span></div>
-    </div></footer>
+    </footer>
   );
 }

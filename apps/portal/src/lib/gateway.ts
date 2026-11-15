@@ -52,6 +52,7 @@ export interface DomainCheck { ok: boolean; message: string; record?: { type: st
 /** One thing that needs the merchant's attention. The same list feeds the Overview alerts and the notification centre, so they never disagree. */
 export interface Notice { id: string; tone: 'danger' | 'warn' | 'info' | 'success'; title: string; body: string; href: string; action: string; at: string; read: boolean; kind: 'payment' | 'stock' | 'order' | 'access' | 'quote' | 'setup' }
 export interface LiveView { demo: boolean; asOf: string; visitorsNow: number; sessions: { value: number; vsPrev: number }; salesMinor: { value: number; vsPrev: number }; orders: { value: number; vsPrev: number }; behaviour: { activeCarts: number; checkingOut: number; purchased: number }; locations: { place: string; sessions: number }[]; returning: { newCustomers: number; returning: number } }
+export interface Billing { demo: boolean; planName: string; monthlyMinor: number; buildMinor: number; status: 'not_started' | 'active' | 'past_due'; nextInvoiceAt?: string; invoices: { number: string; description: string; issuedAt: string; amountMinor: number; status: 'paid' | 'due' | 'overdue' }[] }
 export type TaxClass = 'standard' | 'reduced' | 'zero';
 export interface OptionGroup { name: string; options: string[] }
 export interface Variant { id: string; options: string[]; sku: string; priceMinor: number; onHand: number; allocated: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number }
@@ -65,6 +66,8 @@ export interface CommerceGateway {
   store(): Promise<StoreView>;
   summary(): Promise<Summary>;
   live(): Promise<LiveView>;
+  /** The merchant's subscription to OSS Commerce (platform billing account). Never the merchant's own Stripe Connect account. */
+  billing(): Promise<Billing>;
   orders(q?: { filter?: string; q?: string }): Promise<Order[]>;
   order(id: string): Promise<Order | null>;
   products(): Promise<Product[]>;
@@ -110,7 +113,7 @@ export interface CommerceGateway {
 }
 
 export const GATE_COPY: Record<LaunchGate, { label: string; hint: string }> = {
-  contract_signed: { label: 'Contract signed', hint: 'Handled in your OSS account.' },
+  contract_signed: { label: 'Contract signed', hint: 'We send this to you to sign.' },
   payments_enabled: { label: 'Payments connected', hint: 'Connect Stripe to accept payments.' },
   domain_verified: { label: 'Domain verified', hint: 'Add the DNS record we show you.' },
   test_order_passed: { label: 'Test order placed', hint: 'Place a test order in preview.' },

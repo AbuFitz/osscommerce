@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { LayoutGrid, Globe, FileText, SlidersHorizontal, ChevronsUpDown } from 'lucide-react';
 import { Popover } from './Popover';
 
-/** The account corner of the menu. One place for the OSS account links that used to clutter the rail. */
+/** The account corner of the menu. Commerce is self-contained: plan, team, preferences and help all live here. */
 export function ProfileMenu({ initials, name, role, open }: { initials: string; name: string; role: string; open: boolean }) {
   const btn = useRef<HTMLButtonElement>(null); const [show, setShow] = useState(false);
-  const items = [{ href: '/account', label: 'Your OSS account', note: 'One login for your website and store', icon: LayoutGrid }, { href: '/account/website', label: 'Website', note: 'Your site and domain', icon: Globe }, { href: '/account/billing', label: 'Plan and billing', note: 'Invoices and payment', icon: FileText }, { href: '/settings/preferences', label: 'Preferences', note: 'Alerts and checkout', icon: SlidersHorizontal }];
+  const items = [{ href: '/account/billing', label: 'Plan and billing', note: 'Your subscription and invoices', icon: FileText }, { href: '/settings/team', label: 'Team and access', note: 'Members and roles', icon: LayoutGrid }, { href: '/settings/preferences', label: 'Preferences', note: 'Alerts and checkout', icon: SlidersHorizontal }, { href: '/support', label: 'Help and requests', note: 'Talk to the OSS Commerce team', icon: Globe }];
   return (<>
     <button ref={btn} type="button" className="rail-me" aria-haspopup="dialog" aria-expanded={show} aria-label={`Account menu, ${name}`} onClick={() => setShow(s => !s)}>
       <span className="avatar" aria-hidden>{initials}</span><span className="who"><b>{name}</b><span>{role}</span></span><ChevronsUpDown size={15} className="rm-chev" aria-hidden />

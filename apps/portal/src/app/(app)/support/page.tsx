@@ -8,7 +8,7 @@ const kind = { product_upload: 'Product upload', design_change: 'Design change',
 export default async function Support() {
   const rs = await gateway().serviceRequests();
   return (<>
-    <Header title="Support" eyebrow="Requests are handled through your OSS account"><NewRequest /></Header>
+    <Header title="Support" eyebrow="Requests go to the OSS Commerce team"><NewRequest /></Header>
     <div className="grid">
       <section className="w c-8" aria-labelledby="rq"><div className="wh"><h2 id="rq">Your requests</h2></div>
         {rs.length === 0 ? <div className="empty">No requests yet. Ask us for product uploads, design changes, content or integrations.</div> :

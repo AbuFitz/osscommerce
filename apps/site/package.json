@@ -9,22 +9,25 @@
     "render": "NODE_PATH=$(npm root -g):../../node_modules node scripts/render-sets.cjs"
   },
   "dependencies": {
+    "@fontsource-variable/funnel-display": "^5.3.0",
     "@fontsource-variable/hanken-grotesk": "^5.3.0",
     "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/dm-mono": "^5.3.0",
+    "@oss-commerce/contracts": "^0.1.0",
     "@oss-commerce/ui": "*",
-    "@types/three": "^0.187.0",
-    "geist": "^1.3.1",
     "lucide-react": "^1.73.0",
     "next": "^15.1.0",
+    "pg": "^8.23.1",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "simple-icons": "^16.38.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "esbuild": "^0.28.2",
-    "typescript": "~5.8.0",
-    "three": "^0.187.0"
+    "typescript": "~5.8.0"
   }
 }

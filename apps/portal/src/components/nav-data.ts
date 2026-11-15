@@ -24,17 +24,12 @@ export const GROUPS: { label?: string; items: NavItem[] }[] = [
   { label: 'Grow', items: [by('/discounts'), by('/analytics'), by('/automations')] },
   { label: 'Website', items: [by('/storefront'), by('/content')] },
 ];
-/** Pinned to the bottom of the menu, in this order: help, settings, then the profile menu (which holds the OSS account links). */
+/** Pinned to the bottom of the menu, in this order: help, settings, then the profile menu (plan and billing, team, preferences). */
 export const HELP = by('/support');
 const SETTINGS = by('/settings');
 export { SETTINGS };
-export const accountLink: NavItem = { href: '/account', label: 'Your OSS account', icon: LayoutGrid };
-export const account: NavItem[] = [
-  { href: '/account/website', label: 'Website', icon: Globe },
-  { href: '/account/billing', label: 'Billing', icon: FileText },
-  { href: '/account/support', label: 'Support', icon: LifeBuoy },
-];
-export const MORE_LINKS = [by('/collections'), by('/inventory'), by('/customers'), by('/discounts'), by('/analytics'), by('/automations'), by('/storefront'), by('/content'), HELP, SETTINGS, ...account.filter(a => a.href !== '/account/support')];
+export const account: NavItem[] = [{ href: '/account/billing', label: 'Plan and billing', icon: FileText }];
+export const MORE_LINKS = [by('/collections'), by('/inventory'), by('/customers'), by('/discounts'), by('/analytics'), by('/automations'), by('/storefront'), by('/content'), HELP, SETTINGS, ...account];
 export const PROGRESSIVE = ['/analytics', '/customers', '/discounts', '/inventory'];
 
 /** Second-level links shown under their parent when the menu is expanded and that section is open. Collections and Inventory live under Products when expanded; the icon rail still lists them. */

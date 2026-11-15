@@ -11,7 +11,7 @@ const items = [
   { href: '/settings/integrations', t: 'Integrations', d: 'Shipping, search, maps and more', i: Plug, c: 'blue' },
   { href: '/settings/team', t: 'Team and access', d: 'Members, roles and support access', i: Users, c: 'lilac' },
   { href: '/storefront', t: 'Storefront', d: 'Theme, domain and versions', i: Store, c: 'peach' },
-  { href: '/account/billing', t: 'Plan and billing', d: 'Managed in your OSS account', i: Receipt, c: 'lime' },
+  { href: '/account/billing', t: 'Plan and billing', d: 'Your subscription and invoices', i: Receipt, c: 'lime' },
 ];
 const groups = [
   { h: 'Store', rows: ['/settings/payments', '/settings/shipping', '/settings/integrations', '/settings/preferences', '/settings/emails', '/settings/legal'] },

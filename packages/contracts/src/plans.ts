@@ -45,12 +45,21 @@ export const MerchantAgreement = z.object({
 });
 export type MerchantAgreement = z.infer<typeof MerchantAgreement>;
 
+/**
+ * One plan at launch (decision of 15 Nov 2026): £479 once for the storefront build, then £39 a month.
+ * The fee machinery (basis points, tiers, overrides, promotions) stays so terms remain configurable per merchant.
+ */
 export const SEED_PLANS: Plan[] = [
-  { id: 'commerce', name: 'OSS Commerce', monthlyMinor: 4999, buildFromMinor: 69900, status: 'provisional', fee: { baseBp: 50, refundsReturnFee: true, tiers: [] },
+  { id: 'commerce', name: 'OSS Commerce', monthlyMinor: 3900, buildFromMinor: 47900, status: 'provisional', fee: { baseBp: 50, refundsReturnFee: true, tiers: [] },
     entitlements: { features: ['automation_basic'], limits: { staffSeats: 3, stockLocations: 1, automationRunsPerMonth: 1000, emailsPerMonth: 5000, storageGb: 10 } } },
-  { id: 'plus', name: 'OSS Commerce Plus', monthlyMinor: 9900, buildFromMinor: 149900, status: 'provisional', fee: { baseBp: 30, refundsReturnFee: true, tiers: [{ fromMonthlyVolumeMinor: 10_000_000, bp: 20 }] },
-    entitlements: { features: ['automation_basic', 'automation_advanced', 'advanced_reporting', 'priority_support', 'custom_checkout_branding'], limits: { staffSeats: 10, stockLocations: 5, automationRunsPerMonth: 20000, emailsPerMonth: 50000, storageGb: 50 } } },
 ];
+/**
+ * What may be stated publicly. Anything false here must not appear as a firm customer-facing claim.
+ * - applicationFee: the 0.5% platform fee was proposed earlier and has NOT been reconfirmed with the new pricing. Charged in code only when confirmed.
+ * - vat: whether £39 and £479 include VAT is undecided (the company has no VAT number on record).
+ */
+export const COMMERCIAL_CONFIRMED = { monthly: true, build: true, applicationFee: false, vat: false, buildScope: false, supportAllowance: false } as const;
+export const LAUNCH_PLAN = SEED_PLANS[0];
 
 /** Resolve what a merchant actually pays and may use at a moment in time. Overrides beat the plan; an active fee promotion beats both. */
 export function resolveAgreement(plan: Plan, a: MerchantAgreement, at: Date, monthlyVolumeMinor = 0) {

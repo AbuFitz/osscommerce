@@ -1,23 +1,25 @@
+import { LAUNCH_PLAN, COMMERCIAL_CONFIRMED } from '@oss-commerce/contracts';
+
 /**
  * Single source of truth for facts that appear on the site and in legal pages.
- * Anything marked `provisional` or `null` must be confirmed before launch.
+ * Prices come from packages/contracts (the same data the platform reads), never from a page.
  */
 export const SITE = {
-  name: 'OneSimpleSite',
-  product: 'Commerce',
+  name: 'OSS Commerce',
+  maker: 'OneSimpleSite',
   url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://commerce.onesimplesite.co.uk',
-  agencyUrl: 'https://onesimplesite.co.uk',
-  email: 'hello@onesimplesite.co.uk', // published on onesimplesite.co.uk
+  makerUrl: 'https://onesimplesite.co.uk',
+  /** The merchant sign-in. Unset until the production portal has a public address; the header hides the link rather than pointing somewhere wrong. */
+  portalUrl: process.env.NEXT_PUBLIC_PORTAL_URL || null,
+  email: 'hello@onesimplesite.co.uk', // published on onesimplesite.co.uk. A Commerce-specific address is still to be chosen.
   social: [
     { label: 'Instagram', href: 'https://www.instagram.com/onesimplesite/' },
     { label: 'LinkedIn', href: 'https://www.linkedin.com/company/onesimplesite/' },
     { label: 'TikTok', href: 'https://www.tiktok.com/@onesimplesite' },
-    { label: 'Facebook', href: 'https://www.facebook.com/profile.php?id=61587530671229' },
   ],
 } as const;
 
-/** From the public Companies House record (company 17552675, checked 14 Nov 2026). Company-level details only.
- *  Still unknown: VAT number and ICO registration. As a data controller the company should hold an ICO data protection fee registration; confirm. */
+/** From the public Companies House record (company 17552675, checked 14 Nov 2026). VAT number and ICO registration are still unknown. */
 export const COMPANY = {
   legalName: 'OneSimpleSite Ltd' as string | null,
   companyNumber: '17552675' as string | null,
@@ -26,36 +28,22 @@ export const COMPANY = {
   vatNumber: null as string | null,
   icoRegistration: null as string | null,
 };
-/** Required identity fields. VAT and ICO numbers are shown only when present. */
 export const COMPANY_REQUIRED = ['legalName', 'companyNumber', 'registeredAddress'] as const;
-export const LEGAL = {
-  /** Set NEXT_PUBLIC_LEGAL_REVIEWED=1 only after a solicitor has approved the documents. */
-  reviewed: process.env.NEXT_PUBLIC_LEGAL_REVIEWED === '1',
-  updated: '14 November 2026',
-};
+export const LEGAL = { reviewed: process.env.NEXT_PUBLIC_LEGAL_REVIEWED === '1', updated: '14 November 2026' };
 
-/**
- * Intended starting prices, from the product brief. Provisional until infrastructure cost, Stripe Connect fees and entitlements are validated.
- * Pricing, entitlements and fees must be managed in the internal platform (see packages/contracts/src/plans.ts), not hardcoded in pages.
- */
-export const PRICING = {
-  status: 'provisional' as const,
-  vatRate: 0.2,
-  plans: [
-    {
-      id: 'commerce', name: 'OSS Commerce', monthly: 49.99, buildFrom: 699, commissionBp: 50 as number | null, commissionNote: 'of captured payments, on top of payment processing fees',
-      includes: ['The OSS Commerce platform and merchant dashboard', 'Managed hosting and infrastructure', 'Security, monitoring and platform maintenance', 'Payment infrastructure and essential integrations', 'Defined technical support', 'Standard platform updates and improvements'],
-    },
-    {
-      id: 'plus', name: 'OSS Commerce Plus', monthly: 99, buildFrom: 1499, commissionBp: 30 as number | null, commissionNote: 'of captured payments, falling to 0.2% above £100,000 a month. Payment processing fees are separate',
-      includes: ['Everything in OSS Commerce', 'Advanced reporting', 'Additional automation', 'Higher usage allowances', 'More advanced team and inventory features', 'Priority technical support'],
-    },
-  ],
+const gbp = (minor: number) => (minor % 100 === 0 ? `£${minor / 100}` : `£${(minor / 100).toFixed(2)}`);
+/** One plan. `confirmed` says what may be stated as fact; pages read it and soften or omit the rest. */
+export const PRICE = {
+  name: LAUNCH_PLAN.name,
+  build: gbp(LAUNCH_PLAN.buildFromMinor), buildMinor: LAUNCH_PLAN.buildFromMinor,
+  monthly: gbp(LAUNCH_PLAN.monthlyMinor), monthlyMinor: LAUNCH_PLAN.monthlyMinor,
+  confirmed: COMMERCIAL_CONFIRMED,
 } as const;
 
 export const NAV = [
+  { href: '/platform', label: 'Platform' },
   { href: '/storefronts', label: 'Storefronts' },
-  { href: '/#dashboard', label: 'The platform' },
+  { href: '/payments', label: 'Payments' },
+  { href: '/integrations', label: 'Integrations' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/contact', label: 'Contact' },
 ] as const;
