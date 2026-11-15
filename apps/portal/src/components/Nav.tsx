@@ -1,9 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { commerce, GROUPS, SETTINGS, HELP, type NavItem } from './nav-data';
+import { commerce, GROUPS, SETTINGS, HELP, CHILDREN, NESTED, type NavItem } from './nav-data';
 import { ProfileMenu } from './ProfileMenu';
 
 const active = (p: string, h: string) => (h === '/' ? p === '/' : p === h || p.startsWith(h + '/'));
@@ -17,18 +17,25 @@ export function Shell({ children, initials, name, role, hidden = [], defaultExpa
   const [narrow, setNarrow] = useState(false);
   useEffect(() => { const m = window.matchMedia('(max-width:1099px)'); const f = () => setNarrow(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
   const open = pref && !narrow;
-  const p = usePathname();
+  const p = usePathname(); const sp = useSearchParams();
   const toggle = () => { const v = !pref; setOpen(v); document.cookie = `oss_rail=${v ? 'open' : 'closed'}; path=/; max-age=31536000; samesite=lax`; };
-  const item = (it: NavItem) => (
-    <Link key={it.href} href={it.href} data-label={it.label} title={open ? undefined : it.label} aria-label={open ? undefined : it.label} aria-current={active(p, it.href) ? 'page' : undefined}>
-      <it.icon size={19} aria-hidden /><span className="lbl">{it.label}</span>
-    </Link>
-  );
+  const kids = (it: NavItem) => CHILDREN[it.href] ?? [];
+  const here = (h: string): boolean => { const [path, qs] = h.split('?'); if (!qs) return active(p, path) && !(CHILDREN[path] ?? []).some(c => c.href !== h && here(c.href)); return p === path && sp.toString() === qs; };
+  const sectionOpen = (it: NavItem) => active(p, it.href) || kids(it).some(c => active(p, c.href.split('?')[0]));
+  const item = (it: NavItem) => {
+    const sub = open ? kids(it) : [];
+    return (<div key={it.href} className="rail-item">
+      <Link href={it.href} data-label={it.label} title={open ? undefined : it.label} aria-label={open ? undefined : it.label} aria-current={active(p, it.href) && !sub.some(c => here(c.href)) ? 'page' : undefined} aria-expanded={sub.length ? sectionOpen(it) : undefined}>
+        <it.icon size={19} aria-hidden /><span className="lbl">{it.label}</span>
+      </Link>
+      {sub.length > 0 && sectionOpen(it) && <div className="rail-sub" role="group" aria-label={`${it.label} sections`}>{sub.map(c => <Link key={c.href} href={c.href} aria-current={here(c.href) ? 'page' : undefined}>{c.label}</Link>)}</div>}
+    </div>);
+  };
   return (
     <div className="frame" data-rail={open ? 'open' : 'closed'}>
       <aside className="rail">
         <nav aria-label="Main" className="rail-nav">
-          {GROUPS.map((g, i) => { const items = g.items.filter(x => !hidden.includes(x.href)); if (!items.length) return null; return (
+          {GROUPS.map((g, i) => { const items = g.items.filter(x => !hidden.includes(x.href) && !(open && NESTED.has(x.href))); if (!items.length) return null; return (
             <div key={i} className="rail-grp">{g.label && <div className="rail-cap" aria-hidden={!open}>{g.label}</div>}{items.map(item)}</div>); })}
         </nav>
         <div className="grow" />

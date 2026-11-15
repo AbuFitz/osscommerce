@@ -69,3 +69,17 @@ export async function markNoticesRead(ids: string[] | 'all') { const r = await g
 export async function saveVariants(productId: string, d: { optionGroups: OptionGroup[]; variants: VariantInput[] }) { try { return await run(() => gateway().saveVariants(productId, d), [`/products/${productId}`, '/products', '/inventory', '/']); } catch (e) { return { ok: false, message: e instanceof Error ? e.message : 'Could not save variants.' }; } }
 export async function previewCollection(contains: string) { return gateway().previewCollection(contains); }
 export async function createCollection(name: string, contains: string) { return run(() => gateway().createCollection(name, contains), ['/collections']); }
+
+export interface SearchHit { kind: 'Order' | 'Product' | 'Customer'; title: string; sub: string; href: string }
+/** Read-only search across orders, products and customers for the command palette. */
+export async function searchAll(q: string): Promise<SearchHit[]> {
+  const t = q.trim().toLowerCase(); if (t.length < 2) return [];
+  try {
+    const g = gateway(); const [o, p, c] = await Promise.all([g.orders({ q }), g.products(), g.customers()]);
+    return [
+      ...o.slice(0, 4).map(x => ({ kind: 'Order' as const, title: `#${x.number} · ${x.customer}`, sub: `${x.fulfilment}`, href: `/orders/${x.id}` })),
+      ...p.filter(x => `${x.title} ${x.sku}`.toLowerCase().includes(t)).slice(0, 4).map(x => ({ kind: 'Product' as const, title: x.title, sub: x.sku, href: `/products/${x.id}` })),
+      ...c.filter(x => `${x.name} ${x.email}`.toLowerCase().includes(t)).slice(0, 4).map(x => ({ kind: 'Customer' as const, title: x.name, sub: x.email, href: `/customers` })),
+    ];
+  } catch { return []; }
+}

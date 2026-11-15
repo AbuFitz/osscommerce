@@ -1,4 +1,6 @@
 import { Search } from 'lucide-react';
+import { CommandPalette } from '@/components/CommandPalette';
+import { OpenPalette, PaletteIcon } from '@/components/OpenPalette';
 import Link from 'next/link';
 import { Shell, TabBar } from '@/components/Nav';
 import { cookies } from 'next/headers';
@@ -30,13 +32,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <StatusBanner banner={banner} />
             <header className="top">
               <Switcher name={s.name} /><div className="spacer" />
-              <form className="searchpill" role="search" action="/orders"><Search size={16} aria-hidden /><label className="sr" htmlFor="gq">Search orders</label><input id="gq" name="q" placeholder="Search orders and customers" /></form>
+              <OpenPalette />
               <NotificationBell notices={notices} />
             </header>
-            <header className="topbar"><Switcher name={s.name} /><div className="spacer" /><NotificationBell notices={notices} /></header>
+            <header className="topbar"><Switcher name={s.name} /><div className="spacer" /><PaletteIcon /><NotificationBell notices={notices} /></header>
             <main id="main">{children}</main>
           </div>
         </Shell>
-        <TabBar /></>
+        <TabBar /><CommandPalette /></>
   );
 }

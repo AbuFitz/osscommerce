@@ -1,6 +1,6 @@
 import 'server-only';
 import { cookies } from 'next/headers';
-import { GATE_COPY, LAUNCH_GATES, type Notice, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
+import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
 
 /**
@@ -123,6 +123,10 @@ export const demoGateway: CommerceGateway = {
       store: { storeId: StoreId.parse('st_demo'), organisationId: OrganisationId.parse('org_demo'), cellId: 'cell-demo', hostnames: [{ host: 'kilnandthread.example', verified: st === 'live' }], region: 'eu-west-london', lifecycle: st === 'live' ? 'live' : 'configuring', entitlementVersion: 1, paymentReadiness: st === 'new' ? 'not_started' : 'enabled' },
       readiness: LAUNCH_GATES.map(g => ({ gate: g, done: done[g], ...GATE_COPY[g] })),
     };
+  },
+  async live(): Promise<LiveView> {
+    const st = await state(); if (st === 'new') return { demo: true, asOf: AS_OF, visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } };
+    return { demo: true, asOf: AS_OF, visitorsNow: 3, sessions: { value: 76, vsPrev: 62 }, salesMinor: { value: 14000, vsPrev: 1300 }, orders: { value: 8, vsPrev: 300 }, behaviour: { activeCarts: 2, checkingOut: 1, purchased: 1 }, locations: [{ place: 'United Kingdom · England · Bristol', sessions: 31 }, { place: 'United Kingdom · England · London', sessions: 24 }, { place: 'United Kingdom · Scotland · Glasgow', sessions: 9 }, { place: 'United Kingdom · Wales · Cardiff', sessions: 7 }, { place: 'Ireland · Dublin', sessions: 5 }], returning: { newCustomers: 5, returning: 3 } };
   },
   async summary(): Promise<Summary> {
     const st = await state(); const ALL = await ordersFor(st);

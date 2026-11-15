@@ -1,5 +1,6 @@
 import type { SalesPoint } from '@/lib/gateway';
 import { day, moneyShort, money } from '@/lib/format';
+import { ChartSwitch } from './ChartSwitch';
 
 /** Server-rendered SVG: no chart library needed for one bar series. Data table is the accessible equivalent. */
 export function SalesChart({ series }: { series: SalesPoint[] }) {
@@ -8,7 +9,7 @@ export function SalesChart({ series }: { series: SalesPoint[] }) {
   const total = series.reduce((s, p) => s + p.netMinor, 0);
   const best = series.reduce((a, b) => (b.netMinor > a.netMinor ? b : a));
   return (
-    <>
+    <ChartSwitch label="Net sales per day" chart={<>
       <svg className="chart" viewBox={`0 0 ${W} ${H + 16}`} preserveAspectRatio="none" role="img"
         aria-label={`Net sales per day, ${day(series[0].day)} to ${day(series.at(-1)!.day)}. Total ${money(total)}. Best day ${day(best.day)} at ${money(best.netMinor)}.`}>
         {series.map((p, i) => {
@@ -18,9 +19,6 @@ export function SalesChart({ series }: { series: SalesPoint[] }) {
         <text x={0} y={H + 12}>{day(series[0].day)}</text>
         <text x={W} y={H + 12} textAnchor="end">{day(series.at(-1)!.day)}</text>
       </svg>
-      <details className="data"><summary>View as table</summary>
-        <table><tbody>{series.map(p => <tr key={p.day}><td style={{ paddingRight: 16 }}>{day(p.day)}</td><td className="num">{moneyShort(p.netMinor)}</td></tr>)}</tbody></table>
-      </details>
-    </>
+      </>} table={<table><tbody>{series.map(p => <tr key={p.day}><td style={{ paddingRight: 16 }}>{day(p.day)}</td><td className="num">{moneyShort(p.netMinor)}</td></tr>)}</tbody></table>} />
   );
 }

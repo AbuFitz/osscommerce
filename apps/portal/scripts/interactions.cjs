@@ -74,6 +74,17 @@ async function run(name, vp) {
   await pc.fill('IV2 3AB'); await p.getByRole('button', { name: 'Check' }).click(); ok(S('postcode: Highlands zone and its price'), (await p.locator('.pok').innerText()).includes('Highlands and Islands') && (await p.locator('.pok').innerText()).includes('£8.95'));
   await pc.fill('M1 1AA'); await p.getByRole('button', { name: 'Check' }).click(); ok(S('postcode: unlisted area falls back to the catch-all zone'), (await p.locator('.pok').innerText()).includes('United Kingdom'));
 
+  // Command palette, shortcuts, chart toggle, nav second level
+  await go('/'); await p.keyboard.press('Control+k'); await p.waitForTimeout(300); ok(S('palette: Ctrl+K opens it'), await p.locator('dialog.cmdk[open]').count() === 1);
+  await p.keyboard.type('mug'); await p.waitForTimeout(700); ok(S('palette: finds a product by name'), (await p.locator('.cmdk-r').allInnerTexts()).some(t => /Stoneware mug/.test(t)));
+  await p.keyboard.press('Enter'); await p.waitForTimeout(900); ok(S('palette: Enter opens the result'), /\/products\//.test(p.url()));
+  await go('/'); await p.keyboard.press('g'); await p.keyboard.press('o'); await p.waitForTimeout(700); ok(S('shortcut: g then o goes to Orders'), p.url().endsWith('/orders'));
+  await go('/'); await p.keyboard.press('Control+k'); await p.keyboard.press('Escape'); await p.waitForTimeout(250); ok(S('palette: Esc closes it'), await p.locator('dialog.cmdk[open]').count() === 0);
+  await go('/analytics'); const tb = p.getByRole('button', { name: 'Table' }).first(); const h0 = (await p.locator('.cview').first().boundingBox()).height; await tb.click(); await p.waitForTimeout(250); const h1 = (await p.locator('.cview').first().boundingBox()).height;
+  ok(S('chart: Table swaps in place without growing the card'), Math.abs(h1 - h0) < 4 && (await p.locator('.cview-table:not([hidden]) td').count()) > 0, `${h0} -> ${h1}`);
+  await go('/analytics/live'); ok(S('live view: renders tiles, funnel and locations'), (await p.getByText('Visitors right now').count()) === 1 && (await p.getByText('Sessions by location').count()) === 1);
+  await go('/settings'); ok(S('settings: lists every section'), (await p.locator('.glist a').count()) >= 9);
+
   // Team
   await go('/settings/team'); await p.getByRole('button', { name: 'Invite member' }).click(); await dlg().getByRole('button', { name: 'Send invitation' }).click(); ok(S('invite: empty email is refused with a reason'), (await dlg().locator('.ferr').count()) === 1); await dlg().getByLabel('Email').fill('new.person@example.com'); await dlg().getByRole('button', { name: 'Send invitation' }).click(); await p.waitForTimeout(900); await go('/settings/team'); ok(S('invite: person appears as invited'), (await p.getByText('new.person@example.com').count()) > 0);
   const ap = p.getByRole('button', { name: 'Approve' }); if (await ap.count()) { await ap.first().click(); await p.waitForTimeout(900); await go('/settings/team'); ok(S('grant: approving moves it to active'), (await p.getByText('Needs your approval').count()) === 0); }

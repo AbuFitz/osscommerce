@@ -20,7 +20,6 @@ const groups = [
 export default function Settings() {
   const by = (h: string) => items.find(x => x.href === h)!;
   return (<><Header title="Settings" eyebrow="Kiln & Thread" />
-    <div className="only-m glist">{groups.map(g => <section key={g.h} aria-label={g.h}><h2>{g.h}</h2><ul>{g.rows.map(h => { const x = by(h); return <li key={h}><Link href={h}><span className={`ic ${x.c}`}><x.i size={18} aria-hidden /></span><span className="t"><b>{x.t}</b><span>{x.d}</span></span><ChevronRight size={18} className="chev" aria-hidden /></Link></li>; })}</ul></section>)}</div>
-    <div className="only-d pgrid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))' }}>{items.map(x => (
-      <Link key={x.href} href={x.href} className="w kcard"><div className="top2"><span className={`ic ${x.c}`}><x.i size={18} aria-hidden /></span><ArrowUpRight size={16} className="muted" aria-hidden /></div><div style={{ fontWeight: 600, fontSize: 17, marginTop: 18 }}>{x.t}</div><div className="muted" style={{ marginTop: 4 }}>{x.d}</div></Link>))}</div></>);
+    <div className="glist glist-2">{groups.map(g => <section key={g.h} aria-label={g.h}><h2>{g.h}</h2><ul>{g.rows.map(h => { const x = by(h); return <li key={h}><Link href={h}><span className={`ic ${x.c}`}><x.i size={18} aria-hidden /></span><span className="t"><b>{x.t}</b><span>{x.d}</span></span><ChevronRight size={18} className="chev" aria-hidden /></Link></li>; })}</ul></section>)}</div>
+  </>);
 }

@@ -51,6 +51,7 @@ export interface StockAdjust { productId: string; mode: 'set' | 'add'; qty: numb
 export interface DomainCheck { ok: boolean; message: string; record?: { type: string; name: string; value: string } }
 /** One thing that needs the merchant's attention. The same list feeds the Overview alerts and the notification centre, so they never disagree. */
 export interface Notice { id: string; tone: 'danger' | 'warn' | 'info' | 'success'; title: string; body: string; href: string; action: string; at: string; read: boolean; kind: 'payment' | 'stock' | 'order' | 'access' | 'quote' | 'setup' }
+export interface LiveView { demo: boolean; asOf: string; visitorsNow: number; sessions: { value: number; vsPrev: number }; salesMinor: { value: number; vsPrev: number }; orders: { value: number; vsPrev: number }; behaviour: { activeCarts: number; checkingOut: number; purchased: number }; locations: { place: string; sessions: number }[]; returning: { newCustomers: number; returning: number } }
 export type TaxClass = 'standard' | 'reduced' | 'zero';
 export interface OptionGroup { name: string; options: string[] }
 export interface Variant { id: string; options: string[]; sku: string; priceMinor: number; onHand: number; allocated: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number }
@@ -63,6 +64,7 @@ export interface RefundInput { orderId: string; amountMinor: number; reason: str
 export interface CommerceGateway {
   store(): Promise<StoreView>;
   summary(): Promise<Summary>;
+  live(): Promise<LiveView>;
   orders(q?: { filter?: string; q?: string }): Promise<Order[]>;
   order(id: string): Promise<Order | null>;
   products(): Promise<Product[]>;

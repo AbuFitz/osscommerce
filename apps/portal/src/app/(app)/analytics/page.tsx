@@ -1,6 +1,8 @@
 import { gateway } from '@/lib/gateway-instance';
 import { money, day } from '@/lib/format';
 import { Header } from '@/components/ui';
+import Link from 'next/link';
+import { Radio } from 'lucide-react';
 import { SalesBars, Donut, SLICE } from '@/components/charts';
 export const metadata = { title: 'Analytics' };
 
@@ -8,7 +10,7 @@ export default async function Analytics() {
   const s = await gateway().summary();
   const max = Math.max(...s.topProducts.map(p => p.netMinor), 1);
   return (<>
-    <Header title="Analytics" eyebrow={`Last 14 days to ${day(s.asOf)} · Europe/London`} />
+    <Header title="Analytics" eyebrow={`Last 14 days to ${day(s.asOf)} · Europe/London`}><Link className="btn" href="/analytics/live"><Radio size={16} aria-hidden />Live view</Link></Header>
     <div className="kgrid" style={{ marginBottom: 16 }}>
       {[['Sales before refunds', money(s.grossMinor)], ['Refunded', money(s.refundedMinor)], ['Net sales', money(s.netMinor)], ['Average order', money(s.aovMinor)]].map(([l, v], i) => <div key={l} className={`w kcard ${i === 2 ? 'dark' : ''}`}><div className="muted">{l}</div><div className="kpi">{v}</div></div>)}
     </div>
