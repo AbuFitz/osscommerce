@@ -25,6 +25,6 @@ export function PriceBlock() {
         <ul>{RUN.map(x => <li key={x}><Check size={16} aria-hidden /><span>{x}</span></li>)}</ul>
       </section>
     </div>
-    <p className="price-foot">Card processing fees are set by Stripe and charged to your own Stripe account. {PRICE.confirmed.applicationFee ? '' : 'Any platform fee on transactions is stated in your order form before you commit. '}Your domain name, optional third-party services and design work beyond the agreed scope are separate. {PRICE.confirmed.vat ? '' : 'Your quote states whether VAT applies.'}</p>
+    <p className="price-foot">{PRICE.confirmed.vatRegistered ? 'Prices exclude VAT.' : 'These are the full prices. We are not VAT registered, so no VAT is added.'} Payments carry a small cost per transaction, shown below. Your domain name, optional third-party services and design work beyond the agreed scope are separate.</p>
   </>);
 }

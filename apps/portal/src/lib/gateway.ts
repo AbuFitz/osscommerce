@@ -66,7 +66,7 @@ export interface CommerceGateway {
   store(): Promise<StoreView>;
   summary(): Promise<Summary>;
   live(): Promise<LiveView>;
-  /** The merchant's subscription to OSS Commerce (platform billing account). Never the merchant's own Stripe Connect account. */
+  /** The merchant's subscription to OneSimpleCommerce (platform billing account). Never the merchant's own Stripe Connect account. */
   billing(): Promise<Billing>;
   orders(q?: { filter?: string; q?: string }): Promise<Order[]>;
   order(id: string): Promise<Order | null>;

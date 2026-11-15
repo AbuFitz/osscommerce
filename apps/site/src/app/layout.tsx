@@ -8,6 +8,7 @@ import './globals.css';
 import { SITE, PRICE } from '@/config';
 import { SiteHeader } from '@/components/SiteHeader';
 import { Footer } from '@/components/Footer';
+import { WhatsApp } from '@/components/WhatsApp';
 
 const desc = `A custom-built online shop and the dashboard to run it. We design, build and host the store; you manage products, orders and payments. ${PRICE.build} to build, ${PRICE.monthly} a month.`;
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <SiteHeader />
         <main id="main">{children}</main>
         <Footer />
+        <WhatsApp />
       </body>
     </html>
   );

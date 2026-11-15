@@ -50,15 +50,17 @@ export type MerchantAgreement = z.infer<typeof MerchantAgreement>;
  * The fee machinery (basis points, tiers, overrides, promotions) stays so terms remain configurable per merchant.
  */
 export const SEED_PLANS: Plan[] = [
-  { id: 'commerce', name: 'OSS Commerce', monthlyMinor: 3900, buildFromMinor: 47900, status: 'provisional', fee: { baseBp: 50, refundsReturnFee: true, tiers: [] },
+  { id: 'commerce', name: 'OneSimpleCommerce', monthlyMinor: 3900, buildFromMinor: 47900, status: 'provisional', fee: { baseBp: 50, refundsReturnFee: true, tiers: [] },
     entitlements: { features: ['automation_basic'], limits: { staffSeats: 3, stockLocations: 1, automationRunsPerMonth: 1000, emailsPerMonth: 5000, storageGb: 10 } } },
 ];
 /**
- * What may be stated publicly. Anything false here must not appear as a firm customer-facing claim.
- * - applicationFee: the 0.5% platform fee was proposed earlier and has NOT been reconfirmed with the new pricing. Charged in code only when confirmed.
- * - vat: whether £39 and £479 include VAT is undecided (the company has no VAT number on record).
+ * What may be stated publicly (owner decisions, 15 Nov 2026).
+ * - applicationFee: confirmed at 0.5% of each payment, presented as part of one combined payment cost, never as a separate commission.
+ * - vat: OneSimpleSite Ltd is not VAT registered, so £479 and £39 are the full prices and no VAT is added.
+ * - buildScope, supportAllowance: still defined per order form.
+ * Processor rates have their own flag (PROCESSOR_RATES_CONFIRMED in fees.ts): Stripe has not yet confirmed the arrangement in writing.
  */
-export const COMMERCIAL_CONFIRMED = { monthly: true, build: true, applicationFee: false, vat: false, buildScope: false, supportAllowance: false } as const;
+export const COMMERCIAL_CONFIRMED = { monthly: true, build: true, applicationFee: true, vat: true, vatRegistered: false, buildScope: false, supportAllowance: false } as const;
 export const LAUNCH_PLAN = SEED_PLANS[0];
 
 /** Resolve what a merchant actually pays and may use at a moment in time. Overrides beat the plan; an active fee promotion beats both. */

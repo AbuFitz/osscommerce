@@ -3,7 +3,7 @@ import { useId, useState } from 'react';
 import { Browser, Shot } from './Frames';
 
 const TABS = [
-  { k: 'orders', t: 'Orders', d: 'Every order in one list, with payment and fulfilment status. Open one to see items, the customer, the payment and a timeline.', alt: 'Orders list in the OSS Commerce dashboard' },
+  { k: 'orders', t: 'Orders', d: 'Every order in one list, with payment and fulfilment status. Open one to see items, the customer, the payment and a timeline.', alt: 'Orders list in the OneSimpleCommerce dashboard' },
   { k: 'order', t: 'Fulfilment and refunds', d: 'Mark an order as fulfilled with tracking, or refund all or part of it. The customer is told by email.', alt: 'A single order with fulfil and refund actions' },
   { k: 'product', t: 'Products and variants', d: 'Add products with sizes, colours and other options. Each variant has its own SKU, price and stock.', alt: 'A product with its variants' },
   { k: 'inventory', t: 'Stock', d: 'See what is on hand, what is reserved for open orders and what is running low. Adjust with a reason, so there is a record.', alt: 'Inventory screen with stock levels' },

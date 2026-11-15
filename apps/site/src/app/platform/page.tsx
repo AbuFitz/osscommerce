@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Browser, Shot } from '@/components/Frames';
 import { Cta } from '@/components/Cta';
-export const metadata: Metadata = { title: 'Platform', description: 'The OSS Commerce dashboard: orders, products, stock, customers, discounts, sales, delivery and content, in one place.' };
+export const metadata: Metadata = { title: 'Platform', description: 'The OneSimpleCommerce dashboard: orders, products, stock, customers, discounts, sales, delivery and content, in one place.' };
 
 const F = [
   { s: 'orders', k: 'ORDERS', h: 'See every order and what it needs.', p: 'A single list with payment and fulfilment status, filters for what is waiting, and search by order, name or email.', l: ['Filter to orders waiting to ship or refunded', 'Open an order for items, customer, payment and timeline'] },
@@ -19,12 +19,12 @@ const F = [
 
 export default function Platform() {
   return (<>
-    <section className="phd"><div className="wrap"><h1>The dashboard you run your shop from.</h1><p className="lede">Everything below is the real OSS Commerce dashboard, shown with demo data. It works on a phone as well as it does on a desk.</p>
-      <div className="acts"><Link className="btn ink" href="/contact">Start a store <ArrowRight size={18} aria-hidden /></Link></div></div></section>
+    <section className="phd"><div className="wrap"><h1>The dashboard you run your shop from.</h1><p className="lede">Everything below is the real OneSimpleCommerce dashboard, shown with demo data. It works on a phone as well as it does on a desk.</p>
+      <div className="acts"><Link className="btn ink" href="/start">Start your store <ArrowRight size={18} aria-hidden /></Link></div></div></section>
     <section className="sec tight"><div className="wrap">
       {F.map(f => (<article className="feature" key={f.s}>
         <div><span className="mono muted">{f.k}</span><h2>{f.h}</h2><p>{f.p}</p>{f.l.length > 0 && <ul>{f.l.map(x => <li key={x}>{x}</li>)}</ul>}</div>
-        <Browser><Shot name={f.s} alt={`${f.h} Screen from the OSS Commerce dashboard.`} /></Browser>
+        <Browser><Shot name={f.s} alt={`${f.h} Screen from the OneSimpleCommerce dashboard.`} /></Browser>
       </article>))}
       <p className="note" style={{ marginTop: 32 }}>Team roles, a notification centre, keyboard search (Ctrl or ⌘ K) and a help area for service requests are part of the dashboard too.</p>
     </div></section>

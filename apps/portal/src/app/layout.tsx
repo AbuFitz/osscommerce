@@ -6,7 +6,7 @@ import '@oss-commerce/ui/ui.css';
 import './globals.css';
 
 export const dynamic = 'force-dynamic';
-export const metadata: Metadata = { title: { default: 'Commerce', template: '%s · OSS Commerce' }, robots: { index: false } };
+export const metadata: Metadata = { title: { default: 'Commerce', template: '%s · OneSimpleCommerce' }, robots: { index: false } };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#e4e9d4' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

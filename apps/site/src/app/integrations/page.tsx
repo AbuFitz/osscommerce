@@ -4,7 +4,7 @@ import { ArrowRight, MapPin } from 'lucide-react';
 import { siResend } from 'simple-icons';
 import { Mark } from '@/components/Marks';
 import { Cta } from '@/components/Cta';
-export const metadata: Metadata = { title: 'Integrations', description: 'OSS Commerce connects your store to Stripe for payments, with order emails and UK address checks built in.' };
+export const metadata: Metadata = { title: 'Integrations', description: 'OneSimpleCommerce connects your store to Stripe for payments, with order emails and UK address checks built in.' };
 
 /** Only integrations that are part of the launch product are listed. Research-stage providers are not advertised (see packages/integrations/src/catalogue.ts). */
 export default function Integrations() {

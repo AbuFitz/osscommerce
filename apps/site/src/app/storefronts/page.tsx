@@ -5,12 +5,12 @@ import { Browser, Phone } from '@/components/Frames';
 import { StoreDemo } from '@/components/StoreDemo';
 import { Cta } from '@/components/Cta';
 import { PRICE } from '@/config';
-export const metadata: Metadata = { title: 'Storefronts', description: 'Every OSS Commerce storefront is designed and built for one business. No templates to pick from.' };
+export const metadata: Metadata = { title: 'Storefronts', description: 'Every OneSimpleCommerce storefront is designed and built for one business. No templates to pick from.' };
 
 export default function Storefronts() {
   return (<>
     <section className="phd"><div className="wrap"><h1>Built for your shop, not picked from a list.</h1><p className="lede">We design and develop each storefront for the business it belongs to. You do not choose a theme and you do not build pages. You tell us about your brand and products, and we make the shop.</p>
-      <div className="acts"><Link className="btn ink" href="/contact">Start a store <ArrowRight size={18} aria-hidden /></Link></div></div></section>
+      <div className="acts"><Link className="btn ink" href="/start">Start your store <ArrowRight size={18} aria-hidden /></Link></div></div></section>
     <section className="sec tight"><div className="wrap">
       <div className="sell-vis" style={{ maxWidth: 1040, margin: '0 auto' }}><Browser url="kilnandthread.example/vases/bud-vase"><StoreDemo /></Browser><Phone><StoreDemo variant="phone" /></Phone></div>
       <p className="tabnote" style={{ textAlign: 'center', marginTop: 20 }}>Kiln &amp; Thread is our demonstration shop, not a client. Your storefront is designed from scratch around your own brand.</p>

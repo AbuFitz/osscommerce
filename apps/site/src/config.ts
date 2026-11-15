@@ -5,13 +5,15 @@ import { LAUNCH_PLAN, COMMERCIAL_CONFIRMED } from '@oss-commerce/contracts';
  * Prices come from packages/contracts (the same data the platform reads), never from a page.
  */
 export const SITE = {
-  name: 'OSS Commerce',
+  name: 'OneSimpleCommerce',
   maker: 'OneSimpleSite',
   url: process.env.NEXT_PUBLIC_SITE_URL ?? 'https://commerce.onesimplesite.co.uk',
   makerUrl: 'https://onesimplesite.co.uk',
   /** The merchant sign-in. Unset until the production portal has a public address; the header hides the link rather than pointing somewhere wrong. */
   portalUrl: process.env.NEXT_PUBLIC_PORTAL_URL || null,
   email: 'hello@onesimplesite.co.uk', // published on onesimplesite.co.uk. A Commerce-specific address is still to be chosen.
+  /** WhatsApp Business number as published by OneSimpleSite: 07732 420976. */
+  whatsapp: { display: '07732 420976', href: 'https://wa.me/447732420976' },
   social: [
     { label: 'Instagram', href: 'https://www.instagram.com/onesimplesite/' },
     { label: 'LinkedIn', href: 'https://www.linkedin.com/company/onesimplesite/' },
