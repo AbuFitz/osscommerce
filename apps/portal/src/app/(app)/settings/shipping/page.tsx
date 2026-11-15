@@ -4,7 +4,7 @@ import { Header } from '@/components/ui';
 export const metadata = { title: 'Shipping and tax' };
 export default async function Shipping() {
   const t = await gateway().shippingTax();
-  return (<><Header title="Shipping and tax" eyebrow="Settings"><button className="btn primary" type="button">Add zone</button></Header>
+  return (<><Header title="Shipping and tax" back={{ href: '/settings', label: 'Settings' }}><button className="btn primary" type="button">Add zone</button></Header>
     <div className="grid">
       <div className="c-8" style={{ display: 'grid', gap: 16, }}>{t.zones.map(z => (
         <section key={z.name} className="w" aria-label={z.name}><div className="wh"><div><h2>{z.name}</h2><div className="muted" style={{ fontSize: 12.5 }}>{z.regions}</div></div><button className="btn sm" type="button">Edit</button></div>

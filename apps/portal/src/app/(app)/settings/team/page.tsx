@@ -6,7 +6,7 @@ export const metadata = { title: 'Team and access' };
 const role = { owner: 'Owner', manager: 'Manager', fulfilment: 'Fulfilment', analyst: 'Analyst' } as const;
 export default async function Team() {
   const { members, grants } = await gateway().team();
-  return (<><Header title="Team and access" eyebrow="Settings"><InviteAction /></Header>
+  return (<><Header title="Team and access" back={{ href: '/settings', label: 'Settings' }}><InviteAction /></Header>
     <div className="grid">
       <section className="w c-7" aria-labelledby="mb"><div className="wh"><h2 id="mb">Members</h2></div>
         <div className="rows">{members.map((m, i) => <div key={m.email} className="row"><Avatar name={m.name} i={i} /><span className="t"><b>{m.name}</b><span>{m.email}</span></span><span className={`badge ${m.status === 'active' ? 'ok' : 'warn'}`}>{m.status === 'active' ? role[m.role] : `Invited · ${role[m.role]}`}</span></div>)}</div></section>

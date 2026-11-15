@@ -18,13 +18,16 @@
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",
     "zod": "^3.24.0",
-    "@oss-commerce/emails": "*"
+    "@oss-commerce/emails": "*",
+    "@oss-commerce/handoff": "*",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "tsx": "^4.23.15",
-    "typescript": "~5.8.0"
+    "typescript": "~5.8.0",
+    "@types/qrcode": "^1.5.5"
   }
 }

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import type { FulfilmentStatus, OrderState, PaymentStatus } from '@/lib/gateway';
 
 const PAY: Record<PaymentStatus, [string, string]> = {
@@ -10,8 +12,8 @@ export const PayBadge = ({ s }: { s: PaymentStatus }) => <span className={`badge
 export const FulBadge = ({ s, state }: { s: FulfilmentStatus; state: OrderState }) =>
   state === 'cancelled' ? <span className="badge">Cancelled</span> : <span className={`badge ${FUL[s][1]}`}>{FUL[s][0]}</span>;
 
-export function Header({ eyebrow, title, children }: { eyebrow?: string; title: string; children?: React.ReactNode }) {
-  return <div className="ph"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1></div>{children && <div className="acts">{children}</div>}</div>;
+export function Header({ eyebrow, back, title, children }: { eyebrow?: string; back?: { href: string; label: string }; title: string; children?: React.ReactNode }) {
+  return <div className="ph"><div>{back ? <Link href={back.href} className="back"><ChevronLeft size={16} aria-hidden />{back.label}</Link> : eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1></div>{children && <div className="acts">{children}</div>}</div>;
 }
 
 const TONES = ['', 'b', 'l', 'p'];

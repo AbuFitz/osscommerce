@@ -20,7 +20,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   const { state } = await searchParams; const g = gateway();
   const p = await g.paymentSetup(DEMO ? state : undefined);
   const tone = TONE[p.status], step = stepIndex(p.status, p.payoutsEnabled, p.chargesEnabled), cta = CTA[p.status], deadline = when(p.deadline);
-  return (<><Header title="Payments" eyebrow="Settings">{p.account && <a className="btn" href="https://dashboard.stripe.com/" target="_blank" rel="noreferrer">Open Stripe dashboard</a>}</Header>
+  return (<><Header title="Payments" back={{ href: '/settings', label: 'Settings' }}>{p.account && <a className="btn only-d" href="https://dashboard.stripe.com/" target="_blank" rel="noreferrer">Open Stripe dashboard</a>}</Header>
     <div className="grid">
       <section className="w dark c-7" aria-labelledby="st"><div className="wh"><h2 id="st">{p.headline}</h2><span className={`badge ${tone.cls}`}>{tone.label}</span></div>
         <p style={{ margin: '0 0 4px', maxWidth: 520 }}>{p.detail}</p>
@@ -37,6 +37,6 @@ export default async function Payments({ searchParams }: { searchParams: Promise
         <p className="muted" style={{ marginBottom: 0, fontSize: 12.5 }}>When checkout is off, existing orders, refunds and your reports stay available.</p></section>
       <section className="w c-6" aria-labelledby="ac"><div className="wh"><h2 id="ac">Account</h2></div>
         <dl className="kv"><dt>Stripe account</dt><dd className="mono">{p.account ?? 'Not connected'}</dd><dt>Payouts</dt><dd>{p.payoutSchedule ?? 'Not set'}</dd><dt>OSS application fee</dt><dd className="num">{(p.applicationFeeBp / 100).toFixed(2)}% of each captured payment</dd></dl>
-        <p className="muted" style={{ marginBottom: 0, fontSize: 12.5, marginTop: 14 }}>Customers pay your Stripe account directly. OSS never holds your funds.</p></section>
+        <p className="muted" style={{ marginBottom: 0, fontSize: 12.5, marginTop: 14 }}>Customers pay your Stripe account directly. OSS never holds your funds.</p>{p.account && <a className="btn only-m" style={{ marginTop: 14, width: '100%', justifyContent: 'center' }} href="https://dashboard.stripe.com/" target="_blank" rel="noreferrer">Open Stripe dashboard</a>}</section>
     </div></>);
 }

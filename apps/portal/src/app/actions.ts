@@ -23,3 +23,29 @@ export async function decideQuote(id: string, approve: boolean) { return run(() 
 export async function saveEmailSettings(brand: Partial<EmailSettings['brand']>, n: Record<string, boolean>) { return run(() => gateway().saveEmailSettings(brand, n), ['/settings/emails']); }
 
 export async function startPaymentSetup() { return gateway().startPaymentSetup(); }
+
+// ---- Phone handoff (add photos from your phone) ----
+import { handoff, callerNow, origin, qrSvg, AVAILABLE, photoStore } from '@/lib/handoff';
+import { HandoffError } from '@oss-commerce/handoff';
+const fail = (e: unknown) => ({ ok: false as const, message: e instanceof HandoffError ? e.message : 'Something went wrong. Nothing was changed.' });
+export async function startPhoneHandoff(productId: string, label: string) {
+  if (!AVAILABLE) return { ok: false as const, message: 'Adding photos from your phone is available once your store is live on the platform.' };
+  try { const h = await handoff().create(await callerNow(), { kind: 'product_photos', productId, label }); const url = `${await origin()}/h/${h.token}`; return { ok: true as const, id: h.id, url, svg: await qrSvg(url), expiresAt: h.expiresAt, localhost: /localhost|127\.0\.0\.1/.test(url) }; } catch (e) { return fail(e); }
+}
+export async function pollPhoneHandoff(id: string) { try { return { ok: true as const, ...(await handoff().status(await callerNow(), id)) }; } catch (e) { return fail(e); } }
+export async function closePhoneHandoff(id: string, as: 'completed' | 'cancelled') { try { return { ok: true as const, ...(await handoff().close(await callerNow(), id, as)) }; } catch (e) { return fail(e); } }
+export async function listProductPhotos(productId: string) { return photoStore().list((await callerNow()).storeId, productId); }
+import { sniff, stripMetadata, mime, MAX_FILE_BYTES } from '@oss-commerce/handoff';
+/** Photos picked on this computer go through the same checks as phone photos: content sniffed, metadata stripped, size limited. */
+export async function uploadPhotos(productId: string, form: FormData) {
+  if (!AVAILABLE) return { ok: false as const, message: 'Photo upload is available once your store is live on the platform.' };
+  const c = await callerNow(); let added = 0; const problems: string[] = [];
+  for (const f of form.getAll('file')) {
+    if (!(f instanceof File)) continue; const bytes = new Uint8Array(await f.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > MAX_FILE_BYTES) { problems.push(`${f.name} is over 12 MB`); continue; }
+    const t = sniff(bytes); if (!t) { problems.push(`${f.name} is not a JPEG, PNG or WebP photo`); continue; }
+    try { await photoStore().put(c.storeId, productId, Math.random().toString(36).slice(2, 12) + Date.now().toString(36), stripMetadata(bytes, t), mime(t)); added++; } catch { problems.push(`${f.name} could not be read`); }
+  }
+  revalidatePath(`/products/${productId}`);
+  return { ok: added > 0, message: added ? `${added} photo${added > 1 ? 's' : ''} added${problems.length ? `. ${problems.join('. ')}.` : ''}` : problems.join('. ') || 'No photos were added.' };
+}
