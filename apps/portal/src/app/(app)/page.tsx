@@ -4,7 +4,6 @@ import { gateway } from '@/lib/gateway-instance';
 import { plan, type Plan } from '@/lib/smart';
 import { money, when, day } from '@/lib/format';
 import { SalesBars, Dial, Donut } from '@/components/charts';
-import { AlertStack } from '@/components/Notices';
 import { Header, Avatar } from '@/components/ui';
 
 const KPI = {
@@ -42,7 +41,6 @@ export default async function Overview() {
         {P.hero !== 'first_product' && <Link className="btn primary" href="/products">Add product</Link>}
       </Header>
 
-      <AlertStack notices={notices.filter(n => !n.read && (n.tone === 'danger' || n.tone === 'warn'))} total={notices.filter(n => !n.read).length} />
 
       <div className="ov">
         <div className="stack">

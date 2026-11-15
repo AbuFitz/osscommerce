@@ -192,7 +192,8 @@ export const demoGateway: CommerceGateway = {
       disconnected: { ...base, status: 'disconnected', headline: 'Stripe is disconnected', detail: 'Checkout is paused. Past orders and refunds stay available. Reconnect to take payments again.', actionRequired: true },
       enabled: { ...base, status: 'enabled', headline: 'Payments are on', detail: 'Customers can pay and payouts go to your bank.', chargesEnabled: true, payoutsEnabled: true, checkoutAllowed: true },
     };
-    return states[preview ?? 'enabled'] ?? states.enabled;
+    let pick = preview; if (!pick) { try { pick = (await cookies()).get('oss_pay')?.value; } catch { /* outside a request */ } }
+    return states[pick ?? 'enabled'] ?? states.enabled;
   },
   async startPaymentSetup(): Promise<StartPaymentSetup> { return { ok: false, message: 'Stripe onboarding opens here once the store is connected to the live platform. This is a demo.' }; },
   async shippingTax() {
@@ -304,6 +305,7 @@ export const demoGateway: CommerceGateway = {
   async notices() {
     const st = await state(); const x = await S(); const out: Notice[] = []; if (st === 'new') return out;
     for (const o of x.orders.filter(q => q.payment === 'failed').slice(0, 3)) out.push({ id: `pay-${o.id}`, tone: 'danger', kind: 'payment', title: `Payment failed on order #${o.number}`, body: `${o.customer}'s card was declined. No charge was made, so there is nothing to refund.`, href: `/orders/${o.id}`, action: 'View order', at: o.placedAt, read: false });
+    const pay = await demoGateway.paymentSetup(); if (['restricted', 'disconnected', 'payouts_paused', 'action_required'].includes(pay.status)) out.push({ id: `acct-${pay.status}`, tone: pay.status === 'action_required' ? 'warn' : 'danger', kind: 'payment', title: pay.headline, body: pay.detail, href: '/settings/payments', action: 'Open payments', at: AS_OF, read: false });
     const open = x.orders.filter(q => q.state === 'open' && q.payment === 'paid'); if (open.length) out.push({ id: `ship-${open.length}`, tone: 'warn', kind: 'order', title: `${open.length} order${open.length > 1 ? 's' : ''} waiting to ship`, body: `The oldest was placed ${new Date(open[open.length - 1].placedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}. Customers are told when you mark an order fulfilled.`, href: '/orders?filter=unfulfilled', action: 'Review orders', at: open[0].placedAt, read: false });
     for (const p of x.products.filter(q => q.status === 'published' && q.onHand - q.allocated <= q.threshold).slice(0, 2)) out.push({ id: `stock-${p.id}-${p.onHand}`, tone: 'warn', kind: 'stock', title: `${p.title} is running low`, body: `${Math.max(p.onHand - p.allocated, 0)} available, and your alert level is ${p.threshold}.`, href: '/inventory', action: 'Adjust stock', at: AS_OF, read: false });
     for (const g of x.grants.filter(q => q.state === 'pending')) out.push({ id: `grant-${g.id}`, tone: 'info', kind: 'access', title: `${g.who} is asking for access`, body: g.purpose + '. Nothing is shared until you approve.', href: '/settings/team', action: 'Review request', at: AS_OF, read: false });

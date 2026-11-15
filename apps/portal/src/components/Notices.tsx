@@ -38,14 +38,14 @@ function Item({ n, onGo }: { n: Notice; onGo: () => void }) {
   return (<li className={n.read ? 'read' : ''}><Link href={n.href} onClick={onGo} className="nitem"><NoticeIcon tone={n.tone} /><span className="nt"><b>{n.title}</b><span>{n.body}</span><small>{ago(n.at)} · {n.action}</small></span>{!n.read && <span className="udot" aria-label="Unread" />}</Link></li>);
 }
 
-/** Alerts at the top of Overview: only things that need action now, each with its own button and a way to dismiss. */
-export function AlertStack({ notices, total }: { notices: Notice[]; total: number }) {
-  const router = useRouter(); const [gone, setGone] = useState<Set<string>>(new Set()); const [, start] = useTransition();
-  const live = notices.filter(n => !gone.has(n.id)); const shown = live.slice(0, 2); const hidden = Math.max(total - shown.length - gone.size, 0); if (!shown.length) return null;
-  return (<section aria-label="Needs your attention" className="alerts">{shown.map(n => { const I = ICON[n.tone]; return (
-    <div key={n.id} className={`alert ${n.tone}`} role={n.tone === 'danger' ? 'alert' : 'status'}>
-      <span className="aic" aria-hidden><I size={20} /></span>
-      <div className="abody"><b>{n.title}</b><p>{n.body}</p></div>
-      <div className="aact"><Link href={n.href} className="btn sm">{n.action}</Link><button type="button" className="iconbtn sm" aria-label={`Dismiss: ${n.title}`} onClick={() => { setGone(g => new Set(g).add(n.id)); start(async () => { await markNoticesRead([n.id]); router.refresh(); }); }}><X size={15} aria-hidden /></button></div>
-    </div>); })}{hidden > 0 && <button type="button" className="alerts-more" onClick={() => dispatchEvent(new Event('oss:notices'))}>{hidden} more in notifications</button>}</section>);
+/** A slim bar across the top of the app for account-level problems only (payments or payouts stopped, action due). One at a time, always links to the fix. Everything else lives in the notification centre. */
+export interface BannerData { tone: 'danger' | 'warn'; title: string; body: string; href: string; action: string; id: string }
+export function StatusBanner({ banner }: { banner: BannerData | null }) {
+  const [gone, setGone] = useState(false); useEffect(() => { try { if (banner && sessionStorage.getItem('oss_banner') === banner.id) setGone(true); } catch {} }, [banner]);
+  if (!banner || gone) return null; const I = ICON[banner.tone];
+  return (<div className={`sbanner ${banner.tone}`} role={banner.tone === 'danger' ? 'alert' : 'status'}>
+    <I size={18} aria-hidden /><p><b>{banner.title}</b> <span>{banner.body}</span></p>
+    <Link href={banner.href} className="sb-act">{banner.action}</Link>
+    {banner.tone === 'warn' && <button type="button" className="sb-x" aria-label={`Dismiss: ${banner.title}`} onClick={() => { setGone(true); try { sessionStorage.setItem('oss_banner', banner.id); } catch {} }}><X size={15} aria-hidden /></button>}
+  </div>);
 }

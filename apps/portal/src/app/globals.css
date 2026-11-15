@@ -341,20 +341,17 @@ input[type=date]{min-height:46px}input[type=date]::-webkit-calendar-picker-indic
 .nfoot{padding:12px 18px 16px;border-top:0;font-size:13px}.nfoot a{color:var(--olive-700,#4a5f1f);font-weight:550}
 .iconbtn .count{position:absolute;top:-3px;right:-3px;min-width:19px;height:19px;padding:0 5px;border-radius:99px;background:#c2410c;color:#fff;font-size:11px;font-weight:650;display:grid;place-items:center;box-shadow:0 0 0 2px #fff}
 .btn.ghost.sm{background:transparent}
-/* ---- Alerts on Overview ---- */
-.alerts{display:grid;gap:10px;margin-bottom:16px}
-.alert{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px 14px 14px 16px;border-radius:22px;background:#fff;border:1px solid rgba(40,50,20,.1);box-shadow:0 12px 30px -22px rgba(30,40,10,.5);position:relative;overflow:hidden}
-.alert::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:#c2410c}.alert.warn::before{background:#c9901a}.alert.info::before{background:#3f6bb0}
-.alert .aic{width:40px;height:40px;border-radius:14px;display:grid;place-items:center}.alert.warn .aic{background:#f8ebb8;color:#6b4e07}.alert.info .aic{background:#d8e6f6;color:#1f3f6b}
-.abody{min-width:0}.abody b{font-size:15.5px;font-weight:600}.abody p{margin:2px 0 0;font-size:13.5px;color:var(--muted);line-height:1.45}
-.aact{display:flex;align-items:center;gap:6px}.iconbtn.sm{width:34px;height:34px}
-@media(prefers-reduced-motion:no-preference){.alert{animation:alertin var(--dur-3) var(--ease)}@keyframes alertin{from{opacity:0;transform:translateY(-6px)}}}
-@media(max-width:700px){.alert{grid-template-columns:auto 1fr;gap:10px 12px;padding:14px}.alert .aact{grid-column:1/-1;justify-content:space-between}.alert .aact .btn{flex:1;justify-content:center}}
+/* ---- Status banner: account-level problems only ---- */
+.sbanner{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:10px 12px 10px 16px;border-radius:18px;font-size:14px;line-height:1.4}
+.sbanner>svg{flex:none}.sbanner p{margin:0;flex:1;min-width:0}.sbanner b{font-weight:650}
+.sbanner.danger{background:#fde4e1;color:#7a1f12}.sbanner.warn{background:#faefc4;color:#5e4506}
+.sb-act{flex:none;font-weight:600;font-size:13.5px;padding:7px 14px;border-radius:99px;background:rgba(255,255,255,.7);color:inherit;text-decoration:none}.sb-act:hover{background:#fff}
+.sb-x{flex:none;width:30px;height:30px;border-radius:99px;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer}.sb-x:hover{background:rgba(255,255,255,.6)}
+@media(max-width:700px){.sbanner{flex-wrap:wrap;gap:8px 10px;padding:12px 14px}.sbanner p{flex-basis:calc(100% - 36px)}.sb-act{margin-left:28px}.sb-x{position:absolute;right:20px}.sbanner{position:relative}}
 /* ---- Account menu ---- */
 .pmenu{display:grid}.pm-head{display:flex;align-items:center;gap:12px;padding:16px 16px 12px}.pm-head b{display:block;font-size:15px}.pm-head small{color:var(--muted);font-size:12.5px}
 .pmenu ul{list-style:none;margin:0;padding:4px 8px 10px}.pmenu a{display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:14px;text-decoration:none;color:inherit}.pmenu a:hover,.pmenu a:focus-visible{background:rgba(40,50,20,.06)}.pmenu a svg{color:#5b6648;flex:none}.pmenu a b{display:block;font-size:14px;font-weight:600}.pmenu a small{display:block;color:var(--muted);font-size:12.5px}
 
-.alert .btn{background:rgba(40,50,20,.07);box-shadow:none}.alert .btn:hover{background:rgba(40,50,20,.12)}.alerts-more{justify-self:start;font-size:13px;color:var(--muted);background:none;border:0;padding:4px 8px;cursor:pointer;border-radius:99px}.alerts-more:hover{color:var(--ink);background:rgba(40,50,20,.06)}
 .nhead .btn{background:rgba(40,50,20,.07);color:var(--ink);box-shadow:none;opacity:1}.nhead .btn:hover{background:rgba(40,50,20,.13)}
 .dlg .nhead h2{display:none}.dlg .nhead{justify-content:flex-end;padding:0 0 4px;position:static}.dlg .nlist{max-height:none}.dlg .nlist ul{padding:0}.dlg .nlist h3{padding-left:4px}
 
