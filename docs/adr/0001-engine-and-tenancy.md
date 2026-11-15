@@ -36,3 +36,6 @@ Admin-side channel scoping works. **Shopper identity and customer data are not t
 ## Not validated here
 - The existing OSS Manage platform's auth/schema were not accessible in this session (only `osscommerce` and `onesimplesite-web-designer` were in scope). `docs/manage-integration.md` defines the contract Manage must satisfy; reconcile after inspecting it.
 - No infrastructure, payment account or real data exists. Medusa, load/concurrency tests and restore drills remain open gates.
+
+## Addendum: engine capability audit
+See `docs/engine/capability-coverage.md`. The portal's model was not derived from the engine's schema; the audit lists the gaps (variants and options, collections, shipping calculators, tax categories, roles as permission sets, draft orders) and the order to close them.
