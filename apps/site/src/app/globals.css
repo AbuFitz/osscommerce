@@ -381,3 +381,52 @@ main{padding-top:0}.phd{padding-top:clamp(120px,13vw,176px)}.doc{padding-top:cla
 .dark .cols li,.glow .cols li{border-color:var(--dline)}.cta.glow{padding:clamp(88px,12vw,168px) 0}
 .ft{position:relative}.ft-big .wm{display:flex;font-size:10.6cqw}
 .panel h2{margin-bottom:18px}
+
+/* ===================== v3: display voice, working demo, receipts ===================== */
+.hero h1,.rows h2,.cta h2,.su-side h1,.phd.glow h1{text-transform:uppercase;font-weight:650;letter-spacing:-.055em}
+.hero h1{font-size:clamp(44px,6vw,92px);line-height:.9;max-width:9.5ch}
+.phd.glow{padding-bottom:clamp(56px,7vw,96px)}.phd.glow h1{font-size:clamp(40px,5.2vw,76px);line-height:.92}.phd.glow .duo{align-items:center}
+.ticket{display:inline-grid;grid-template-columns:auto auto;margin-top:38px;border-top:1px solid var(--dline);border-bottom:1px solid var(--dline)}
+.ticket>div{padding:16px 34px 16px 0}.ticket>div+div{padding-left:34px;border-left:1px dashed var(--dline)}
+.ticket dt{font-family:var(--f-mono);font-weight:500;font-size:clamp(34px,3.6vw,50px);letter-spacing:-.06em;line-height:1}.ticket dt small{font-size:.42em;letter-spacing:-.02em;opacity:.75}
+.ticket dd{margin-top:8px;font-size:14.5px;color:var(--on-dark-2)}
+@media(max-width:940px){.ticket{text-align:left}}
+
+.demo{display:grid;gap:10px}
+.demo-hint{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;font-family:var(--f-mono);font-size:13px;color:var(--spring);min-height:34px;text-align:center}
+.demo-hint button{display:inline-flex;align-items:center;gap:6px;border:0;background:rgba(239,235,227,.1);color:var(--bone);font:inherit;padding:7px 12px;border-radius:99px;cursor:pointer}
+.sd-opts button{font:inherit;color:inherit;background:transparent;cursor:pointer;padding:2cqw 3.6cqw;border-radius:99px;border:1px solid rgba(29,26,22,.22);font-size:3.4cqw}.sd-opts button[aria-pressed=true]{background:#1d1a16;color:#fbf8f2;border-color:#1d1a16}
+button.sd-cta{border:0;cursor:pointer;font-family:inherit;width:100%}button.sd-cta:hover{background:#000}
+.sd-phone .sd-title{font-size:8.4cqw}.sd-title.sm{font-size:7cqw!important;text-align:center;align-self:center}
+.sd-bag{position:relative;display:grid}.sd-bag b{position:absolute;right:-2.4cqw;top:-2.4cqw;min-width:4.6cqw;height:4.6cqw;border-radius:99px;background:#1d1a16;color:#fff;font-size:2.9cqw;display:grid;place-items:center}
+.sd-line{display:flex;justify-content:space-between;gap:3cqw;align-self:stretch;font-size:3.7cqw;padding:2cqw 0;border-bottom:1px solid rgba(29,26,22,.12)}.sd-line.tot{border:0;font-weight:650}
+.sd-phone .sd-note.c{text-align:center;display:block;align-self:center;color:#5a554d}.sd-ok{align-self:center;width:13cqw;height:13cqw;border-radius:50%;background:#dff0e4;color:#2f6a48;display:grid;place-items:center;margin-top:4cqw}.sd-ok svg{width:7cqw;height:7cqw}
+.sd-phone .sd-body{grid-template-rows:44% 1fr}
+.fc-order.ghost{opacity:.55;border:1px dashed rgba(14,19,17,.3);box-shadow:none}
+.fc-sent{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--moss);font-weight:600}
+button.fc-btn{border:0;cursor:pointer;font-family:inherit}button.fc-btn:hover{background:var(--pine)}
+.fc b[data-flash]{color:var(--moss)}
+.rcpt{background:#fbfaf5;color:var(--ink);font-family:var(--f-mono);border-radius:6px;border-bottom:3px dashed rgba(14,19,17,.28)}
+.rcpt dl{display:grid;font-size:12.5px;min-width:230px}.rcpt dl>div{display:flex;justify-content:space-between;gap:20px;padding:6px 0;border-bottom:1px dashed rgba(14,19,17,.2)}
+.rcpt .tot{border:0;font-weight:500;font-size:15px;padding-top:9px}.rcpt .tot dd{color:var(--moss)}.rcpt .sub{color:var(--muted);border:0;padding:2px 0 2px 14px;font-size:.9em}
+.fc.rcpt{right:0;top:47%;transform:translateZ(150px);max-width:54%;box-shadow:none;filter:drop-shadow(0 24px 30px rgba(0,0,0,.55))}
+@media(prefers-reduced-motion:no-preference){.fc.in{animation:land .55s cubic-bezier(.2,1.3,.4,1) both,bob 7s 1s ease-in-out infinite}@keyframes land{from{opacity:0;scale:.8;translate:-30px 20px}}}
+@media(max-width:560px){.fc.rcpt{top:auto;bottom:0;right:0;max-width:66%}.rcpt dl{min-width:190px;font-size:11.5px}.fc-order{top:6%}}
+
+.calc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr);gap:clamp(24px,4vw,64px);align-items:start}
+.calc-in{display:grid;gap:22px}.calc .fld label,.calc .fld legend{color:inherit}
+.adorn{position:relative}.adorn span{position:absolute;left:16px;top:50%;translate:0 -50%;font-family:var(--f-mono);color:var(--muted)}.adorn input{padding-left:34px;font-family:var(--f-mono);font-size:20px}
+.glow .chips label{background:transparent;border-color:var(--dline);color:var(--bone)}.glow .chips label[data-on]{background:var(--bone);color:var(--ink);border-color:var(--bone)}
+.rcpt.big{padding:26px 26px 34px;display:grid;gap:12px;filter:drop-shadow(0 30px 40px rgba(0,0,0,.35))}.rcpt.big dl{font-size:15px}.rcpt.big dl>div{padding:11px 0}.rcpt.big .tot{font-size:clamp(26px,3vw,36px);align-items:baseline;padding-top:16px}.rcpt.big .tot dt{font-size:15px}
+@media(max-width:820px){.calc{grid-template-columns:1fr}}
+/* phones: no overlap. The phone sits on its own and the dashboard cards form a tidy grid beneath it, so every button can be reached */
+@media(max-width:560px){
+  .scene{aspect-ratio:auto;perspective:none;max-width:none}
+  .scene-in{transform:none;display:grid;grid-template-columns:1fr 1fr;gap:10px;height:auto}
+  .scene-phone{position:relative;left:auto;top:auto;width:68%;margin:0 auto 6px;grid-column:1/-1;transform:none}
+  .scene .fc,.scene .fc.rcpt{position:relative;inset:auto;left:auto;right:auto;top:auto;bottom:auto;transform:none;width:auto;max-width:none;min-width:0;display:grid;animation:none}
+  .scene .fc-stock{display:grid}.scene .fc-order,.scene .fc.rcpt{grid-column:1/-1}.scene .fc-order{order:1}.scene .fc.rcpt{order:2}.scene .fc-sales{order:3}.scene .fc-stock{order:4}
+  .scene .fc-bars{width:100%}.rcpt dl{min-width:0}
+}
+/* a card with a button on it never drifts: a moving target is harder to press */
+@media(prefers-reduced-motion:no-preference){.fc.fc-order{animation:none}.fc.fc-order.in{animation:land .55s cubic-bezier(.2,1.3,.4,1) both}}

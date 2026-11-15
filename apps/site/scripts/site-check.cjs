@@ -20,6 +20,15 @@ const PAGES = ['/', '/platform', '/storefronts', '/payments', '/pricing', '/inte
     await p.goto(BASE + '/pricing'); const pt = await p.locator('main').innerText(); ok(`[${name}] pricing shows £479 and £39`, pt.includes('£479') && pt.includes('£39'));
     const nf = await p.goto(BASE + '/nope'); ok(`[${name}] unknown page returns a 404 page`, nf.status() === 404 && (await p.getByText('That page is not here').count()) === 1);
     if (name === 'phone') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Open menu' }).click(); await p.locator('#hd-menu').getByRole('link', { name: 'Pricing', exact: true }).click(); await p.waitForURL('**/pricing'); await p.waitForTimeout(400); ok('[phone] menu opens and navigates', (await p.locator('#hd-menu').isHidden())); }
+    // the working demo on the home page
+    await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Chalk' }).click(); await p.getByRole('button', { name: 'Add to bag' }).click(); await p.getByRole('button', { name: /^Pay/ }).click();
+    ok(`[${name}] demo: paying creates an order in the dashboard cards`, (await p.locator('.fc-order').innerText()).includes('#1043') && (await p.locator('.fc-order').innerText()).includes('chalk'));
+    await p.getByRole('button', { name: 'Mark as fulfilled' }).click(); const rc = await p.locator('.scene .rcpt').innerText();
+    ok(`[${name}] demo: receipt shows £24.00 paid, £0.68 cost, £23.32 received`, rc.includes('£24.00') && rc.includes('£0.68') && rc.includes('£23.32'), rc.replace(/\n/g, ' '));
+    await p.getByRole('button', { name: 'Start again' }).click(); ok(`[${name}] demo: Start again resets it`, (await p.getByRole('button', { name: 'Add to bag' }).count()) === 1);
+    await p.goto(BASE + '/pricing'); await p.getByLabel('Order value').fill('100'); await p.getByText('International cards', { exact: true }).first().click();
+    ok(`[${name}] calculator: £100 on an international card costs £3.85`, (await p.locator('.rcpt.big').innerText()).includes('£3.85') && (await p.locator('.rcpt.big').innerText()).includes('£96.15'));
+    await p.getByLabel('Order value').fill('abc'); ok(`[${name}] calculator: nonsense is refused with a reason`, (await p.getByText('Enter an amount between').count()) === 1);
     // sign-up flow
     const cont = () => p.getByRole('button', { name: /Continue|Send to the team/ });
     await p.goto(BASE + '/start'); await cont().click();

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { PriceBlock } from '@/components/PriceBlock';
 import { Cta } from '@/components/Cta';
 import { FeeTable } from '@/components/FeeTable';
+import { PayCalc } from '@/components/PayCalc';
 import { PRICE } from '@/config';
 export const metadata: Metadata = { title: 'Pricing', description: `One plan: ${PRICE.build} to design and build your store, then ${PRICE.monthly} a month for the platform, hosting and technical upkeep.` };
 
@@ -21,6 +22,8 @@ export default function Pricing() {
     <section className="sec tight"><div className="wrap"><PriceBlock /></div></section>
     <section className="sec dark glow"><div className="wrap">
       <div className="head split"><h2>Payments, built in.</h2><p className="lede">Taking payments is part of the platform, not an add-on. You see one cost per payment and exactly what lands in your bank.</p></div>
+      <PayCalc />
+      <div style={{ height: 28 }} />
       <FeeTable />
     </div></section>
     <section className="sec"><div className="wrap">

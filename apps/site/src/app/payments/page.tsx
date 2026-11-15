@@ -2,21 +2,25 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Browser, Shot } from '@/components/Frames';
-import { Mark } from '@/components/Marks';
 import { Cta } from '@/components/Cta';
+import { Orbit } from '@/components/Orbit';
+import { PayCalc } from '@/components/PayCalc';
 export const metadata: Metadata = { title: 'Payments and checkout', description: 'Customers pay into your own Stripe account. How onboarding, checkout, refunds and payouts work with OneSimpleCommerce.' };
 
 export default function Payments() {
   return (<>
-    <section className="phd"><div className="wrap"><h1>Payments, built into your shop.</h1><p className="lede">Take cards and wallets, see every transaction and its cost, issue refunds and follow payouts to your bank, all from your dashboard. Processing is by Stripe, and the money is always yours: we never hold it.</p>
-      <div className="marks" style={{ marginTop: 28 }}><Mark k="stripe" /><Mark k="visa" /><Mark k="mastercard" /><Mark k="amex" /><Mark k="applepay" /><Mark k="googlepay" /></div></div></section>
+    <section className="phd glow"><div className="wrap duo">
+      <div><p className="kicker">Payments</p><h1>Payments, built into your shop.</h1><p className="lede">Take cards and wallets, see every transaction and its cost, issue refunds and follow payouts to your bank, all from your dashboard. Processing is by Stripe, and the money is always yours: we never hold it.</p></div>
+      <Orbit />
+    </div></section>
+    <section className="sec bone"><div className="wrap"><div className="head split"><h2>See what you keep.</h2><p className="lede">One cost per payment, taken when the customer pays. Put in your own numbers.</p></div><PayCalc /></div></section>
     <section className="sec tight"><div className="wrap">
       <article className="feature"><div><span className="mono muted">SETTING UP</span><h2>Connect once, with Stripe.</h2><p>You enter your business, identity and bank details on Stripe's own secure pages. We never see or store them. The dashboard shows where you are and what Stripe still needs.</p></div>
         <Browser><Shot name="payments" alt="Payment settings in the dashboard, showing the Stripe account status" /></Browser></article>
       <article className="feature"><div><span className="mono muted">CHECKOUT</span><h2>A checkout customers already trust.</h2><p>Card details are entered into Stripe's payment form. Cards are supported, and wallets such as Apple Pay and Google Pay appear when your Stripe account, your domain and the shopper's device support them.</p></div>
         <Browser><Shot name="order" alt="An order showing a card payment made to the merchant's Stripe account" /></Browser></article>
     </div></section>
-    <section className="sec bone"><div className="wrap">
+    <section className="sec"><div className="wrap">
       <div className="head"><h2>The parts people ask about.</h2></div>
       <ul className="cols">
         <li><b>Refunds</b><span>Refund all or part of an order from the dashboard. The refund goes back to the customer's original payment method.</span></li>

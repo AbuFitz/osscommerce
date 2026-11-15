@@ -4,8 +4,8 @@ import { Browser, Phone, Shot } from '@/components/Frames';
 import { StoreDemo } from '@/components/StoreDemo';
 import { PlatformTabs } from '@/components/PlatformTabs';
 import { PriceBlock } from '@/components/PriceBlock';
-import { Scene } from '@/components/Scene';
-import { Orbit } from '@/components/Orbit';
+import { LiveDemo } from '@/components/LiveDemo';
+import { PayCalc } from '@/components/PayCalc';
 import { Reveal } from '@/components/Reveal';
 import { Cta } from '@/components/Cta';
 import { PRICE } from '@/config';
@@ -19,9 +19,9 @@ export default function Home() {
           <h1>We build the store. <em>You run the business.</em></h1>
           <p className="lede">A bespoke online store, a powerful commerce platform, and a team that takes care of the technology.</p>
           <div className="acts"><Link className="btn green" href="/start">Start your store <ArrowRight size={18} aria-hidden /></Link><Link className="btn glass" href="/platform">See the platform</Link></div>
-          <dl className="hero-stats"><div><dt className="fig">{PRICE.build}</dt><dd>One-time build fee</dd></div><div><dt className="fig">{PRICE.monthly}<small>/mo</small></dt><dd>Managed commerce</dd></div></dl>
+          <dl className="ticket"><div><dt>{PRICE.build}</dt><dd>One-time build fee</dd></div><div><dt>{PRICE.monthly}<small>/mo</small></dt><dd>Managed commerce</dd></div></dl>
         </div>
-        <Scene />
+        <LiveDemo />
       </div>
     </section>
 
@@ -61,12 +61,10 @@ export default function Home() {
     </section>
 
     <section className="sec dark glow">
-      <div className="wrap duo">
-        <div><h2>Payments, built in.</h2><p className="lede">Take cards and wallets from day one. See every payment, what it cost and what you received, then follow the payout to your bank.</p>
-          <dl className="pay-stat"><div><dt className="fig">2% + 20p</dt><dd>per standard UK card payment, all in</dd></div></dl>
-          <ul className="ticks"><li><Check size={18} aria-hidden /><span>The money is yours: it is paid into an account in your name and on to your bank.</span></li><li><Check size={18} aria-hidden /><span>Refunds from the dashboard in a couple of taps.</span></li><li><Check size={18} aria-hidden /><span>Processing by Stripe.</span></li></ul>
-          <p style={{ marginTop: 28 }}><Link className="lnk" href="/payments">How payments work <ArrowRight size={16} aria-hidden /></Link></p></div>
-        <Reveal><Orbit /></Reveal>
+      <div className="wrap">
+        <div className="head split"><h2>Payments, built in.</h2><p className="lede">Take cards and wallets from day one. Every payment shows what it cost and what you received, and payouts go straight to your bank. Try your own numbers.</p></div>
+        <PayCalc />
+        <p style={{ marginTop: 32 }}><Link className="lnk" href="/payments">How payments work <ArrowRight size={16} aria-hidden /></Link></p>
       </div>
     </section>
 
