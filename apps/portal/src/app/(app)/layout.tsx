@@ -8,13 +8,14 @@ import { PROGRESSIVE } from '@/components/nav-data';
 import { Switcher } from '@/components/Switcher';
 import { NotificationBell, StatusBanner, type BannerData } from '@/components/Notices';
 import { gateway } from '@/lib/gateway-instance';
+import { LIVE } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
 
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const g = gateway();
-  const [s, notices, all, pay] = await Promise.all([g.store(), g.notices(), g.orders(), g.paymentSetup()]);
+  const [s, notices, all, pay, me] = await Promise.all([g.store(), g.notices(), g.orders(), g.paymentSetup(), g.viewer()]);
   const date = (d?: string) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) : '';
   const copy: Record<string, Pick<BannerData, 'tone' | 'body' | 'action'>> = {
     restricted: { tone: 'danger', body: 'Customers cannot pay right now.', action: 'Get help' },
@@ -27,7 +28,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const hidden = all.length === 0 ? PROGRESSIVE : [];
   const expanded = (await cookies()).get('oss_rail')?.value === 'open';
   return (<>
-        <Shell initials="MO" name="Maya Okafor" role="Owner" hidden={hidden} defaultExpanded={expanded}>
+        <Shell initials={me.initials} name={me.name} role={me.role} live={LIVE} hidden={hidden} defaultExpanded={expanded}>
           <div className="stage">
             <StatusBanner banner={banner} />
             <header className="top">

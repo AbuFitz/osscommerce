@@ -9,8 +9,8 @@ import { ProfileMenu } from './ProfileMenu';
 const active = (p: string, h: string) => (h === '/' ? p === '/' : p === h || p.startsWith(h + '/'));
 
 /** Frame + rail. Owns the expanded state so the grid column can animate; the preference lives in a cookie so the server renders it without a flash. */
-export function Shell({ children, initials, name, role, hidden = [], defaultExpanded }: {
-  children: React.ReactNode; initials: string; name: string; role: string; hidden?: string[]; defaultExpanded: boolean;
+export function Shell({ children, initials, name, role, hidden = [], defaultExpanded, live = false }: {
+  children: React.ReactNode; initials: string; name: string; role: string; hidden?: string[]; defaultExpanded: boolean; live?: boolean;
 }) {
   const [pref, setOpen] = useState(defaultExpanded);
   // On narrower desktop windows the labelled rail would squeeze the page, so it folds to icons there (the saved preference is kept).
@@ -40,7 +40,7 @@ export function Shell({ children, initials, name, role, hidden = [], defaultExpa
         </nav>
         <div className="grow" />
         <div className="rail-grp rail-end">{item(HELP)}{item(SETTINGS)}</div>
-        <ProfileMenu initials={initials} name={name} role={role} open={open} />
+        <ProfileMenu initials={initials} name={name} role={role} open={open} live={live} />
         <button type="button" className="rail-toggle" onClick={toggle} aria-expanded={open} aria-label={open ? 'Collapse menu' : 'Expand menu'} data-label={open ? 'Collapse menu' : 'Expand menu'}>
           {open ? <PanelLeftClose size={18} aria-hidden /> : <PanelLeftOpen size={18} aria-hidden />}<span className="lbl">Collapse</span>
         </button>

@@ -507,3 +507,10 @@ dialog.cmdk::backdrop{background:rgba(20,26,10,.45);backdrop-filter:blur(4px)}
   .tabbar a{background:transparent}
   .stage{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 }
+
+/* ---- Sign in ---- */
+.login{min-height:100dvh;display:grid;place-items:center;padding:24px}
+.login-card{width:min(420px,100%);display:grid;gap:16px;padding:32px;border-radius:28px;background:rgba(255,255,255,.86);box-shadow:0 30px 70px -30px rgba(30,40,10,.5),0 0 0 1px rgba(255,255,255,.8) inset}
+.login-wm{margin:0;font-weight:700;letter-spacing:-.04em;font-size:19px}.login-wm b{color:var(--olive-700,#4a5f1f)}.login-wm em{font-style:normal;color:#5f8a1f}
+.login h1{font-size:26px;letter-spacing:-.03em;margin:0}.login-note{margin:0;padding:10px 14px;border-radius:14px;background:#faefc4;color:#5e4506;font-size:13.5px}.login-fine{margin:0;font-size:13px;color:var(--muted)}
+.pm-out{padding:6px 8px 10px;border-top:1px solid rgba(40,50,20,.1)}.pm-out button{display:flex;align-items:center;gap:12px;width:100%;padding:10px;border:0;border-radius:14px;background:transparent;font:inherit;font-weight:600;font-size:14px;color:inherit;cursor:pointer}.pm-out button:hover{background:rgba(40,50,20,.06)}

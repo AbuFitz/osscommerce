@@ -114,6 +114,7 @@ const productsFor = async (st: DemoState) => (st === 'new' ? [] : (await S()).pr
 const NOTE = ' Demo data: nothing was changed.';
 const okDemo = (m: string) => ({ ok: true, message: m + NOTE });
 export const demoGateway: CommerceGateway = {
+  async viewer() { return { name: 'Maya Okafor', initials: 'MO', role: 'Owner' }; },
   async store() {
     const st = await state();
     const done: Record<string, boolean> = st === 'live' ? { contract_signed: true, payments_enabled: true, domain_verified: true, test_order_passed: true, launch_approved: true }

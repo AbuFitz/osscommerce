@@ -62,7 +62,10 @@ export interface Collection { id: string; name: string; contains: string; count:
 export interface MutationResult { ok: boolean; message: string }
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
+export interface Viewer { name: string; initials: string; role: string }
 export interface CommerceGateway {
+  /** Who is signed in. */
+  viewer(): Promise<Viewer>;
   store(): Promise<StoreView>;
   summary(): Promise<Summary>;
   live(): Promise<LiveView>;
