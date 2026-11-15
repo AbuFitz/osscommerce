@@ -59,3 +59,4 @@ export const LAUNCH_GATES = ['contract_signed', 'payments_enabled', 'domain_veri
 export type LaunchGate = (typeof LAUNCH_GATES)[number];
 
 export * from './plans';
+export * from './catalogue.ts';

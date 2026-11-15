@@ -29,3 +29,9 @@ test('refunds return our fee by default, in proportion', () => {
   assert.equal(feeRefundMinor({ chargeMinor: 10000, feeMinor: 50, refundMinor: 5000, refundsReturnFee: false }), 0);
   assert.ok(plus.fee.refundsReturnFee && commerce.fee.refundsReturnFee);
 });
+
+import { validateDraft, combinations } from './catalogue.ts';
+test('catalogue rules live in contracts: variants must pick one value per group, with unique combinations', () => {
+  const d = { title: 'Tee', optionGroups: [{ name: 'Size', options: ['S', 'M'] }], variants: [{ options: ['S'], sku: 'A', priceMinor: 1, stock: 1 }, { options: ['S'], sku: 'B', priceMinor: 1, stock: 1 }] };
+  assert.match(validateDraft(d).join(' '), /already exists/); assert.equal(combinations([{ name: 'a', options: ['1', '2'] }, { name: 'b', options: ['x'] }]).length, 2);
+});
