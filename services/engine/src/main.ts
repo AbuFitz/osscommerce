@@ -1,0 +1,77 @@
+/**
+ * The cell's process entry point. One cell serves one merchant: its database, channel token and Stripe account are fixed by environment at boot.
+ *
+ *   tsx src/main.ts                    run the API server (MODE=server), the job worker (MODE=worker) or both in one process (MODE=both, the default for a small cell)
+ *   tsx src/main.ts migrate:generate N create a migration from the difference between the code and the database
+ *   tsx src/main.ts migrate:run        apply pending migrations and exit
+ *   tsx src/main.ts setup              first-time data: UK zone and VAT, delivery method, the Connect payment method, tax classes and the merchant's own administrator
+ */
+import path from 'node:path';
+import Stripe from 'stripe';
+import { bootstrap, bootstrapWorker, generateMigration, runMigrations, mergeConfig, JobQueueService, TransactionalConnection, RequestContextService, RequestContext, ChannelService, RoleService, AdministratorService, PaymentMethodService, Permission, LanguageCode, isGraphQlErrorResult, User, DefaultSchedulerPlugin, type VendureConfig } from '@vendure/core';
+import { populate } from '@vendure/core/cli';
+import { parseEnv } from './cell/env.ts';
+import { buildCellConfig } from './cell/config.ts';
+import { CellPlugin, vendureWebhookDeps, type CheckoutGate } from './cell/plugin.ts';
+import { liveStripe } from './cell/stripe-live.ts';
+
+const env = parseEnv(process.env);
+const extra = { PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY ?? '', CONTROL_SECRET: process.env.CONTROL_SECRET, PORT: Number(process.env.PORT ?? 3000), MODE: (process.env.MODE ?? 'both') as 'server' | 'worker' | 'both' };
+
+// Filled in once the application is up; the webhook adapter and the checkout gate need the live database connection.
+let conn!: TransactionalConnection; let ctx!: RequestContext;
+const sql = (q: string, p: unknown[] = []) => conn.rawConnection.query(q, p);
+/** Small durable state the cell owns outside Vendure's schema: processed webhook events (so a replay is ignored) and the checkout gate. */
+const STATE_DDL = `create table if not exists oss_processed_event (account text not null, event_id text not null, seen_at timestamptz not null default now(), primary key (account, event_id));
+create table if not exists oss_cell_state (key text primary key, value jsonb not null, updated_at timestamptz not null default now());`;
+const gate: CheckoutGate = {
+  async get() { const r = await sql(`select value from oss_cell_state where key = 'checkout'`); return r[0]?.value ?? { allowed: true }; },
+  async set(allowed, reason) { await sql(`insert into oss_cell_state (key, value) values ('checkout', $1) on conflict (key) do update set value = excluded.value, updated_at = now()`, [JSON.stringify({ allowed, reason })]); },
+};
+const markIfNew = async (account: string, id: string) => (await sql(`insert into oss_processed_event (account, event_id) values ($1, $2) on conflict do nothing returning event_id`, [account, id])).length > 0;
+
+function config(): VendureConfig {
+  const sdk = new Stripe(env.STRIPE_SECRET_KEY);
+  const deps = vendureWebhookDeps(env.STRIPE_CONNECTED_ACCOUNT_ID, () => conn, markIfNew, { restrict: r => gate.set(false, r), allow: () => gate.set(true) }, () => ctx);
+  return mergeConfig(buildCellConfig(env), {
+    apiOptions: { port: extra.PORT, hostname: '0.0.0.0', trustProxy: 1, csrfPrevention: true } as VendureConfig['apiOptions'],
+    dbConnectionOptions: { migrations: [path.join(__dirname, 'migrations/*.+(js|ts)')] },
+    plugins: [DefaultSchedulerPlugin.init(), CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
+  });
+}
+/** Internal work (webhooks, first-time setup) runs as the platform's superadmin. Merchants never get this identity. */
+async function wire(app: { get: <T>(t: any) => T }) {
+  conn = app.get(TransactionalConnection); const rcs = app.get<RequestContextService>(RequestContextService);
+  const user = await conn.rawConnection.getRepository(User).findOne({ where: { identifier: env.SUPERADMIN_USER }, relations: ['roles', 'roles.channels'] });
+  ctx = await rcs.create({ apiType: 'admin', ...(user ? { user } : {}) }); await sql(STATE_DDL);
+}
+
+/** What a merchant may do in their own store. Deliberately not SuperAdmin: no settings, roles, channels, administrators or system access. */
+const MERCHANT_PERMISSIONS = [Permission.ReadCatalog, Permission.CreateCatalog, Permission.UpdateCatalog, Permission.DeleteCatalog, Permission.ReadOrder, Permission.UpdateOrder, Permission.ReadCustomer, Permission.UpdateCustomer,
+  Permission.ReadPromotion, Permission.CreatePromotion, Permission.UpdatePromotion, Permission.DeletePromotion, Permission.ReadSettings, Permission.ReadAsset, Permission.CreateAsset, Permission.UpdateAsset, Permission.DeleteAsset];
+
+async function setup() {
+  const email = process.env.MERCHANT_EMAIL, password = process.env.MERCHANT_PASSWORD, first = process.env.MERCHANT_FIRST_NAME ?? 'Store', last = process.env.MERCHANT_LAST_NAME ?? 'Owner';
+  if (!email || !password || password.length < 12) throw new Error('setup needs MERCHANT_EMAIL and MERCHANT_PASSWORD (12 characters or more).');
+  const app = await populate(() => bootstrap(config()), { defaultLanguage: LanguageCode.en, defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }, { name: 'Reduced', percentage: 5 }, { name: 'Zero', percentage: 0 }], shippingMethods: [{ name: 'Standard delivery', price: 495 }], paymentMethods: [], collections: [] } as any);
+  await wire(app); const channel = await app.get(ChannelService).getDefaultChannel(ctx);
+  if (!channel.pricesIncludeTax) await app.get(ChannelService).update(ctx, { id: channel.id, pricesIncludeTax: true });      // prices are entered and shown as the customer pays them
+  const pm = app.get(PaymentMethodService); if (!(await pm.findAll(ctx)).items.some(m => m.code === 'stripe-connect')) await pm.create(ctx, { code: 'stripe-connect', enabled: true, handler: { code: 'stripe-connect', arguments: [] }, translations: [{ languageCode: LanguageCode.en, name: 'Card' }] });
+  const roles = app.get(RoleService); let role = (await roles.findAll(ctx)).items.find(r => r.code === 'merchant-owner');
+  if (!role) role = await roles.create(ctx, { code: 'merchant-owner', description: 'Store owner', permissions: MERCHANT_PERMISSIONS, channelIds: [channel.id] });
+  const admins = app.get(AdministratorService); const have = (await admins.findAll(ctx, { filter: { emailAddress: { eq: email } } })).items[0];
+  if (!have) { const a = await admins.create(ctx, { emailAddress: email, firstName: first, lastName: last, password, roleIds: [role.id] }); if (isGraphQlErrorResult(a)) throw new Error('Could not create the merchant administrator.'); }
+  console.log(`setup complete: channel ${channel.code}, merchant ${email}${have ? ' (already existed)' : ''}`); await app.close();
+}
+
+(async () => {
+  const cmd = process.argv[2];
+  if (cmd === 'migrate:generate') { await generateMigration(config(), { name: process.argv[3] ?? 'change', outputDir: path.join(__dirname, 'migrations') }); process.exit(0); }
+  if (cmd === 'migrate:run') { await runMigrations(config()); process.exit(0); }
+  if (cmd === 'setup') { await setup(); process.exit(0); }
+  if (extra.MODE === 'worker') { const w = await bootstrapWorker(config()); await wire(w.app); await w.startJobQueue(); console.log('cell worker running'); return; }
+  const app = await bootstrap(config()); await wire(app);
+  if (extra.MODE === 'both') await app.get(JobQueueService).start();
+  console.log(`cell ${env.CELL_ID} for store ${env.STORE_ID} listening on ${extra.PORT} (${extra.MODE}, ${env.APP_ENV})`);
+  for (const s of ['SIGTERM', 'SIGINT'] as const) process.on(s, async () => { await app.close(); process.exit(0); });
+})().catch(e => { console.error('cell failed to start:', e instanceof Error ? e.message : e); process.exit(1); });
