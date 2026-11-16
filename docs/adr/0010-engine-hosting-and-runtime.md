@@ -34,9 +34,9 @@ Sources: docs.vendure.io deployment pages "production-configuration", "horizonta
 - Migrations generated and applied on PostgreSQL 16; the server boots from `src/main.ts`; setup creates the merchant.
 - Signed in as the merchant, the portal adapter adds a product and adjusts stock; the engine refuses that login creating administrators, reading administrators, changing the channel or changing global settings.
 - `portal-adapter.test.ts`: orders, fulfilment and refunds over HTTP against a real Vendure.
+- The Docker image builds (about 835 MB) and runs as a non-root user; started as a container against PostgreSQL it served the merchant's sign-in and catalogue to the portal adapter.
 
 ## Not proven or not built
-- The image has not been built or run: there is no Docker in this workspace.
 - The engine has not been run against Neon itself: this workspace cannot open database connections to Neon (only the management connector works). Neon runs PostgreSQL 18 and the local proof used 16.
 - Redis-backed job queue in a deployed setting, asset storage, CORS origin list for browser clients, UUID ids, backups and monitoring.
 - Routing several merchants: today one portal deployment points at one cell. The control plane lookup (signed-in merchant to their cell) is the next architectural step for more than one store.
