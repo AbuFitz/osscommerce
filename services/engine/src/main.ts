@@ -39,9 +39,13 @@ function config(): VendureConfig {
   const sdk = new Stripe(env.STRIPE_SECRET_KEY);
   const deps = vendureWebhookDeps(env.STRIPE_CONNECTED_ACCOUNT_ID, () => conn, markIfNew, { restrict: r => gate.set(false, r), allow: () => gate.set(true) }, () => ctx);
   return mergeConfig(buildCellConfig(env), {
-    apiOptions: { port: extra.PORT, hostname: '0.0.0.0', trustProxy: 1, csrfPrevention: true } as VendureConfig['apiOptions'],
     dbConnectionOptions: { migrations: [path.join(__dirname, 'migrations/*.+(js|ts)')] },
     assetOptions: ASSET_LIMITS,
+    // /health: the process is up (used by the host's restart check, deliberately independent of the database so a database blip does not restart the engine).
+    // /ready: the process can reach its database (used by humans and monitors).
+    apiOptions: { port: extra.PORT, hostname: '0.0.0.0', trustProxy: 1, csrfPrevention: true,
+      middleware: [{ route: '/health', beforeListen: true, handler: (_q: unknown, r: { json: (b: unknown) => void }) => r.json({ ok: true, cell: env.CELL_ID }) },
+        { route: '/ready', beforeListen: true, handler: async (_q: unknown, r: { status: (n: number) => { json: (b: unknown) => void } }) => { try { await sql('select 1'); r.status(200).json({ ready: true }); } catch { r.status(503).json({ ready: false }); } } }] } as VendureConfig['apiOptions'],
     plugins: [...(assets ? [assetPlugin(assets)] : []), DefaultSchedulerPlugin.init(), CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
   });
 }
