@@ -9,9 +9,16 @@ export async function ensureTaxCategories(x: Exec): Promise<Record<TaxClass, str
   return out;
 }
 
+/** Tax categories are GLOBAL in Vendure (shared by every store on the engine), so a merchant must never create them. Provisioning creates them once with ensureTaxCategories; merchants only look them up. */
+export async function findTaxCategories(x: Exec): Promise<Record<TaxClass, string>> {
+  const have = (await x('query{ taxCategories{ items{ id name } } }')).taxCategories.items as { id: string; name: string }[]; const out = {} as Record<TaxClass, string>;
+  for (const k of Object.keys(TAX_CATEGORY_NAME) as TaxClass[]) { const f = have.find(t => t.name === TAX_CATEGORY_NAME[k]); if (!f) throw new Error('This store has not been fully set up yet (VAT classes are missing). Contact support.'); out[k] = f.id; }
+  return out;
+}
+
 export async function createProductWithVariants(x: Exec, d: ProductDraft) {
   const problems = validateDraft(d); if (problems.length) throw new Error(problems.join(' '));
-  const tax = await ensureTaxCategories(x);
+  const tax = await findTaxCategories(x);
   const product = (await x(`mutation($i: CreateProductInput!){ createProduct(input:$i){ id } }`, { i: { enabled: d.enabled ?? false, translations: [{ languageCode: 'en', name: d.title.trim(), slug: d.slug ?? slugify(d.title), description: d.description ?? '' }] } })).createProduct.id as string;
   const groupIds: string[] = [];
   for (const g of d.optionGroups) {

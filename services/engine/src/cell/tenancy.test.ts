@@ -1,0 +1,155 @@
+// Two merchants on ONE engine. Each has their own channel, role and administrator. Everything here goes over real HTTP with each merchant's own token and channel header,
+// the way the portal and storefronts call it. Cross-merchant attempts must be refused or return nothing, never another store's data.
+import { test, after, before } from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path'; import fs from 'node:fs';
+import { mergeConfig } from '@vendure/core';
+import { createTestEnvironment, testConfig, SqljsInitializer, registerInitializer } from '@vendure/testing';
+import { parse } from 'graphql';
+import Stripe from 'stripe';
+import { CellPlugin, MemGate } from './plugin.ts';
+import { engineLogin, httpExec, EngineError } from '../../../../apps/portal/src/lib/engine/exec.ts';
+import * as A from '../../../../apps/portal/src/lib/engine/adapter.ts';
+import { ensureTaxCategories } from '../../../../apps/portal/src/lib/engine/catalogue.ts';
+import { provisionStore } from './provision-store.ts';
+
+const dir = path.join(__dirname, '.tmp-tenancy'); fs.mkdirSync(dir, { recursive: true }); registerInitializer('sqljs', new SqljsInitializer(dir));
+const intents = new Map<string, any>(); const refunds: any[] = []; let n = 0;
+const stripe: any = {
+  async createPaymentIntent(_a: string, p: any) { const id = `pi_${++n}`; intents.set(id, { id, status: 'requires_payment_method', amount: p.amount, currency: p.currency, metadata: p.metadata, application_fee_amount: p.applicationFeeAmount }); return { id, clientSecret: `${id}_secret` }; },
+  async retrievePaymentIntent(_a: string, id: string) { return intents.get(id); },
+  async createRefund(a: string, p: any) { refunds.push({ a, ...p }); return { id: `re_${refunds.length}`, status: 'succeeded' }; },
+};
+const deps: any = { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } };
+const { server, adminClient, shopClient } = createTestEnvironment(mergeConfig(testConfig, {
+  authOptions: { requireVerification: false, tokenMethod: 'bearer', superadminCredentials: { identifier: 'ops', password: 'long-random-pass' } },
+  plugins: [CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43) }, deps)],
+}));
+const URL = `http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOptions.adminApiPath}`; const g = (s: string) => parse(s);
+type M = { x: ReturnType<typeof httpExec>; token: string; channelId: string; channelToken: string; adminId: string };
+const m: Record<'A' | 'B', M> = {} as any; const ids: Record<string, Record<string, string>> = { A: {}, B: {} };
+
+before(async () => {
+  await server.init({ initialData: { defaultLanguage: 'en', defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }], shippingMethods: [], paymentMethods: [], collections: [] } as any, productsCsvPath: path.join(__dirname, '../../proofs/empty.csv'), customerCount: 0 });
+  await adminClient.asSuperAdmin();
+  await ensureTaxCategories((qq, v) => adminClient.query(g(qq), v));
+  await adminClient.query(g(`mutation($i: CreatePaymentMethodInput!){ createPaymentMethod(input:$i){ id } }`), { i: { code: 'stripe-connect', enabled: true, handler: { code: 'stripe-connect', arguments: [] }, translations: [{ languageCode: 'en', name: 'Card' }] } });
+  for (const k of ['A', 'B'] as const) {
+    const token = `chan-${k}-token-0123456789`; const email = `owner-${k.toLowerCase()}@example.com`; const pw = `Long-merchant-pass-${k}-1`;
+    const p = await provisionStore((qq, v) => adminClient.query(g(qq), v), { key: k.toLowerCase(), name: `Store ${k}`, channelToken: token, owner: { email, password: pw, firstName: k } });
+    const again = await provisionStore((qq, v) => adminClient.query(g(qq), v), { key: k.toLowerCase(), name: `Store ${k}`, channelToken: token, owner: { email, password: pw } }); assert.deepEqual(again, p, 'provisioning twice changes nothing');
+    const s = await engineLogin({ url: URL, channelToken: token }, email, pw); assert.ok(s, `login ${k}`);
+    m[k] = { x: httpExec({ url: URL, channelToken: token }, s!.token), token: s!.token, channelId: p.channelId, channelToken: token, adminId: p.administratorId };
+  }
+  for (const k of ['A', 'B'] as const) {
+    const r = await A.addProduct(m[k].x, { title: `Mug ${k}`, priceMinor: 1000, sku: `MUG-${k}`, status: 'published', onHand: 10 }); assert.equal(r.ok, true, r.message);
+    ids[k].product = (await A.listProducts(m[k].x))[0].id;
+  }
+});
+after(async () => { await server.destroy(); fs.rmSync(dir, { recursive: true, force: true }); });
+
+test('each merchant sees only their own catalogue, with real stock', async () => {
+  for (const k of ['A', 'B'] as const) assert.equal((await A.listProducts(m[k].x))[0].onHand, 10, `stock for ${k} (a store needs its own stock location)`);
+  assert.deepEqual((await A.listProducts(m.A.x)).map(p => p.title), ['Mug A']); assert.deepEqual((await A.listProducts(m.B.x)).map(p => p.title), ['Mug B']);
+});
+
+/** Run a request as merchant `who`; resolves to { data } or { denied: code } so each probe can assert either "refused" or "nothing returned". */
+const as = async (who: 'A' | 'B', q: string, v?: any) => { try { return { data: await m[who].x(q, v) }; } catch (e) { return { denied: e instanceof EngineError ? e.code : 'ERR', message: (e as Error).message }; } };
+const isolated = (r: { data?: any; denied?: string }, pick: (d: any) => unknown) => r.denied ? true : (() => { const v = pick(r.data); return v === null || v === undefined || (Array.isArray(v) && v.length === 0) || (typeof v === 'object' && (v as any).totalItems === 0); })();
+
+test('manipulated IDs: B asking for A\'s product by id gets nothing', async () => {
+  const r = await as('B', `query($id:ID!){ product(id:$id){ id name } }`, { id: ids.A.product }); assert.ok(isolated(r, d => d.product), JSON.stringify(r));
+});
+test('manipulated IDs: B cannot update or delete A\'s product', async () => {
+  const u = await as('B', `mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id: ids.A.product }); assert.ok(u.denied || !u.data?.updateProduct, JSON.stringify(u));
+  const d = await as('B', `mutation($id:ID!){ deleteProduct(id:$id){ result } }`, { id: ids.A.product }); assert.ok(d.denied || d.data?.deleteProduct?.result !== 'DELETED', JSON.stringify(d));
+  const still = await as('A', `query($id:ID!){ product(id:$id){ id enabled } }`, { id: ids.A.product }); assert.equal(still.data?.product?.enabled, true, 'A\'s product is untouched');
+});
+test('manipulated IDs: B cannot change A\'s stock through variants', async () => {
+  const v = (await m.A.x(`query($id:ID!){ product(id:$id){ variants{ id } } }`, { id: ids.A.product })).product.variants[0].id;
+  const r = await as('B', `mutation($i:[UpdateProductVariantInput!]!){ updateProductVariants(input:$i){ id stockOnHand } }`, { i: [{ id: v, stockOnHand: 0 }] });
+  assert.equal((r as any).denied, 'FORBIDDEN', 'the guard refuses it outright, not merely "no effect": ' + JSON.stringify(r));
+  const after = (await m.A.x(`query($id:ID!){ product(id:$id){ variants{ stockOnHand } } }`, { id: ids.A.product })).product.variants[0].stockOnHand; assert.equal(after, 10);
+  assert.equal((await as('B', `query($id:ID!){ productVariant(id:$id){ id } }`, { id: v })).data?.productVariant ?? null, null);
+});
+test('channel header games: B\'s token with A\'s channel token, or no channel, never reaches A', async () => {
+  const mix = httpExec({ url: URL, channelToken: m.A.channelToken }, m.B.token);
+  const r = await mix(`query{ products{ items{ name } } }`).then(d => d, e => ({ denied: (e as EngineError).code }));
+  assert.ok((r as any).denied || ((r as any).products.items as any[]).length === 0, 'B\'s session on A\'s channel returns nothing: ' + JSON.stringify(r));
+  const none = httpExec({ url: URL }, m.B.token); const d = await none(`query{ products{ items{ name } } }`).then(d => d, e => ({ denied: (e as EngineError).code }));
+  assert.ok((d as any).denied || ((d as any).products.items as any[]).every((p: any) => p.name === 'Mug B'), 'with no channel header the default channel is used and B sees nothing of A: ' + JSON.stringify(d));
+});
+test('global operations are closed to a merchant: administrators, roles, channels, settings, jobs, system', async () => {
+  const probes: [string, string][] = [
+    ['read administrators', `query{ administrators{ totalItems } }`], ['create administrator', `mutation{ createAdministrator(input:{emailAddress:"x@y.zz",firstName:"a",lastName:"b",password:"aaaaaaaaaaaa",roleIds:[]}){ id } }`],
+    ['read roles', `query{ roles{ totalItems } }`], ['create role', `mutation{ createRole(input:{code:"r",description:"d",permissions:[SuperAdmin],channelIds:[]}){ id } }`],
+    ['read channels', `query{ channels{ totalItems } }`], ['update channel', `mutation($id:ID!){ updateChannel(input:{id:$id,pricesIncludeTax:false}){ __typename } }`],
+    ['global settings', `mutation{ updateGlobalSettings(input:{trackInventory:false}){ __typename } }`], ['read jobs', `query{ jobs{ totalItems } }`], ['cancel job', `mutation{ cancelJob(jobId:"1"){ id } }`],
+    ['system status', `query{ systemStatus: pendingSearchIndexUpdates }`], ['create tax category (global)', `mutation{ createTaxCategory(input:{name:"Evil"}){ id } }`], ['create zone (global)', `mutation{ createZone(input:{name:"Evil"}){ id } }`],
+    ['create country (global)', `mutation{ createCountry(input:{code:"XX",enabled:true,translations:[{languageCode:en,name:"X"}]}){ id } }`], ['payment method handlers', `mutation($id:ID!){ updatePaymentMethod(input:{id:$id,enabled:false}){ id } }`],
+  ];
+  const bad: string[] = []; for (const [n, q] of probes) { const r = await as('B', q, { id: m.A.channelId }); if (!r.denied) bad.push(`${n}: ${JSON.stringify(r.data).slice(0, 80)}`); }
+  assert.deepEqual(bad, [], 'these global operations were NOT refused');
+});
+
+test('collections, promotions and customers: B cannot touch A\'s by id', async () => {
+  const col = (await m.A.x(`mutation{ createCollection(input:{ translations:[{languageCode:en,name:"A only",slug:"a-only",description:""}], filters:[] }){ id } }`)).createCollection.id;
+  const promo = (await m.A.x(`mutation{ createPromotion(input:{ enabled:true, couponCode:"A10", conditions:[], actions:[{ code:"order_percentage_discount", arguments:[{name:"discount", value:"10"}] }], translations:[{languageCode:en,name:"A promo",description:""}] }){ __typename ... on Promotion { id } ... on ErrorResult { message } } }`).catch((e: Error) => ({ createPromotion: { __typename: 'Err', message: e.message } }))).createPromotion;
+  const bad: string[] = [];
+  const u1 = await as('B', `mutation($id:ID!){ updateCollection(input:{ id:$id, translations:[{languageCode:en,name:"hijacked"}] }){ id } }`, { id: col }); if (!u1.denied) bad.push('updateCollection');
+  const d1 = await as('B', `mutation($id:ID!){ deleteCollection(id:$id){ result } }`, { id: col }); if (!d1.denied) bad.push('deleteCollection');
+  if (promo?.id) { const u2 = await as('B', `mutation($id:ID!){ updatePromotion(input:{ id:$id, enabled:false }){ __typename } }`, { id: promo.id }); if (!u2.denied) bad.push('updatePromotion'); const d2 = await as('B', `mutation($id:ID!){ deletePromotion(id:$id){ result } }`, { id: promo.id }); if (!d2.denied) bad.push('deletePromotion'); }
+  assert.deepEqual(bad, []); assert.equal((await m.A.x(`query($id:ID!){ collection(id:$id){ name } }`, { id: col })).collection.name, 'A only', 'A\'s collection is unchanged');
+  assert.equal((await as('B', `query($id:ID!){ collection(id:$id){ id } }`, { id: col })).data?.collection ?? null, null, 'and B cannot read it');
+  assert.deepEqual((await m.B.x(`query{ collections{ items{ name } } }`)).collections.items.map((c: any) => c.name).filter((n: string) => n === 'A only'), []);
+});
+test('option groups are not channel-aware: B cannot attach A\'s option group to B\'s product', async () => {
+  const x = m.A.x; const grp = (await x(`mutation($i:CreateProductOptionGroupInput!){ createProductOptionGroup(input:$i){ id } }`, { i: { code: 'a-size', translations: [{ languageCode: 'en', name: 'Size' }], options: [{ code: 's', translations: [{ languageCode: 'en', name: 'S' }] }] } })).createProductOptionGroup.id;
+  await x(`mutation($p:ID!,$g:ID!){ addOptionGroupToProduct(productId:$p, optionGroupId:$g){ id } }`, { p: ids.A.product, g: grp });
+  const r = await as('B', `mutation($p:ID!,$g:ID!){ addOptionGroupToProduct(productId:$p, optionGroupId:$g){ id } }`, { p: ids.B.product, g: grp }); assert.equal(r.denied, 'FORBIDDEN', JSON.stringify(r));
+  const r2 = await as('B', `mutation($p:ID!,$g:ID!){ addOptionGroupToProduct(productId:$p, optionGroupId:$g){ id } }`, { p: ids.A.product, g: grp }); assert.equal(r2.denied, 'FORBIDDEN', 'nor can B modify A\'s product');
+});
+test('the guard is for merchants only: the platform operator can still do global work', async () => {
+  const r = await adminClient.query(g(`query{ channels{ totalItems } jobs{ totalItems } }`)); assert.ok(r.channels.totalItems >= 3);
+});
+test('merchant customers: each store lists only its own', async () => {
+  assert.equal((await A.listCustomers(m.A.x)).length, 0); assert.equal((await A.listCustomers(m.B.x)).length, 0);
+});
+
+/** A real checkout in store `who` through the Shop API with that store's channel token, paid through the Connect handler. */
+async function paidOrder(who: 'A' | 'B') {
+  shopClient.setChannelToken(m[who].channelToken); await shopClient.asAnonymousUser();
+  const variantId = (await m[who].x(`query($id:ID!){ product(id:$id){ variants{ id } } }`, { id: ids[who].product })).product.variants[0].id;
+  await shopClient.query(g(`mutation($v:ID!){ addItemToOrder(productVariantId:$v, quantity: 1){ __typename ... on ErrorResult { message } } }`), { v: variantId });
+  await shopClient.query(g(`mutation($i: CreateCustomerInput!){ setCustomerForOrder(input:$i){ __typename } }`), { i: { emailAddress: `shopper-${who}@example.com`, firstName: 'Shopper', lastName: who } });
+  await shopClient.query(g(`mutation($i: CreateAddressInput!){ setOrderShippingAddress(input:$i){ __typename } }`), { i: { fullName: `Shopper ${who}`, streetLine1: '1 High St', city: 'Watford', postalCode: 'WD24 6SX', countryCode: 'GB' } });
+  const ms = await shopClient.query(g(`query{ eligibleShippingMethods{ id } }`)); await shopClient.query(g(`mutation($id: [ID!]!){ setOrderShippingMethod(shippingMethodId:$id){ __typename } }`), { id: [ms.eligibleShippingMethods[0].id] });
+  await shopClient.query(g(`mutation{ transitionOrderToState(state:"ArrangingPayment"){ __typename } }`));
+  const sess = (await shopClient.query(g(`mutation{ createPaymentSession{ paymentIntentId amount } }`))).createPaymentSession; intents.get(sess.paymentIntentId).status = 'succeeded';
+  const done = (await shopClient.query(g(`mutation($i: PaymentInput!){ addPaymentToOrder(input:$i){ __typename ... on Order { id state } } }`), { i: { method: 'stripe-connect', metadata: { paymentIntentId: sess.paymentIntentId } } })).addPaymentToOrder;
+  assert.equal(done.state, 'PaymentSettled', JSON.stringify(done)); return { id: String(done.id), total: sess.amount as number };
+}
+const orders: Record<string, { id: string; total: number }> = {};
+test('orders: each store has its own paid order and sees only that', async () => {
+  for (const k of ['A', 'B'] as const) { orders[k] = await paidOrder(k); ids[k].order = orders[k].id; }
+  assert.equal((await A.listOrders(m.A.x)).length, 1); assert.equal((await A.listOrders(m.B.x)).length, 1);
+  assert.equal((await A.listOrders(m.A.x))[0].email, 'shopper-a@example.com'); assert.equal((await A.listOrders(m.B.x))[0].email, 'shopper-b@example.com');
+  assert.equal((await A.listCustomers(m.A.x)).map(c => c.email).join(), 'shopper-a@example.com'); assert.equal((await A.listCustomers(m.B.x)).map(c => c.email).join(), 'shopper-b@example.com', 'customers are per store');
+  assert.equal(await A.getOrder(m.B.x, orders.A.id), null, 'B cannot read A\'s order by id'); assert.equal(await A.getOrder(m.A.x, orders.B.id), null);
+});
+test('orders: B cannot fulfil, refund, cancel or annotate A\'s order; nothing changes; A still can', async () => {
+  const f = await A.fulfilOrder(m.B.x, orders.A.id, 'EVIL'); assert.equal(f.ok, false);
+  const r = await A.refundOrder(m.B.x, { orderId: orders.A.id, amountMinor: 100, reason: 'x', restock: false, refundFee: true }); assert.equal(r.ok, false); assert.equal(refunds.length, 0, 'no refund reached Stripe');
+  const c = await as('B', `mutation($id:ID!){ cancelOrder(input:{ orderId:$id, reason:"x", cancelShipping:true, lines:[] }){ __typename } }`, { id: orders.A.id }); assert.equal(c.denied, 'FORBIDDEN');
+  const nt = await as('B', `mutation($id:ID!){ addNoteToOrder(input:{ id:$id, note:"hi", isPublic:false }){ id } }`, { id: orders.A.id }); assert.equal(nt.denied, 'FORBIDDEN');
+  const pay = (await adminClient.query(g(`query($id:ID!){ order(id:$id){ payments{ id } lines{ id } fulfillments{ id } } }`), { id: orders.A.id })).order;
+  const direct = await as('B', `mutation($i:RefundOrderInput!){ refundOrder(input:$i){ __typename } }`, { i: { lines: [], shipping: 0, adjustment: 0, amount: 100, paymentId: pay.payments[0].id, reason: 'x' } }); assert.equal(direct.denied, 'FORBIDDEN', 'refund by payment id of another store');
+  const line = await as('B', `mutation($i:FulfillOrderInput!){ addFulfillmentToOrder(input:$i){ __typename } }`, { i: { lines: [{ orderLineId: pay.lines[0].id, quantity: 1 }], handler: { code: 'manual-fulfillment', arguments: [{ name: 'method', value: 'x' }, { name: 'trackingCode', value: 'x' }] } } }); assert.equal(line.denied, 'FORBIDDEN', 'fulfil by order line id of another store');
+  const still = (await A.getOrder(m.A.x, orders.A.id))!; assert.equal(still.fulfilment, 'unfulfilled'); assert.equal(still.refundedMinor, 0);
+  assert.equal((await A.fulfilOrder(m.A.x, orders.A.id, 'RM1')).ok, true, 'A can fulfil their own order'); assert.equal((await A.refundOrder(m.A.x, { orderId: orders.A.id, amountMinor: 200, reason: 'ok', restock: false, refundFee: true })).ok, true);
+  assert.equal(refunds.length, 1); assert.equal(refunds[0].amount, 200);
+});
+test('transactions and customers: B\'s reporting never includes A\'s orders or money', async () => {
+  const sumA = (await A.listOrders(m.A.x)).reduce((s, o) => s + o.totalMinor, 0), sumB = (await A.listOrders(m.B.x)).reduce((s, o) => s + o.totalMinor, 0); assert.equal(sumA, orders.A.total); assert.equal(sumB, orders.B.total);
+  assert.equal((await A.listOrders(m.B.x))[0].refundedMinor, 0, 'A\'s refund does not show on B');
+});

@@ -8,14 +8,19 @@
  */
 import path from 'node:path';
 import Stripe from 'stripe';
-import { bootstrap, bootstrapWorker, generateMigration, runMigrations, mergeConfig, JobQueueService, TransactionalConnection, RequestContextService, RequestContext, ChannelService, RoleService, AdministratorService, PaymentMethodService, Permission, LanguageCode, isGraphQlErrorResult, User, DefaultSchedulerPlugin, type VendureConfig } from '@vendure/core';
+import { bootstrap, bootstrapWorker, generateMigration, runMigrations, mergeConfig, JobQueueService, TransactionalConnection, RequestContextService, RequestContext, ChannelService, RoleService, AdministratorService, PaymentMethodService, Permission, LanguageCode, isGraphQlErrorResult, User, DefaultSchedulerPlugin, TaxCategoryService, type VendureConfig } from '@vendure/core';
+import { TAX_CATEGORY_NAME } from '@oss-commerce/contracts';
 import { populate } from '@vendure/core/cli';
 import { parseEnv } from './cell/env.ts';
 import { buildCellConfig } from './cell/config.ts';
 import { CellPlugin, vendureWebhookDeps, type CheckoutGate } from './cell/plugin.ts';
 import { liveStripe } from './cell/stripe-live.ts';
+import { MERCHANT_PERMISSIONS } from './cell/merchant-role.ts';
+import { assetPlugin, readAssetEnv, ASSET_LIMITS } from './cell/assets.ts';
 
 const env = parseEnv(process.env);
+const assets = readAssetEnv(process.env);
+if (!assets && env.APP_ENV === 'production') throw new Error('Production needs object storage for media: set the ASSET_S3_* variables.');
 const extra = { PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY ?? '', CONTROL_SECRET: process.env.CONTROL_SECRET, PORT: Number(process.env.PORT ?? 3000), MODE: (process.env.MODE ?? 'both') as 'server' | 'worker' | 'both' };
 
 // Filled in once the application is up; the webhook adapter and the checkout gate need the live database connection.
@@ -36,7 +41,8 @@ function config(): VendureConfig {
   return mergeConfig(buildCellConfig(env), {
     apiOptions: { port: extra.PORT, hostname: '0.0.0.0', trustProxy: 1, csrfPrevention: true } as VendureConfig['apiOptions'],
     dbConnectionOptions: { migrations: [path.join(__dirname, 'migrations/*.+(js|ts)')] },
-    plugins: [DefaultSchedulerPlugin.init(), CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
+    assetOptions: ASSET_LIMITS,
+    plugins: [...(assets ? [assetPlugin(assets)] : []), DefaultSchedulerPlugin.init(), CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
   });
 }
 /** Internal work (webhooks, first-time setup) runs as the platform's superadmin. Merchants never get this identity. */
@@ -46,10 +52,6 @@ async function wire(app: { get: <T>(t: any) => T }) {
   ctx = await rcs.create({ apiType: 'admin', ...(user ? { user } : {}) }); await sql(STATE_DDL);
 }
 
-/** What a merchant may do in their own store. Deliberately not SuperAdmin: no settings, roles, channels, administrators or system access. */
-const MERCHANT_PERMISSIONS = [Permission.ReadCatalog, Permission.CreateCatalog, Permission.UpdateCatalog, Permission.DeleteCatalog, Permission.ReadOrder, Permission.UpdateOrder, Permission.ReadCustomer, Permission.UpdateCustomer,
-  Permission.ReadPromotion, Permission.CreatePromotion, Permission.UpdatePromotion, Permission.DeletePromotion, Permission.ReadSettings, Permission.ReadAsset, Permission.CreateAsset, Permission.UpdateAsset, Permission.DeleteAsset];
-
 async function setup() {
   const email = process.env.MERCHANT_EMAIL, password = process.env.MERCHANT_PASSWORD, first = process.env.MERCHANT_FIRST_NAME ?? 'Store', last = process.env.MERCHANT_LAST_NAME ?? 'Owner';
   if (!email || !password || password.length < 12) throw new Error('setup needs MERCHANT_EMAIL and MERCHANT_PASSWORD (12 characters or more).');
@@ -57,6 +59,8 @@ async function setup() {
   const app = !fresh ? await bootstrap(config()) : await populate(() => bootstrap(config()), { defaultLanguage: LanguageCode.en, defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }, { name: 'Reduced', percentage: 5 }, { name: 'Zero', percentage: 0 }], shippingMethods: [{ name: 'Standard delivery', price: 495 }], paymentMethods: [], collections: [] } as any);
   await wire(app); const channel = await app.get(ChannelService).getDefaultChannel(ctx);
   if (!channel.pricesIncludeTax) await app.get(ChannelService).update(ctx, { id: channel.id, pricesIncludeTax: true });      // prices are entered and shown as the customer pays them
+  // Tax categories are global to the engine: the platform creates them once here; merchants can only read them.
+  const tc = app.get(TaxCategoryService); const cats = await tc.findAll(ctx); for (const name of Object.values(TAX_CATEGORY_NAME)) if (!cats.items.some(t => t.name === name)) await tc.create(ctx, { name });
   const pm = app.get(PaymentMethodService); if (!(await pm.findAll(ctx)).items.some(m => m.code === 'stripe-connect')) await pm.create(ctx, { code: 'stripe-connect', enabled: true, handler: { code: 'stripe-connect', arguments: [] }, translations: [{ languageCode: LanguageCode.en, name: 'Card' }] });
   const roles = app.get(RoleService); let role = (await roles.findAll(ctx)).items.find(r => r.code === 'merchant-owner');
   if (!role) role = await roles.create(ctx, { code: 'merchant-owner', description: 'Store owner', permissions: MERCHANT_PERMISSIONS, channelIds: [channel.id] });

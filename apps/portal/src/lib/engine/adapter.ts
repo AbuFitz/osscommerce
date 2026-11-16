@@ -1,5 +1,5 @@
 import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup } from '../gateway';
-import { createProductWithVariants, ensureTaxCategories, type Exec } from './catalogue';
+import { createProductWithVariants, findTaxCategories, type Exec } from './catalogue';
 
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
@@ -88,7 +88,7 @@ export async function saveVariants(x: Exec, productId: string, d: { optionGroups
   try { const p = await getProduct(x, productId); if (!p) return { ok: false, message: 'Product not found.' };
     const same = JSON.stringify(p.optionGroups) === JSON.stringify(d.optionGroups) && d.variants.length === p.variantList.length && d.variants.every(v => p.variantList.some(e => e.options.join('|') === v.options.join('|')));
     if (!same) return { ok: false, message: 'Adding or removing options on an existing product is not available yet. Prices, stock and other details can be changed.' };
-    const tax = await ensureTaxCategories(x);
+    const tax = await findTaxCategories(x);
     const input = d.variants.map(v => { const e = p.variantList.find(q => q.options.join('|') === v.options.join('|'))!; return { id: e.id, sku: v.sku, price: undefined as number | undefined, priceWithTaxWanted: v.priceMinor, taxCategoryId: tax[v.taxClass], stockOnHand: v.stock, enabled: v.enabled, customFields: { weightGrams: v.weightGrams ?? 0 } }; });
     // Prices are entered as the customer pays them. The channel stores them that way when its prices include tax, which is how every cell is configured.
     await x(`mutation($i:[UpdateProductVariantInput!]!){ updateProductVariants(input:$i){ id } }`, { i: input.map(({ priceWithTaxWanted, price: _p, ...rest }) => ({ ...rest, price: priceWithTaxWanted })) });

@@ -9,6 +9,7 @@ import Stripe from 'stripe';
 import { CellPlugin, MemGate } from './plugin.ts';
 import type { StripePort, PaymentIntentLite } from './stripe-port.ts';
 import { engineLogin, httpExec, EngineError } from '../../../../apps/portal/src/lib/engine/exec.ts';
+import { ensureTaxCategories } from '../../../../apps/portal/src/lib/engine/catalogue.ts';
 import * as A from '../../../../apps/portal/src/lib/engine/adapter.ts';
 
 const dir = path.join(__dirname, '.tmp-portal'); fs.mkdirSync(dir, { recursive: true }); registerInitializer('sqljs', new SqljsInitializer(dir));
@@ -28,7 +29,7 @@ const URL = `http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOpti
 let x: ReturnType<typeof httpExec>;
 before(async () => {
   await server.init({ initialData: { defaultLanguage: 'en', defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }], shippingMethods: [{ name: 'Standard', price: 500 }], paymentMethods: [], collections: [] } as any, productsCsvPath: path.join(__dirname, '../../proofs/products.csv'), customerCount: 0 });
-  await adminClient.asSuperAdmin();
+  await adminClient.asSuperAdmin(); await ensureTaxCategories((q, v) => adminClient.query(g(q), v));
   await adminClient.query(g(`mutation($i: CreatePaymentMethodInput!){ createPaymentMethod(input:$i){ id } }`), { i: { code: 'stripe-connect', enabled: true, handler: { code: 'stripe-connect', arguments: [] }, translations: [{ languageCode: 'en', name: 'Card' }] } });
 });
 after(async () => { await server.destroy(); fs.rmSync(dir, { recursive: true, force: true }); });

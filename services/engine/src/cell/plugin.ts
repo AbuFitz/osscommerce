@@ -1,3 +1,5 @@
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { TenantGuard } from './tenant-guard.ts';
 import { VendurePlugin, PluginCommonModule, Injector, TransactionalConnection, Order, RequestContext, ID } from '@vendure/core';
 import { OssOutbox } from './outbox-entity.ts';
 import { OutboxService } from './events.ts';
@@ -21,7 +23,7 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
 @VendurePlugin({
   imports: [PluginCommonModule],
   entities: [OssOutbox],
-  providers: [OutboxService],
+  providers: [OutboxService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }],
   shopApiExtensions: { schema: shopApiExtensions, resolvers: [PaymentSessionResolver] },
   configuration: (config) => {
     const o = CellPlugin.options;
