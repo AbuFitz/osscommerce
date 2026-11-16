@@ -20,7 +20,7 @@ export function buildCellConfig(env: CellEnv): VendureConfig {
       superadminCredentials: { identifier: env.SUPERADMIN_USER, password: env.SUPERADMIN_PASSWORD },
       cookieOptions: { secret: env.COOKIE_SECRET, name: 'oss_session', httpOnly: true, secure: prod || env.APP_ENV === 'staging', sameSite: 'lax' },
     },
-    dbConnectionOptions: { type: 'postgres', url: env.DATABASE_URL, synchronize: false, migrationsRun: true, logging: false, ssl: prod || env.APP_ENV === 'staging' ? { rejectUnauthorized: true } : false },
+    dbConnectionOptions: { type: 'postgres', url: env.DATABASE_URL, synchronize: false, migrationsRun: false, logging: false, ssl: prod || env.APP_ENV === 'staging' ? { rejectUnauthorized: true } : false },
     defaultLanguageCode: LanguageCode.en,
     defaultChannelToken: env.CHANNEL_TOKEN,
     paymentOptions: { paymentMethodHandlers: [] },   // Connect handler is registered by the cell bootstrap, never the default dummy handler
@@ -28,7 +28,13 @@ export function buildCellConfig(env: CellEnv): VendureConfig {
       HardenPlugin.init({ maxQueryComplexity: 650, apiMode: prod ? 'prod' : 'dev', hideFieldSuggestions: prod, logComplexityScore: false }),
       redis
         ? BullMQJobQueuePlugin.init({ connection: { host: redis.hostname, port: Number(redis.port || 6379), password: redis.password || undefined, username: redis.username || undefined, tls: redis.protocol === 'rediss:' ? {} : undefined } })
-        : DefaultJobQueuePlugin.init({ useDatabaseForBuffer: false }),   // development only; parseEnv forbids this in staging/production
+        : DefaultJobQueuePlugin.init({
+            // Jobs live in Postgres, so they survive restarts and are shared by every server and worker instance. Polling is slow on purpose:
+            // nothing we queue is latency-critical, and a 2s poll costs far less database time than the 200ms default.
+            useDatabaseForBuffer: true, pollInterval: 2000, concurrency: 2, gracefulShutdownTimeout: 20_000,
+            setRetries: (_queue, job) => Math.max(job.retries ?? 0, 5),
+            backoffStrategy: (_queue, attempts) => Math.min(60_000 * 2 ** (attempts - 1), 30 * 60_000),   // 1, 2, 4, 8, 16 minutes: bounded, then the job is marked failed and stays visible
+          }),
       DefaultSearchPlugin.init({ bufferUpdates: true }),
     ],
   };

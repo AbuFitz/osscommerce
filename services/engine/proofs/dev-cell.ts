@@ -22,7 +22,6 @@ const config = mergeConfig(testConfig, {
 });
 const { server, adminClient, shopClient } = createTestEnvironment(config);
 const URL = `http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOptions.adminApiPath}`; const g = (s: string) => parse(s);
-let x: ReturnType<typeof httpExec>;
 async function start() {
   await server.init({ initialData: { defaultLanguage: 'en', defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }], shippingMethods: [{ name: 'Standard', price: 500 }], paymentMethods: [], collections: [] } as any, productsCsvPath: path.join(__dirname, 'products.csv'), customerCount: 0 });
   await adminClient.asSuperAdmin();

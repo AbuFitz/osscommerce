@@ -10,7 +10,7 @@ const good = { APP_ENV: 'staging', STORE_ID: 'store_demo', CELL_ID: 'cell_demo',
 test('env: accepts a safe staging config', () => assert.equal(parseEnv(good).FEE_BP, 50));
 test('env: refuses live keys outside production', () => assert.throws(() => parseEnv({ ...good, STRIPE_SECRET_KEY: 'sk_live_abc' }), /live Stripe key/));
 test('env: production needs a live key', () => assert.throws(() => parseEnv({ ...good, APP_ENV: 'production' }), /live Stripe key/));
-test('env: staging needs Redis so the DB can sleep', () => assert.throws(() => parseEnv({ ...good, REDIS_URL: undefined }), /REDIS_URL/));
+test('env: Redis is optional; without it the persistent Postgres queue is used', () => assert.doesNotThrow(() => parseEnv({ ...good, REDIS_URL: undefined })));
 test('env: default superadmin rejected', () => assert.throws(() => parseEnv({ ...good, SUPERADMIN_PASSWORD: 'superadmin' }), /Default superadmin/));
 test('env: demo flag rejected in production', () => assert.throws(() => parseEnv({ ...good, APP_ENV: 'production', STRIPE_SECRET_KEY: 'sk_live_a', NEXT_PUBLIC_OSS_DEMO: '1' }), /Demo mode/));
 

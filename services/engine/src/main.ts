@@ -53,7 +53,8 @@ const MERCHANT_PERMISSIONS = [Permission.ReadCatalog, Permission.CreateCatalog, 
 async function setup() {
   const email = process.env.MERCHANT_EMAIL, password = process.env.MERCHANT_PASSWORD, first = process.env.MERCHANT_FIRST_NAME ?? 'Store', last = process.env.MERCHANT_LAST_NAME ?? 'Owner';
   if (!email || !password || password.length < 12) throw new Error('setup needs MERCHANT_EMAIL and MERCHANT_PASSWORD (12 characters or more).');
-  const app = await populate(() => bootstrap(config()), { defaultLanguage: LanguageCode.en, defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }, { name: 'Reduced', percentage: 5 }, { name: 'Zero', percentage: 0 }], shippingMethods: [{ name: 'Standard delivery', price: 495 }], paymentMethods: [], collections: [] } as any);
+  const probe = await bootstrap(config()); const fresh = (await probe.get(TransactionalConnection).rawConnection.query(`select count(*)::int n from zone`))[0].n === 0; await probe.close();
+  const app = !fresh ? await bootstrap(config()) : await populate(() => bootstrap(config()), { defaultLanguage: LanguageCode.en, defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }, { name: 'Reduced', percentage: 5 }, { name: 'Zero', percentage: 0 }], shippingMethods: [{ name: 'Standard delivery', price: 495 }], paymentMethods: [], collections: [] } as any);
   await wire(app); const channel = await app.get(ChannelService).getDefaultChannel(ctx);
   if (!channel.pricesIncludeTax) await app.get(ChannelService).update(ctx, { id: channel.id, pricesIncludeTax: true });      // prices are entered and shown as the customer pays them
   const pm = app.get(PaymentMethodService); if (!(await pm.findAll(ctx)).items.some(m => m.code === 'stripe-connect')) await pm.create(ctx, { code: 'stripe-connect', enabled: true, handler: { code: 'stripe-connect', arguments: [] }, translations: [{ languageCode: LanguageCode.en, name: 'Card' }] });
@@ -67,7 +68,7 @@ async function setup() {
 (async () => {
   const cmd = process.argv[2];
   if (cmd === 'migrate:generate') { await generateMigration(config(), { name: process.argv[3] ?? 'change', outputDir: path.join(__dirname, 'migrations') }); process.exit(0); }
-  if (cmd === 'migrate:run') { await runMigrations(config()); process.exit(0); }
+  if (cmd === 'migrate:run') { const c = config(); if (env.DATABASE_URL_DIRECT) (c.dbConnectionOptions as { url?: string }).url = env.DATABASE_URL_DIRECT; const ran = await runMigrations(c); console.log(`migrations applied: ${ran.length ? ran.join(', ') : 'none pending'}`); process.exit(0); }
   if (cmd === 'setup') { await setup(); process.exit(0); }
   if (extra.MODE === 'worker') { const w = await bootstrapWorker(config()); await wire(w.app); await w.startJobQueue(); console.log('cell worker running'); return; }
   const app = await bootstrap(config()); await wire(app);

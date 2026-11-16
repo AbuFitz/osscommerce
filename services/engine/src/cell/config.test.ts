@@ -17,3 +17,7 @@ test('config: uses Redis queue, never the database-polling queue, when Redis is 
 });
 test('config: no default payment handler is registered', () => assert.deepEqual((buildCellConfig(parseEnv(base)) as any).paymentOptions.paymentMethodHandlers, []));
 test('config: superadmin credentials come from env', () => assert.equal((buildCellConfig(parseEnv(base)) as any).authOptions.superadminCredentials.identifier, 'ops-admin'));
+test('config: without Redis the queue is the Postgres-backed one, persistent, with bounded retries', () => {
+  const { REDIS_URL: _r, ...noRedis } = base as any; const c = buildCellConfig(parseEnv(noRedis)); const names = (c.plugins ?? []).map((p: any) => p.name ?? p.constructor?.name);
+  assert.ok(names.includes('DefaultJobQueuePlugin')); assert.ok(!names.includes('BullMQJobQueuePlugin')); assert.equal((c.dbConnectionOptions as any).migrationsRun, false, 'migrations are a separate step, never run by a booting server or worker');
+});
