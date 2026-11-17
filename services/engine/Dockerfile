@@ -7,10 +7,10 @@ ENV NODE_ENV=production
 WORKDIR /app
 # The shared contracts package is a local dependency of the engine.
 COPY packages/contracts packages/contracts
-# Behind a TLS-inspecting proxy, pass its CA as a build secret: --secret id=npm_ca,src=/path/to/ca.crt  (optional; nothing is baked into the image)
-RUN --mount=type=secret,id=npm_ca,required=false if [ -f /run/secrets/npm_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/npm_ca; fi; cd packages/contracts && npm install --omit=dev --no-package-lock --no-audit --no-fund
+# Plain npm installs, so hosted builders (Railway) that do not support secret mounts can build this. Behind a TLS-inspecting proxy, build locally with --build-arg npm_config_cafile pointing at a CA file copied into the context.
+RUN cd packages/contracts && npm install --omit=dev --no-package-lock --no-audit --no-fund
 COPY services/engine/package.json services/engine/package-lock.json services/engine/
-RUN --mount=type=secret,id=npm_ca,required=false if [ -f /run/secrets/npm_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/npm_ca; fi; cd services/engine && npm ci --omit=dev --no-audit --no-fund
+RUN cd services/engine && npm ci --omit=dev --no-audit --no-fund
 COPY services/engine/src services/engine/src
 COPY services/engine/tsconfig.json services/engine/
 WORKDIR /app/services/engine
