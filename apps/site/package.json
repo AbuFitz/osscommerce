@@ -9,6 +9,7 @@
     "render": "NODE_PATH=$(npm root -g):../../node_modules node scripts/render-sets.cjs"
   },
   "dependencies": {
+    "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource-variable/funnel-display": "^5.3.0",
     "@fontsource-variable/hanken-grotesk": "^5.3.0",
     "@fontsource-variable/inter": "^5.3.0",

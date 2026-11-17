@@ -42,10 +42,3 @@ export const PRICE = {
   confirmed: COMMERCIAL_CONFIRMED,
 } as const;
 
-export const NAV = [
-  { href: '/platform', label: 'Platform' },
-  { href: '/storefronts', label: 'Storefronts' },
-  { href: '/payments', label: 'Payments' },
-  { href: '/integrations', label: 'Integrations' },
-  { href: '/pricing', label: 'Pricing' },
-] as const;

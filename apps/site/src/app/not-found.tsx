@@ -1,4 +1,4 @@
 import Link from 'next/link';
 export default function NotFound() {
-  return <section className="fh" style={{ minHeight: '70svh' }}><div className="wrap"><p className="kicker">404</p><h1>That page is not here.</h1><p className="lede">It may have moved, or the link may be wrong.</p><div className="acts"><Link className="btn bone" href="/">Back to home</Link><Link className="btn glass" href="/contact">Contact us</Link></div></div></section>;
+  return (<main className="fh"><div className="wrap"><p className="tag">404</p><h1 className="d1" style={{ marginTop: 18 }}>Page not <span className="it" style={{ color: 'var(--green)' }}>found.</span></h1><div className="acts" style={{ marginTop: 32 }}><Link className="btn go" href="/">Back home</Link></div></div></main>);
 }

@@ -1,17 +1,14 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
-import { FEATURES } from '@/content/features';
-import { Showcase } from '@/components/Showcase';
-import { Cta } from '@/components/Cta';
-export const metadata: Metadata = { title: 'Platform', description: 'Everything in OneSimpleCommerce: the storefront we build for you and the dashboard you run it from.' };
-export default function Platform() {
-  return (<>
-    <section className="fh"><div className="wrap"><p className="kicker">The platform</p><h1>One place to sell, and one place to run it.</h1><p className="lede">A storefront made for your brand, and a dashboard for everything behind it. It works as well on a phone as it does at a desk.</p>
-      <div className="fh-vis"><Showcase /><p className="cap">A recording of the real dashboard, with demo data.</p></div></div></section>
-    {(['Sell', 'Manage'] as const).map(g => <section className="sec tight" key={g}><div className="wrap"><div className="head"><h2>{g}</h2></div>
-      <ul className="index">{FEATURES.filter(f => f.group === g).map((f, i) => <li key={f.slug}><Link href={`/features/${f.slug}`}><span className="mono">0{i + 1}</span><b>{f.nav}</b><span>{f.blurb}</span><ArrowRight size={20} aria-hidden /></Link></li>)}</ul></div></section>)}
-    <section className="sec"><div className="wrap"><div className="head"><h2>Also in the dashboard.</h2></div><ul className="built"><li><b>Discounts</b><span>Percentage, fixed-amount and free-delivery codes with limits and end dates.</span></li><li><b>Customers</b><span>Who has ordered, how often and how much.</span></li><li><b>Team and roles</b><span>Invite people and choose what each can do.</span></li><li><b>Notifications</b><span>Failed payments, waiting orders and low stock in one place.</span></li><li><b>Search</b><span>Find any order, product or customer from anywhere.</span></li><li><b>Help and requests</b><span>Ask for design changes or support from inside the dashboard.</span></li></ul></div></section>
-    <Cta />
-  </>);
+import { FulfilDemo, SalesBars, ScanDemo } from '@/components/Bento';
+import { PageHead, Head, Cta } from '@/components/Parts';
+export const metadata: Metadata = { title: 'The platform', description: 'Products, orders, customers, stock and sales in one dashboard.' };
+const A = [['Orders', 'See every order, fulfil it, add tracking, refund it.'], ['Products', 'Add products, variants and photos. Import many at once.'], ['Stock', 'Counts update as you sell, with a warning before you run out.'], ['Customers', 'Who bought, what, and how often.'], ['Discounts', 'Offers and codes you control.'], ['Reports', 'Sales and best sellers, clear at a glance.']] as const;
+export default function Page() {
+  return (<><PageHead tag="The platform" title={<>Run it all <span className="it" style={{ color: 'var(--green)' }}>from one place.</span></>} lede="A dashboard made for people who sell, on your phone or your desktop." />
+    <section className="sec t"><div className="wrap"><div className="bento">
+      <div className="bc s4"><h3 className="d3">Fulfil in one tap</h3><FulfilDemo /></div>
+      <div className="bc k s4" style={{ background: '#161b19' }}><h3 className="d3">Today, live</h3><SalesBars /></div>
+      <div className="bc g s4"><h3 className="d3">Add from your phone</h3><ScanDemo /></div></div></div></section>
+    <section className="sec"><div className="wrap"><Head tag="Everything in it" title="The day-to-day, covered." /><ul className="cols">{A.map(([b, s]) => <li key={b}><b>{b}</b><span>{s}</span></li>)}</ul></div></section>
+    <Cta /></>);
 }
