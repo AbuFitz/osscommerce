@@ -21,3 +21,10 @@ test('config: without Redis the queue is the Postgres-backed one, persistent, wi
   const { REDIS_URL: _r, ...noRedis } = base as any; const c = buildCellConfig(parseEnv(noRedis)); const names = (c.plugins ?? []).map((p: any) => p.name ?? p.constructor?.name);
   assert.ok(names.includes('DefaultJobQueuePlugin')); assert.ok(!names.includes('BullMQJobQueuePlugin')); assert.equal((c.dbConnectionOptions as any).migrationsRun, false, 'migrations are a separate step, never run by a booting server or worker');
 });
+
+test('config: shoppers see out / low / in stock around the configured level, never a count', async () => {
+  const { ThresholdStockDisplayStrategy } = await import('./stock-display.ts'); const s = new ThresholdStockDisplayStrategy(5); const lvl = (n: number) => s.getStockLevel({} as any, {} as any, n);
+  assert.equal(lvl(0), 'OUT_OF_STOCK'); assert.equal(lvl(-2), 'OUT_OF_STOCK'); assert.equal(lvl(1), 'LOW_STOCK'); assert.equal(lvl(5), 'LOW_STOCK'); assert.equal(lvl(6), 'IN_STOCK');
+  assert.equal((buildCellConfig(parseEnv({ ...base, LOW_STOCK_AT: '2' })) as any).catalogOptions.stockDisplayStrategy.lowAt, 2);
+  assert.equal((buildCellConfig(parseEnv(base)) as any).catalogOptions.stockDisplayStrategy.lowAt, 5);
+});

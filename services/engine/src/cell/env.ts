@@ -13,6 +13,8 @@ const Base = z.object({
   COOKIE_SECRET: z.string().min(32),
   STRIPE_SECRET_KEY: z.string().startsWith('sk_'), STRIPE_WEBHOOK_SECRET: z.string().startsWith('whsec_'),
   STRIPE_CONNECTED_ACCOUNT_ID: z.string().startsWith('acct_'),
+  /** Shoppers see "low stock" at or below this many saleable units. */
+  LOW_STOCK_AT: z.coerce.number().int().min(0).max(1000).default(5),
   FEE_BP: z.coerce.number().int().min(0).max(1000), REFUNDS_RETURN_FEE: z.enum(['true', 'false']).default('true'),
   NEXT_PUBLIC_OSS_DEMO: z.string().optional(),
 });

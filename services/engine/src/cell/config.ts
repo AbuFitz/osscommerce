@@ -2,6 +2,7 @@ import { DefaultJobQueuePlugin, DefaultSearchPlugin, VendureConfig, LanguageCode
 import { BullMQJobQueuePlugin } from '@vendure/job-queue-plugin/package/bullmq';
 import { HardenPlugin } from '@vendure/harden-plugin';
 import type { CellEnv } from './env.ts';
+import { ThresholdStockDisplayStrategy } from './stock-display.ts';
 
 /** Vendure configuration for ONE merchant cell. Built only from validated env; nothing here has an unsafe default.
  *  Tenancy: one cell = one database = one merchant (ADR 0001). Channels are not used as a tenant boundary. */
@@ -21,6 +22,7 @@ export function buildCellConfig(env: CellEnv): VendureConfig {
       cookieOptions: { secret: env.COOKIE_SECRET, name: 'oss_session', httpOnly: true, secure: prod || env.APP_ENV === 'staging', sameSite: 'lax' },
     },
     dbConnectionOptions: { type: 'postgres', url: env.DATABASE_URL, synchronize: false, migrationsRun: false, logging: false, ssl: prod || env.APP_ENV === 'staging' ? { rejectUnauthorized: true } : false },
+    catalogOptions: { stockDisplayStrategy: new ThresholdStockDisplayStrategy(env.LOW_STOCK_AT) },
     defaultLanguageCode: LanguageCode.en,
     defaultChannelToken: env.CHANNEL_TOKEN,
     paymentOptions: { paymentMethodHandlers: [] },   // Connect handler is registered by the cell bootstrap, never the default dummy handler
