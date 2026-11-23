@@ -7,7 +7,7 @@ import type { PreparedEmail } from './resend.ts';
 const Template = z.enum(['order_confirmation', 'order_dispatched', 'refund_confirmation', 'payment_failed', 'password_reset', 'merchant_new_order']);
 const Payload = z.object({
   orderCode: z.string().min(1).max(80),
-  placedAt: z.string().min(1),
+  placedAt: z.string().datetime(),
   customerName: z.string().min(1).max(200),
   lines: z.array(z.object({ title: z.string().min(1).max(500), quantity: z.number().int().positive(), unitMinor: z.number().int().nonnegative() })).max(250),
   subtotalMinor: z.number().int().nonnegative(),
@@ -17,7 +17,7 @@ const Payload = z.object({
   totalMinor: z.number().int().nonnegative(),
   currency: z.string().length(3),
   shipTo: z.string().min(1).max(1000),
-  orderUrl: z.string().url(),
+  orderUrl: z.string().url().optional(),
   trackingUrl: z.string().url().optional(),
   carrier: z.string().max(200).optional(),
   refundMinor: z.number().int().nonnegative().optional(),
@@ -27,6 +27,7 @@ export interface CommerceEmailProfile {
   fromName: string;
   fromEmail: string;
   replyTo?: string;
+  storefrontUrl: string;
   brand: Brand;
   edits?: Partial<Record<TemplateId, Editable>>;
 }
@@ -36,6 +37,12 @@ const safeName = (value: string) => value.replace(/[\r\n<>]/g, ' ').replace(/\s+
 function money(minor: number, currency: string): string {
   try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: currency.toUpperCase() }).format(minor / 100); }
   catch { throw new PermanentError(`Unsupported email currency ${currency}`); }
+}
+
+function placed(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.valueOf())) throw new PermanentError('Commerce event has an invalid order date');
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
 /** Converts immutable commerce-event data into the shared React Email templates. No values are invented. */
@@ -51,11 +58,14 @@ export function commerceEmailPreparer(profileFor: (storeId: string) => Promise<C
     const replyTo = profile.replyTo ? z.string().email().safeParse(profile.replyTo) : null;
     if (!fromEmail.success || (replyTo && !replyTo.success)) throw new PermanentError('Store email sender is invalid');
     const p = payload.data; const m = (n: number) => money(n, p.currency);
+    let orderUrl: string;
+    try { orderUrl = p.orderUrl ?? new URL(`/account/orders/${encodeURIComponent(p.orderCode)}`, profile.storefrontUrl).toString(); }
+    catch { throw new PermanentError('Storefront URL is invalid'); }
     const order: OrderData = {
-      number: p.orderCode, placed: p.placedAt, customerName: p.customerName,
+      number: p.orderCode, placed: placed(p.placedAt), customerName: p.customerName,
       lines: p.lines.map(l => ({ title: l.title, qty: l.quantity, unit: m(l.unitMinor) })),
       subtotal: m(p.subtotalMinor), shipping: m(p.shippingMinor), discount: p.discountMinor ? m(p.discountMinor) : undefined,
-      vatIncluded: m(p.vatMinor), total: m(p.totalMinor), shipTo: p.shipTo, orderUrl: p.orderUrl,
+      vatIncluded: m(p.vatMinor), total: m(p.totalMinor), shipTo: p.shipTo, orderUrl,
       trackingUrl: p.trackingUrl, carrier: p.carrier, refund: p.refundMinor === undefined ? undefined : m(p.refundMinor),
     };
     const rendered = await renderTemplate(template.data, profile.brand, order, profile.edits?.[template.data]);

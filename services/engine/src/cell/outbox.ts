@@ -7,6 +7,14 @@ export interface OutboxEvent { id: string; storeId: string; type: string; occurr
 export interface OutboxRow { event: OutboxEvent; attempts: number; nextAt: number; deliveredAt?: number }
 export interface OutboxStore { add(e: OutboxEvent): Promise<void>; due(now: number, limit: number): Promise<OutboxRow[]>; markDelivered(ids: string[], now: number): Promise<void>; markFailed(ids: string[], nextAt: number): Promise<void> }
 
+interface OrderSnapshot {
+  code: string; total: number; totalWithTax: number; subTotalWithTax: number; shippingWithTax: number; currencyCode: string; orderPlacedAt?: Date | null;
+  customer?: { emailAddress?: string; firstName?: string; lastName?: string } | null;
+  shippingAddress?: { fullName?: string; company?: string; streetLine1?: string; streetLine2?: string; city?: string; province?: string; postalCode?: string; country?: string } | null;
+  lines: { quantity: number; discountedUnitPriceWithTax: number; productVariant?: { name?: string } | null }[];
+  fulfillments?: { state?: string; trackingCode?: string; method?: string }[];
+}
+
 export const sign = (secret: string, body: string, now = Math.floor(Date.now() / 1000)) => `t=${now},v1=${createHmac('sha256', secret).update(`${now}.${body}`).digest('hex')}`;
 /** Same format as the platform's signer. Used to authenticate control-plane calls into the cell. */
 export function verify(secret: string, body: string, header: string | null | undefined, now = Math.floor(Date.now() / 1000)): boolean {
@@ -16,11 +24,20 @@ export function verify(secret: string, body: string, header: string | null | und
 const BACKOFF = [30, 120, 600, 3600, 21600];      // seconds; after the last, keep retrying every 6 hours and raise an alert (see deadLetterAfter)
 
 /** Vendure order state -> domain event. Only states that matter to the buyer or merchant produce an event. */
-export function fromOrderState(storeId: string, o: { id: string; code: string; totalWithTax: number; currencyCode: string; customer?: { emailAddress?: string; firstName?: string } | null }, to: string, eventSeq: string, now = new Date()): OutboxEvent | null {
+export function fromOrderState(storeId: string, o: OrderSnapshot, to: string, eventSeq: string, now = new Date()): OutboxEvent | null {
   const type = ({ PaymentSettled: 'order.paid', Shipped: 'order.fulfilled', Cancelled: 'order.cancelled' } as Record<string, string>)[to];
   if (!type) return null;
+  const address = o.shippingAddress ? [o.shippingAddress.fullName, o.shippingAddress.company, o.shippingAddress.streetLine1, o.shippingAddress.streetLine2, o.shippingAddress.city, o.shippingAddress.province, o.shippingAddress.postalCode, o.shippingAddress.country].filter(Boolean).join(', ') : '';
+  const customerName = [o.customer?.firstName, o.customer?.lastName].filter(Boolean).join(' ') || o.shippingAddress?.fullName || '';
+  const fulfillment = o.fulfillments?.find(f => f.state === 'Shipped') ?? o.fulfillments?.[0];
   return { id: `${storeId}:${o.code}:${to}:${eventSeq}`.padEnd(8, '_'), storeId, type, occurredAt: now.toISOString(), subject: { orderId: o.code },
-    recipient: { email: o.customer?.emailAddress, name: o.customer?.firstName }, consent: { marketing: false }, data: { totalMinor: o.totalWithTax, currency: o.currencyCode, orderCode: o.code } };
+    recipient: { email: o.customer?.emailAddress, name: customerName }, consent: { marketing: false }, data: {
+      orderCode: o.code, placedAt: o.orderPlacedAt?.toISOString(), customerName,
+      lines: o.lines.map(line => ({ title: line.productVariant?.name ?? '', quantity: line.quantity, unitMinor: line.discountedUnitPriceWithTax })),
+      subtotalMinor: o.subTotalWithTax, shippingMinor: o.shippingWithTax, vatMinor: Math.max(0, o.totalWithTax - o.total),
+      totalMinor: o.totalWithTax, currency: o.currencyCode, shipTo: address,
+      ...(fulfillment?.trackingCode ? { trackingCode: fulfillment.trackingCode } : {}), ...(fulfillment?.method ? { carrier: fulfillment.method } : {}),
+    } };
 }
 
 export interface DispatcherDeps { store: OutboxStore; cellId: string; secret: string; url: string; post(url: string, init: { body: string; headers: Record<string, string> }): Promise<{ status: number }>; now?: () => number; deadLetterAfter?: number; onAlert?: (msg: string) => void }

@@ -43,12 +43,15 @@ export class PgStores {
 
   emailProfile = {
     get: (storeId: string): Promise<CommerceEmailProfile | null> => this.tx(storeId, async c => {
-      const r = (await c.query('select * from cp.email_profiles where store_id = $1 and domain_status = $2', [storeId, 'verified'])).rows[0];
-      if (!r) return null;
+      const r = (await c.query(`select p.*, (select h.host from cp.storefronts f join cp.storefront_hosts h using (storefront_id)
+        where f.store_id = p.store_id and f.env = 'production' and f.state = 'live' and h.verified = true order by h.host limit 1) storefront_host
+        from cp.email_profiles p where p.store_id = $1 and p.domain_status = $2`, [storeId, 'verified'])).rows[0];
+      if (!r?.storefront_host) return null;
       return {
         fromName: r.from_name,
         fromEmail: `${r.from_local_part}@${r.sending_domain}`,
         replyTo: r.reply_to ?? undefined,
+        storefrontUrl: `https://${r.storefront_host}`,
         brand: { shopName: r.shop_name, accent: r.accent, logoUrl: r.logo_url ?? undefined, supportEmail: r.support_email, address: r.postal_address ?? undefined, footer: r.footer ?? undefined },
         edits: r.template_edits,
       };

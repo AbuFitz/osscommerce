@@ -67,6 +67,8 @@ test('full checkout: server derives amount and fee, verified payment settles the
   const done = (await pay(s.paymentIntentId)).addPaymentToOrder; assert.equal(done.state, 'PaymentSettled');
   const svc = server.app.get(OutboxService); await new Promise(r => setTimeout(r, 300));
   const due = await svc.outbox.due(Date.now(), 10); const ev = due.map(r => r.event).find(e => e.type === 'order.paid')!; assert.ok(ev, 'order.paid recorded'); assert.equal(ev.storeId, 'store_a'); assert.equal(ev.data.totalMinor, order.totalWithTax); assert.equal(ev.recipient.email, 'maya@example.com');
+  assert.match(String(ev.data.placedAt), /^\d{4}-\d{2}-\d{2}T/); assert.equal(ev.data.customerName, 'Maya Lee'); assert.match(String(ev.data.shipTo), /1 High St.*Watford.*WD24 6SX/);
+  assert.ok(Array.isArray(ev.data.lines) && ev.data.lines.length === 1); assert.equal((ev.data.lines as any[])[0].quantity, 2); assert.ok(Number(ev.data.vatMinor) > 0);
   assert.deepEqual(await svc.tick(CellPlugin.options.outbox!), { sent: due.length, failed: 0 }); assert.ok(delivered.length >= 1 && /^t=\d+,v1=[0-9a-f]{64}$/.test(delivered[0].sig));
   const b = JSON.parse(delivered[0].body); assert.equal(b.cellId, 'cell_a'); assert.equal(sign('s'.repeat(43), delivered[0].body, Number(/t=(\d+)/.exec(delivered[0].sig)![1])), delivered[0].sig);
 });
