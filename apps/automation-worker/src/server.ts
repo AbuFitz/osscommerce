@@ -2,11 +2,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { PgBoss } from 'pg-boss';
-import { Engine, PgBossScheduler, PgStores, ResendSender, commerceEmailPreparer, createResendClient, handleIngest, handleResendWebhook, startWorker, type Deps } from '@oss-commerce/automation';
+import { Engine, PgBossScheduler, PgStores, ResendSender, commerceEmailPreparer, createResendClient, createUnsubscribeToken, handleIngest, handleResendWebhook, parseUnsubscribeToken, startWorker, type Deps } from '@oss-commerce/automation';
 import { loadConfig } from './config.ts';
 
 const MAX_BODY = 1024 * 1024;
 const json = (res: ServerResponse, status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
+const html = (res: ServerResponse, body: string) => { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' }); res.end(body); };
 async function rawBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = []; let size = 0;
   for await (const chunk of req) { const b = Buffer.from(chunk); size += b.length; if (size > MAX_BODY) throw Object.assign(new Error('payload too large'), { status: 413 }); chunks.push(b); }
@@ -23,11 +24,9 @@ export async function start() {
   const sender = new ResendSender({ apiKey: cfg.RESEND_API_KEY, prepare: commerceEmailPreparer(storeId => stores.emailProfile.get(storeId)) });
   const deps: Deps = {
     rules: stores.rules, events: stores.events, runs: stores.runs, suppression: stores.suppression, scheduler, sender,
-    consent: { hasMarketingConsent: async () => false },
-    state: { checkoutCompleted: async () => true, orderCancelled: async () => true },
-    limits: { automationRunsPerMonth: async () => 0, quietHours: async () => null },
+    consent: stores.consent, state: stores.state, limits: stores.limits,
     clock: { now: () => new Date() }, newId: randomUUID,
-    unsubscribeUrl: (storeId, email) => `${cfg.PUBLIC_BASE_URL}/unsubscribe?store=${encodeURIComponent(storeId)}&email=${encodeURIComponent(email)}`,
+    unsubscribeUrl: (storeId, email) => `${cfg.PUBLIC_BASE_URL}/unsubscribe?t=${createUnsubscribeToken(cfg.UNSUBSCRIBE_SECRET, storeId, email)}`,
   };
   const engine = new Engine(deps); await startWorker(boss, engine);
   const resendClient = createResendClient(cfg.RESEND_API_KEY); let stopping = false;
@@ -36,6 +35,13 @@ export async function start() {
       const path = new URL(req.url ?? '/', cfg.PUBLIC_BASE_URL).pathname;
       if (req.method === 'GET' && path === '/healthz') return json(res, stopping ? 503 : 200, { ok: !stopping });
       if (req.method === 'GET' && path === '/readyz') { await Promise.all([runtime.query('select 1'), queueProbe.query('select 1')]); return json(res, 200, { ready: true }); }
+      if ((req.method === 'GET' || req.method === 'POST') && path === '/unsubscribe') {
+        const token = new URL(req.url ?? '/', cfg.PUBLIC_BASE_URL).searchParams.get('t') ?? ''; const target = parseUnsubscribeToken(cfg.UNSUBSCRIBE_SECRET, token);
+        if (!target) return json(res, 400, { error: 'invalid link' });
+        if (req.method === 'GET') return html(res, `<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Unsubscribe</title><body style="font:16px system-ui;max-width:36rem;margin:10vh auto;padding:1.5rem"><h1>Stop marketing emails?</h1><p>Order and account emails will still arrive.</p><form method="post" action="/unsubscribe?t=${token}"><button style="font:inherit;padding:.75rem 1rem">Unsubscribe</button></form></body></html>`);
+        await stores.unsubscribe(target.storeId, target.email);
+        return json(res, 200, { unsubscribed: true });
+      }
       if (req.method !== 'POST') return json(res, 404, { error: 'not found' });
       const body = await rawBody(req);
       if (path === '/events/ingest') {

@@ -8,3 +8,4 @@ export { PgBossScheduler, startWorker, QUEUE } from './pgboss.ts';
 export * from './ingest.ts';
 export * from './resend.ts';
 export * from './commerce-email.ts';
+export * from './unsubscribe.ts';

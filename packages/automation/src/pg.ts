@@ -41,6 +41,31 @@ export class PgStores {
     add: (storeId, email, reason) => this.tx(storeId, async c => { await c.query('insert into cp.email_suppressions (store_id, email, reason) values ($1,$2,$3) on conflict do nothing', [storeId, email.toLowerCase(), reason]); }),
   };
 
+  consent = {
+    hasMarketingConsent: (storeId: string, email: string): Promise<boolean> => this.tx(storeId, async c => {
+      const row = (await c.query('select granted from cp.marketing_consent where store_id=$1 and email=$2 order by occurred_at desc, id desc limit 1', [storeId, email.toLowerCase()])).rows[0];
+      return row?.granted === true;
+    }),
+    record: (storeId: string, email: string, granted: boolean, source: string): Promise<void> => this.tx(storeId, async c => { await c.query('insert into cp.marketing_consent(store_id,email,granted,source) values ($1,$2,$3,$4)', [storeId, email.toLowerCase(), granted, source]); }),
+  };
+
+  /** Record withdrawal and suppression together so an unsubscribe can never partially apply. */
+  unsubscribe = (storeId: string, email: string): Promise<void> => this.tx(storeId, async c => {
+    const normalized = email.toLowerCase();
+    await c.query('insert into cp.marketing_consent(store_id,email,granted,source) values ($1,$2,false,$3)', [storeId, normalized, 'unsubscribe_link']);
+    await c.query("insert into cp.email_suppressions (store_id, email, reason) values ($1,$2,'unsubscribe') on conflict (store_id, email) do update set reason = excluded.reason", [storeId, normalized]);
+  });
+
+  state = {
+    checkoutCompleted: (storeId: string, checkoutId: string): Promise<boolean> => this.tx(storeId, async c => (await c.query("select 1 from cp.automation_events where store_id=$1 and type='checkout.completed' and payload #>> '{subject,checkoutId}'=$2 limit 1", [storeId, checkoutId])).rowCount === 1),
+    orderCancelled: (storeId: string, orderId: string): Promise<boolean> => this.tx(storeId, async c => (await c.query("select 1 from cp.automation_events where store_id=$1 and type='order.cancelled' and payload #>> '{subject,orderId}'=$2 limit 1", [storeId, orderId])).rowCount === 1),
+  };
+
+  limits = {
+    automationRunsPerMonth: (storeId: string): Promise<number> => this.tx(storeId, async c => Number((await c.query('select automation_runs_per_month n from cp.automation_settings where store_id=$1', [storeId])).rows[0]?.n ?? 0)),
+    quietHours: (storeId: string): Promise<{ tz: string; from: number; to: number } | null> => this.tx(storeId, async c => { const r = (await c.query('select timezone, quiet_from, quiet_to from cp.automation_settings where store_id=$1', [storeId])).rows[0]; return r && r.quiet_from !== null && r.quiet_to !== null ? { tz: r.timezone, from: r.quiet_from, to: r.quiet_to } : null; }),
+  };
+
   emailProfile = {
     get: (storeId: string): Promise<CommerceEmailProfile | null> => this.tx(storeId, async c => {
       const r = (await c.query(`select p.*, (select h.host from cp.storefronts f join cp.storefront_hosts h using (storefront_id)

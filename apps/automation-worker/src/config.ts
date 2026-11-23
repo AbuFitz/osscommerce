@@ -8,6 +8,7 @@ const Env = z.object({
   QUEUE_DATABASE_URL: z.string().url().startsWith('postgres'),
   RESEND_API_KEY: z.string().min(1),
   RESEND_WEBHOOK_SECRET: z.string().min(1),
+  UNSUBSCRIBE_SECRET: z.string().regex(/^[0-9a-f]{64}$/i),
   PUBLIC_BASE_URL: z.string().url().startsWith('https://'),
   CELL_CREDENTIALS_JSON: z.string().min(2),
 });
