@@ -34,6 +34,11 @@ test('Resend sender classifies retryable and permanent provider failures', async
   await assert.rejects(new ResendSender({ apiKey: key, client: bad.client, prepare: async () => prepared }).send(request), PermanentError);
 });
 
+test('Resend sender refuses placeholder credentials even when a client is injected', () => {
+  const f = fake({ data: null, error: null });
+  assert.throws(() => new ResendSender({ apiKey: 're_placeholder_placeholder', client: f.client, prepare: async () => prepared }), /real RESEND_API_KEY/);
+});
+
 test('webhook verification uses the untouched payload and all Svix headers', () => {
   const f = fake({ data: null, error: null });
   const payload = '{"type":"email.delivered"}';

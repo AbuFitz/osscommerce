@@ -37,6 +37,15 @@ export interface ResendSenderOptions {
 
 const placeholder = /(?:placeholder|change[-_ ]?me|replace|example|dummy|fake|todo)/i;
 
+function assertResendApiKey(apiKey: string): void {
+  if (!/^re_[A-Za-z0-9_-]{20,}$/.test(apiKey) || placeholder.test(apiKey)) throw new Error('A real RESEND_API_KEY is required');
+}
+
+export function createResendClient(apiKey: string): ResendClient {
+  assertResendApiKey(apiKey);
+  return new Resend(apiKey) as unknown as ResendClient;
+}
+
 function providerError(error: { name?: string; message?: string; statusCode?: number }): Error {
   const status = error.statusCode ?? 0;
   const name = error.name ?? 'resend_error';
@@ -49,9 +58,7 @@ function providerError(error: { name?: string; message?: string; statusCode?: nu
 export class ResendSender implements Sender {
   private readonly client: ResendClient;
   constructor(private readonly options: ResendSenderOptions) {
-    if (!/^re_[A-Za-z0-9_-]{20,}$/.test(options.apiKey) || placeholder.test(options.apiKey)) {
-      throw new Error('A real RESEND_API_KEY is required');
-    }
+    assertResendApiKey(options.apiKey);
     this.client = options.client ?? (new Resend(options.apiKey) as unknown as ResendClient);
   }
 

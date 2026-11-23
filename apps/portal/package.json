@@ -9,6 +9,7 @@
     "test": "tsx --test src/lib/*.test.ts"
   },
   "dependencies": {
+    "@oss-commerce/automation": "*",
     "@oss-commerce/contracts": "*",
     "@oss-commerce/emails": "*",
     "@oss-commerce/handoff": "*",
