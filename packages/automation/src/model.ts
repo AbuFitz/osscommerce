@@ -14,7 +14,7 @@ export const DomainEvent = z.object({
   recipient: z.object({ email: z.string().email().optional(), name: z.string().optional() }).default({}),
   /** Snapshot taken when the event happened. The engine re-checks live consent before any marketing send. */
   consent: z.object({ marketing: z.boolean(), capturedAt: z.string().datetime().optional(), source: z.string().optional() }).default({ marketing: false }),
-  data: z.record(z.unknown()).default({}),
+  data: z.record(z.string(), z.unknown()).default({}),
 });
 export type DomainEvent = z.infer<typeof DomainEvent>;
 
