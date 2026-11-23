@@ -6,14 +6,17 @@
  "main": "src/index.ts",
  "types": "src/index.ts",
  "scripts": {
-  "test": "tsx --test src/*.test.ts"
+  "test": "tsx --test src/*.test.ts",
+  "typecheck": "tsc --noEmit"
  },
  "dependencies": {
   "@oss-commerce/contracts": "*",
+  "@oss-commerce/emails": "*",
+  "@oss-commerce/storefront-sdk": "*",
   "pg": "^8.13.0",
   "pg-boss": "^12.38.2",
-  "zod": "^4.6.7",
-  "@oss-commerce/storefront-sdk": "*"
+  "resend": "^6.39.0",
+  "zod": "^4.6.7"
  },
  "devDependencies": {
   "@types/pg": "^8.11.0",
