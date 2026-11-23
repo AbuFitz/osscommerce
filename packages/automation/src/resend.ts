@@ -98,3 +98,26 @@ export function suppressionFromResendEvent(event: unknown): { email: string; rea
   if (parsed.data.type === 'contact.updated' && parsed.data.data.unsubscribed) return { email, reason: 'unsubscribe' };
   return null;
 }
+
+const WebhookEvent = z.object({ type: z.string().min(1), data: z.object({ email_id: z.string().min(1) }).passthrough() }).passthrough();
+export interface ResendWebhookDeps {
+  client: Pick<ResendClient, 'webhooks'>;
+  webhookSecret: string;
+  resolveStore(messageId: string): Promise<string | null>;
+  apply(input: { providerEventId: string; storeId: string; messageId: string; type: string; suppression?: { email: string; reason: SuppressionReason } }): Promise<'applied' | 'duplicate'>;
+}
+
+/** Verified, idempotent webhook ingestion. Unknown message ids are acknowledged but can never mutate a tenant. */
+export async function handleResendWebhook(d: ResendWebhookDeps, payload: string, headers: ResendWebhookHeaders): Promise<{ status: number; body: Record<string, unknown> }> {
+  let raw: unknown;
+  try { raw = verifyResendWebhook(d.client, payload, headers, d.webhookSecret); }
+  catch { return { status: 400, body: { error: 'invalid signature' } }; }
+  const event = WebhookEvent.safeParse(raw);
+  if (!event.success || !headers.id) return { status: 400, body: { error: 'invalid event' } };
+  const messageId = event.data.data.email_id;
+  const storeId = await d.resolveStore(messageId);
+  if (!storeId) return { status: 202, body: { received: true, ignored: true } };
+  const suppression = suppressionFromResendEvent(event.data) ?? undefined;
+  const outcome = await d.apply({ providerEventId: headers.id, storeId, messageId, type: event.data.type, suppression });
+  return { status: 200, body: { received: true, duplicate: outcome === 'duplicate' } };
+}
