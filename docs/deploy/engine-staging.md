@@ -12,6 +12,7 @@
 
 ## Verified on this deployment
 - Health and readiness respond; migrations and platform setup applied on Neon PG 18.
+- `/launch-ready` fails closed until the database, checkout gate, R2 media storage and every Stripe credential are configured. Its response contains booleans only, never credential material.
 - Store isolation: a product created in store A is returned by the Shop API for store A's channel token and not for store B's.
 
 ## Still needed (set in the Railway dashboard, never in the repository or chat)

@@ -17,11 +17,13 @@ import { CellPlugin, vendureWebhookDeps, type CheckoutGate } from './cell/plugin
 import { liveStripe } from './cell/stripe-live.ts';
 import { MERCHANT_PERMISSIONS } from './cell/merchant-role.ts';
 import { assetPlugin, readAssetEnv, ASSET_LIMITS } from './cell/assets.ts';
+import { allLaunchChecksPass, launchChecks } from './cell/launch-readiness.ts';
 
 const env = parseEnv(process.env);
 const assets = readAssetEnv(process.env);
 if (!assets && env.APP_ENV === 'production') throw new Error('Production needs object storage for media: set the ASSET_S3_* variables.');
 const extra = { PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY ?? '', CONTROL_SECRET: process.env.CONTROL_SECRET, PORT: Number(process.env.PORT ?? 3000), MODE: (process.env.MODE ?? 'both') as 'server' | 'worker' | 'both' };
+const providerChecks = launchChecks({ assets, stripeSecretKey: env.STRIPE_SECRET_KEY, stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET, stripeConnectedAccountId: env.STRIPE_CONNECTED_ACCOUNT_ID, stripePublishableKey: extra.PUBLISHABLE_KEY });
 
 // Filled in once the application is up; the webhook adapter and the checkout gate need the live database connection.
 let conn!: TransactionalConnection; let ctx!: RequestContext;
@@ -45,7 +47,13 @@ function config(): VendureConfig {
     // /ready: the process can reach its database (used by humans and monitors).
     apiOptions: { port: extra.PORT, hostname: '0.0.0.0', trustProxy: 1, csrfPrevention: true,
       middleware: [{ route: '/health', beforeListen: true, handler: (_q: unknown, r: { json: (b: unknown) => void }) => r.json({ ok: true, cell: env.CELL_ID }) },
-        { route: '/ready', beforeListen: true, handler: async (_q: unknown, r: { status: (n: number) => { json: (b: unknown) => void } }) => { try { await sql('select 1'); r.status(200).json({ ready: true }); } catch { r.status(503).json({ ready: false }); } } }] } as VendureConfig['apiOptions'],
+        { route: '/ready', beforeListen: true, handler: async (_q: unknown, r: { status: (n: number) => { json: (b: unknown) => void } }) => { try { await sql('select 1'); r.status(200).json({ ready: true }); } catch { r.status(503).json({ ready: false }); } } },
+        { route: '/launch-ready', beforeListen: true, handler: async (_q: unknown, r: { status: (n: number) => { json: (b: unknown) => void } }) => {
+          let database = false; let checkout = false;
+          try { await sql('select 1'); database = true; checkout = (await gate.get()).allowed; } catch { /* failed checks remain false */ }
+          const checks = { database, checkout, ...providerChecks }; const ready = Object.values(checks).every(Boolean) && allLaunchChecksPass(providerChecks);
+          r.status(ready ? 200 : 503).json({ ready, checks });
+        } }] } as VendureConfig['apiOptions'],
     plugins: [...(assets ? [assetPlugin(assets)] : []), DefaultSchedulerPlugin.init(), CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
   });
 }
