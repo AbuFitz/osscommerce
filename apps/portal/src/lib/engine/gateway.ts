@@ -52,7 +52,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     // ---- not connected yet: empty, honest states ----
     async discounts() { return A.listDiscounts(x); }, async team() { const v = await this.viewer(); return { members: [{ name: v.name, email: '', role: 'owner', status: 'active' }], grants: control ? await control.grants(meta.storeId) : [] }; },
     async storefront() { return (control && await control.storefront(meta.storeId)) ?? { theme: { name: 'Your storefront', version: '0', deployedAt: new Date().toISOString(), state: 'building' }, previewUrl: '#', liveUrl: null, checks: [], history: [] }; },
-    async shippingTax() { const c = (await x('query{ activeChannel{ pricesIncludeTax } }')).activeChannel; return { zones: [], pricesIncludeTax: !!c?.pricesIncludeTax, vatRegistered: null, payments: { account: '', capabilities: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp, payouts: '' } }; },
+    async shippingTax() { const s = await A.listShippingTax(x); return { ...s, vatRegistered: null, payments: { account: '', capabilities: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp, payouts: '' } }; },
     async paymentSetup() { return control ? control.payment(meta.storeId, LAUNCH_PLAN.fee.baseBp) : { status: 'unknown', headline: 'Payment status is not available yet', detail: 'We are connecting payments for your store. Contact us if you expected this to be ready.', chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [], pending: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp }; },
     async startPaymentSetup() { return control ? control.startPaymentSetup(meta.storeId) : { ok: false, message: 'Payment set-up is not connected for your store yet. Contact us and we will set it up with you.' }; },
     async content() { return { page: { id: 'home', title: 'Home', path: '/' }, sections: [], publishedAt: '', previewUrl: '#', versions: [] }; },
@@ -62,7 +62,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     setAutomation: (id, enabled) => control ? control.setAutomation(meta.storeId, id, enabled) : no(),
     createServiceRequest: no, decideQuote: no,
     saveEmailSettings: (brand, notifications) => control ? control.saveEmailSettings(meta.storeId, brand, notifications) : no(),
-    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(), savePreferences: no, createDiscount: d => A.createDiscount(x, d), saveZone: no, requestLaunch: no,
+    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(), savePreferences: no, createDiscount: d => A.createDiscount(x, d), saveZone: z => A.saveShippingZone(x, z), requestLaunch: no,
     async checkDomain() { return { ok: false, message: 'Domain checks are not connected for your store yet.' }; },
   };
 }

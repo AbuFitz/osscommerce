@@ -1,4 +1,5 @@
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup } from '../gateway';
+import { randomUUID } from 'node:crypto';
+import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup } from '../gateway';
 import { createProductWithVariants, findTaxCategories, type Exec } from './catalogue';
 
 /**
@@ -112,6 +113,78 @@ export async function createDiscount(x: Exec, d: NewDiscount): Promise<MutationR
     const result = (await x(`mutation($i:CreatePromotionInput!){ createPromotion(input:$i){ __typename ... on Promotion{ id } ... on ErrorResult{ message } } }`, { i: input })).createPromotion;
     if (result.__typename !== 'Promotion') return { ok: false, message: result.message ?? 'The discount could not be created.' };
     return { ok: true, message: `${code} is active.` };
+  } catch (e) { return fail(e); }
+}
+
+type RawShippingMethod = { id: string; code: string; name: string; checker: RawOperation; calculator: RawOperation };
+const ZONE_CHECKER = 'oss-delivery-zone';
+const ZONE_CALCULATOR = 'oss-flat-rate-free-over';
+
+function mapShippingZones(methods: RawShippingMethod[]): ShippingZone[] {
+  const groups = new Map<string, ShippingZone>();
+  for (const m of methods) {
+    const legacy = m.code.startsWith('ship-') && m.calculator.code === 'default-shipping-calculator';
+    if (!legacy && (m.checker.code !== ZONE_CHECKER || m.calculator.code !== ZONE_CALCULATOR)) continue;
+    const name = legacy ? 'United Kingdom' : arg(m.checker, 'zoneName')?.trim(); const regions = legacy ? 'United Kingdom' : arg(m.checker, 'regionsLabel')?.trim();
+    if (!name || !regions) continue;
+    const zone = groups.get(name) ?? { name, regions, rates: [] };
+    const free = legacy ? 0 : Number(arg(m.calculator, 'freeOver') ?? 0);
+    zone.rates.push({ label: m.name, priceMinor: Number(arg(m.calculator, 'rate') ?? 0), freeOverMinor: free > 0 ? free : undefined });
+    groups.set(name, zone);
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function listShippingTax(x: Exec): Promise<{ zones: ShippingZone[]; pricesIncludeTax: boolean }> {
+  const r = await x(`query{ activeChannel{ pricesIncludeTax } shippingMethods(options:{ take:200, sort:{ createdAt:ASC } }){ items{ id code name checker{ code args{ name value } } calculator{ code args{ name value } } } } }`);
+  return { zones: mapShippingZones(r.shippingMethods.items as RawShippingMethod[]), pricesIncludeTax: !!r.activeChannel?.pricesIncludeTax };
+}
+
+export async function saveShippingZone(x: Exec, d: ZoneInput): Promise<MutationResult> {
+  try {
+    const name = d.name.trim(); const regionsLabel = d.regions.trim();
+    if (name.length < 2 || name.length > 60) return { ok: false, message: 'Use 2–60 characters for the zone name.' };
+    if (!regionsLabel) return { ok: false, message: 'Choose at least one country.' };
+    if (!d.rates.length || d.rates.length > 10) return { ok: false, message: 'Add between 1 and 10 delivery options.' };
+    for (const rate of d.rates) {
+      if (!rate.label.trim() || rate.label.trim().length > 80) return { ok: false, message: 'Each delivery option needs a name of no more than 80 characters.' };
+      if (!Number.isInteger(rate.priceMinor) || rate.priceMinor < 0) return { ok: false, message: 'Each delivery price must be zero or more.' };
+      if (rate.freeOverMinor !== undefined && (!Number.isInteger(rate.freeOverMinor) || rate.freeOverMinor < 1)) return { ok: false, message: 'A free-delivery threshold must be at least 0.01.' };
+    }
+    const [countryResult, methodResult] = await Promise.all([
+      x(`query{ activeChannel{ pricesIncludeTax } countries(options:{ take:250 }){ items{ code name enabled } } }`),
+      x(`query{ shippingMethods(options:{ take:200 }){ items{ id code name checker{ code args{ name value } } calculator{ code args{ name value } } } } }`),
+    ]);
+    const countries = (countryResult.countries.items as { code: string; name: string; enabled: boolean }[]).filter(c => c.enabled);
+    const aliases: Record<string, string> = { uk: 'GB', 'great britain': 'GB', britain: 'GB', usa: 'US', 'united states': 'US' };
+    const requested = regionsLabel.split(/[,;]+/).map(v => v.trim()).filter(Boolean);
+    const codes: string[] = []; const unknown: string[] = [];
+    for (const value of requested) {
+      const lower = value.toLowerCase(); const alias = aliases[lower];
+      const found = countries.find(c => c.code.toLowerCase() === lower || c.name.toLowerCase() === lower || c.code === alias);
+      if (found) codes.push(found.code.toUpperCase()); else unknown.push(value);
+    }
+    if (unknown.length) return { ok: false, message: `We could not match ${unknown.join(', ')} to an enabled country. Use country names or two-letter ISO codes.` };
+    const countryCodes = [...new Set(codes)].join(',');
+    const methods = methodResult.shippingMethods.items as RawShippingMethod[];
+    const managed = methods.filter(m => m.checker.code === ZONE_CHECKER || (m.code.startsWith('ship-') && m.calculator.code === 'default-shipping-calculator'));
+    const zoneName = (m: RawShippingMethod) => m.checker.code === ZONE_CHECKER ? arg(m.checker, 'zoneName')?.trim() : 'United Kingdom';
+    const original = (d.originalName ?? '').trim().toLowerCase();
+    if (managed.some(m => zoneName(m)?.toLowerCase() === name.toLowerCase() && zoneName(m)?.toLowerCase() !== original)) return { ok: false, message: `A zone named ${name} already exists.` };
+    const current = original ? managed.filter(m => zoneName(m)?.toLowerCase() === original) : [];
+    const pricesIncludeTax = !!countryResult.activeChannel?.pricesIncludeTax;
+    const operation = (rate: ZoneInput['rates'][number]) => ({
+      checker: { code: ZONE_CHECKER, arguments: [{ name: 'countries', value: countryCodes }, { name: 'zoneName', value: name }, { name: 'regionsLabel', value: regionsLabel }] },
+      calculator: { code: ZONE_CALCULATOR, arguments: [{ name: 'rate', value: String(rate.priceMinor) }, { name: 'freeOver', value: String(rate.freeOverMinor ?? 0) }, { name: 'includesTax', value: String(pricesIncludeTax) }, { name: 'taxRate', value: '20' }] },
+      fulfillmentHandler: 'manual-fulfillment', translations: [{ languageCode: 'en', name: rate.label.trim(), description: `Delivery to ${regionsLabel}` }],
+    });
+    for (let i = 0; i < d.rates.length; i++) {
+      const input = operation(d.rates[i]);
+      if (current[i]) await x(`mutation($i:UpdateShippingMethodInput!){ updateShippingMethod(input:$i){ id } }`, { i: { id: current[i].id, code: current[i].code, ...input } });
+      else await x(`mutation($i:CreateShippingMethodInput!){ createShippingMethod(input:$i){ id } }`, { i: { code: `oss-zone-${randomUUID()}`, ...input } });
+    }
+    for (const stale of current.slice(d.rates.length)) await x(`mutation($id:ID!){ deleteShippingMethod(id:$id){ result message } }`, { id: stale.id });
+    return { ok: true, message: `${name} delivery options are live.` };
   } catch (e) { return fail(e); }
 }
 

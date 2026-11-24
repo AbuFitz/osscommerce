@@ -103,6 +103,14 @@ test('collections, promotions and customers: B cannot touch A\'s by id', async (
   assert.equal((await as('B', `query($id:ID!){ collection(id:$id){ id } }`, { id: col })).data?.collection ?? null, null, 'and B cannot read it');
   assert.deepEqual((await m.B.x(`query{ collections{ items{ name } } }`)).collections.items.map((c: any) => c.name).filter((n: string) => n === 'A only'), []);
 });
+test('shipping methods are channel-owned: merchants edit their own and cannot touch another store\'s', async () => {
+  assert.deepEqual((await A.listShippingTax(m.A.x)).zones.map(z => z.name), ['United Kingdom']); assert.deepEqual((await A.listShippingTax(m.B.x)).zones.map(z => z.name), ['United Kingdom']);
+  const a = await A.saveShippingZone(m.A.x, { originalName: 'United Kingdom', name: 'Store A UK', regions: 'GB', rates: [{ label: 'A delivery', priceMinor: 321 }, { label: 'A express', priceMinor: 654 }] }); assert.equal(a.ok, true, a.message);
+  assert.deepEqual((await A.listShippingTax(m.A.x)).zones, [{ name: 'Store A UK', regions: 'GB', rates: [{ label: 'A delivery', priceMinor: 321, freeOverMinor: undefined }, { label: 'A express', priceMinor: 654, freeOverMinor: undefined }] }]); assert.deepEqual((await A.listShippingTax(m.B.x)).zones.map(z => z.name), ['United Kingdom'], 'B is unchanged');
+  const aid = (await m.A.x(`query{ shippingMethods{ items{ id name } } }`)).shippingMethods.items.find((s: any) => s.name === 'A delivery').id;
+  const cross = await as('B', `mutation($i:UpdateShippingMethodInput!){ updateShippingMethod(input:$i){ id } }`, { i: { id: aid, translations: [{ languageCode: 'en', name: 'Stolen' }] } }); assert.equal(cross.denied, 'FORBIDDEN');
+  assert.equal((await m.A.x(`query($id:ID!){ shippingMethod(id:$id){ name } }`, { id: aid })).shippingMethod.name, 'A delivery');
+});
 test('option groups are not channel-aware: B cannot attach A\'s option group to B\'s product', async () => {
   const x = m.A.x; const grp = (await x(`mutation($i:CreateProductOptionGroupInput!){ createProductOptionGroup(input:$i){ id } }`, { i: { code: 'a-size', translations: [{ languageCode: 'en', name: 'Size' }], options: [{ code: 's', translations: [{ languageCode: 'en', name: 'S' }] }] } })).createProductOptionGroup.id;
   await x(`mutation($p:ID!,$g:ID!){ addOptionGroupToProduct(productId:$p, optionGroupId:$g){ id } }`, { p: ids.A.product, g: grp });

@@ -30,13 +30,13 @@ The engine must use bearer tokens (`authOptions.tokenMethod: 'bearer'`), as the 
 
 ## What is live, and what is not
 **Backed by the engine and tested against a real Vendure** (`services/engine/src/cell/portal-adapter.test.ts`, `apps/portal/scripts/live.cjs`):
-orders list and detail, order filters and search, fulfilment with tracking, full and partial refunds through the Connect payment handler, products list, product detail and variants, add product, CSV import, stock adjustment for single-variant products, saving variant price, SKU, stock, VAT class, weight and on-sale, collections (list, preview, create), percentage/fixed/free-delivery coupon creation and listing with actual use counts, customers, overview and analytics figures computed from real orders, notifications derived from real orders and stock, the signed-in user's name.
+orders list and detail, order filters and search, fulfilment with tracking, full and partial refunds through the Connect payment handler, products list, product detail and variants, add product, CSV import, stock adjustment for single-variant products, saving variant price, SKU, stock, VAT class, weight and on-sale, collections (list, preview, create), percentage/fixed/free-delivery coupon creation and listing with actual use counts, country delivery zones with multiple rates and free-delivery thresholds, customers, overview and analytics figures computed from real orders, notifications derived from real orders and stock, the signed-in user's name.
 
 **Backed by the control plane when `CONTROL_PLANE_DATABASE_URL` is set:**
 store lifecycle and verified hostnames, persisted Stripe account readiness, single-use hosted Stripe onboarding for a pre-provisioned account, storefront deployment/domain state, automation rules and recent runs, automation enable/disable, monthly automation limit, sender identity/domain verification, email brand/notification settings, and time-boxed support-access requests. Every query runs in a transaction with tenant RLS set first. Payment onboarding and support-access decisions require a sign-in from the last ten minutes; access approvals, declines and revocations are audited atomically.
 
 **Not connected yet. These show an empty, honest state and refuse changes with a message; they never show fixtures:**
-delivery zones, content editing, legal pages, team invitations and roles (support-access grants are connected), service requests, preferences, billing invoices, and live visitor analytics.
+content editing, legal pages, team invitations and roles (support-access grants are connected), service requests, preferences, billing invoices, and live visitor analytics.
 
 **Known limits**
 - Adding or removing options on an existing product is refused (existing variants can be edited).

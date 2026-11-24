@@ -39,8 +39,8 @@ async function paidOrder() {
   await shopClient.query(g(`mutation{ addItemToOrder(productVariantId: 1, quantity: 2){ __typename } }`));
   await shopClient.query(g(`mutation($i: CreateCustomerInput!){ setCustomerForOrder(input:$i){ __typename } }`), { i: { emailAddress: 'maya@example.com', firstName: 'Maya', lastName: 'Lee' } });
   await shopClient.query(g(`mutation($i: CreateAddressInput!){ setOrderShippingAddress(input:$i){ __typename } }`), { i: { fullName: 'Maya Lee', streetLine1: '1 High St', city: 'Watford', postalCode: 'WD24 6SX', countryCode: 'GB' } });
-  const m = await shopClient.query(g(`query{ eligibleShippingMethods{ id } }`));
-  await shopClient.query(g(`mutation($id: [ID!]!){ setOrderShippingMethod(shippingMethodId:$id){ __typename } }`), { id: [m.eligibleShippingMethods[0].id] });
+  const m = await shopClient.query(g(`query{ eligibleShippingMethods{ id code price } }`)); const legacy = m.eligibleShippingMethods.find((v: any) => v.price === 500);
+  await shopClient.query(g(`mutation($id: [ID!]!){ setOrderShippingMethod(shippingMethodId:$id){ __typename } }`), { id: [legacy.id] });
   await shopClient.query(g(`mutation{ transitionOrderToState(state:"ArrangingPayment"){ __typename } }`));
   const s = (await shopClient.query(g(`mutation{ createPaymentSession{ paymentIntentId amount } }`))).createPaymentSession; intents.get(s.paymentIntentId)!.status = 'succeeded';
   const done = (await shopClient.query(g(`mutation($i: PaymentInput!){ addPaymentToOrder(input:$i){ __typename ... on Order { id state } } }`), { i: { method: 'stripe-connect', metadata: { paymentIntentId: s.paymentIntentId } } })).addPaymentToOrder;
@@ -87,6 +87,13 @@ test('discounts: percentage, fixed and free-delivery coupons are created and rea
   assert.equal(rows.find(d => d.code === 'LESS5')?.value, 500);
   assert.equal(rows.find(d => d.code === 'SHIPFREE')?.kind, 'shipping');
   const duplicate = await A.createDiscount(x, { code: 'save10', kind: 'percent', value: 5 }); assert.equal(duplicate.ok, false); assert.match(duplicate.message, /already in use/);
+});
+test('delivery zones: country eligibility, rates and edits are stored in the real engine', async () => {
+  const made = await A.saveShippingZone(x, { name: 'Home', regions: 'United Kingdom', rates: [{ label: 'Tracked', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Next day', priceMinor: 995 }] }); assert.equal(made.ok, true, made.message);
+  let shipping = await A.listShippingTax(x); assert.equal(shipping.pricesIncludeTax, false); assert.deepEqual(shipping.zones, [{ name: 'Home', regions: 'United Kingdom', rates: [{ label: 'Tracked', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Next day', priceMinor: 995, freeOverMinor: undefined }] }]);
+  const edited = await A.saveShippingZone(x, { originalName: 'Home', name: 'UK', regions: 'GB', rates: [{ label: 'Standard', priceMinor: 595 }] }); assert.equal(edited.ok, true, edited.message);
+  shipping = await A.listShippingTax(x); assert.deepEqual(shipping.zones, [{ name: 'UK', regions: 'GB', rates: [{ label: 'Standard', priceMinor: 595, freeOverMinor: undefined }] }]);
+  const unknown = await A.saveShippingZone(x, { name: 'Lost', regions: 'Atlantis', rates: [{ label: 'Boat', priceMinor: 1 }] }); assert.equal(unknown.ok, false); assert.match(unknown.message, /could not match/);
 });
 let order: { id: string; total: number };
 test('orders: a paid order appears with customer, lines, totals and statuses; baskets do not', async () => {
