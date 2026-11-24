@@ -9,7 +9,7 @@ const st = { healthy: ['Healthy', 'ok'], building: ['Building', 'info'], failed:
 
 export default async function Storefront() {
   const [sf, store] = await Promise.all([gateway().storefront(), gateway().store()]);
-  const h = store.store.hostnames[0]; const blockers = store.readiness.filter(g => !g.done && g.gate !== 'launch_approved' && g.gate !== 'contract_signed').map(g => g.label + '. ' + g.hint); const requested = !!sf.launchRequested;
+  const h = store.store.hostnames[0] ?? { host: 'No domain connected', verified: false }; const blockers = store.readiness.filter(g => !g.done && g.gate !== 'launch_approved' && g.gate !== 'contract_signed').map(g => g.label + '. ' + g.hint); const requested = !!sf.launchRequested;
   return (<>
     <Header title="Storefront" eyebrow={`Theme ${sf.theme.name} · v${sf.theme.version}`}>
       <a className="btn" href={sf.previewUrl} target="_blank" rel="noreferrer">Open preview <ExternalLink size={15} aria-hidden /></a><LaunchRequest blockers={blockers} requested={requested} /></Header>

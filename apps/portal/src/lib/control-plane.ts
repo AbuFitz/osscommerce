@@ -28,6 +28,7 @@ export interface ControlPlanePort {
   content(storeId: string, storeName: string): Promise<ContentView>;
   saveSection(storeId: string, storeName: string, sectionId: string, fields: Record<string, string>): Promise<{ ok: boolean; message: string }>;
   publishContent(storeId: string, storeName: string): Promise<{ ok: boolean; message: string }>;
+  requestLaunch(storeId: string): Promise<{ ok: boolean; message: string }>;
   legalPages(storeId: string): Promise<LegalPage[]>;
   saveLegal(storeId: string, slug: LegalPage['slug'], body: string, publish: boolean): Promise<{ ok: boolean; message: string }>;
 }
@@ -53,7 +54,7 @@ export class PgControlPlane implements ControlPlanePort {
     return this.tx(storeId, async client => {
       const s = (await client.query('select * from cp.stores where store_id=$1', [storeId])).rows[0];
       if (!s) throw new Error('Store is not registered in the control plane.');
-      const hosts = (await client.query('select host, verified from cp.store_hostnames where store_id=$1 order by verified desc, host', [storeId])).rows;
+      const hosts = (await client.query(`select host,bool_or(verified) verified from (select host,verified from cp.store_hostnames where store_id=$1 union all select h.host,h.verified from cp.storefront_hosts h join cp.storefronts f using(storefront_id) where f.store_id=$1) x group by host order by verified desc,host`, [storeId])).rows;
       const payment = await this.paymentIn(client, storeId, 0);
       const domain = hosts.some(h => h.verified === true);
       const ready: Record<string, boolean> = {
@@ -140,9 +141,10 @@ export class PgControlPlane implements ControlPlanePort {
 
   storefront(storeId: string): Promise<StorefrontView | null> {
     return this.tx(storeId, async client => {
-      const f = (await client.query(`select f.*, h.host, h.verified from cp.storefronts f left join cp.storefront_hosts h using (storefront_id) where f.store_id=$1 order by (f.env='production') desc, f.created_at desc limit 1`, [storeId])).rows[0];
+      const f = (await client.query(`select f.*, h.host, h.verified from cp.storefronts f left join cp.storefront_hosts h using (storefront_id) where f.store_id=$1 order by (f.env='production') desc, h.verified desc nulls last, f.created_at desc limit 1`, [storeId])).rows[0];
       if (!f) return null;
       const deployments = (await client.query('select * from cp.storefront_deployments where store_id=$1 and storefront_id=$2 order by created_at desc limit 10', [storeId, f.storefront_id])).rows;
+      const launch = (await client.query(`select state from cp.store_launch_requests where store_id=$1`, [storeId])).rows[0];
       const current = deployments[0];
       return {
         theme: { name: f.name, version: current?.git_sha?.slice(0, 7) ?? String(f.config_version), deployedAt: current?.created_at ? new Date(current.created_at).toISOString() : new Date(f.updated_at).toISOString(), state: current?.state === 'error' ? 'failed' : ['ready', 'promoted'].includes(current?.state) ? 'healthy' : 'building' },
@@ -150,6 +152,7 @@ export class PgControlPlane implements ControlPlanePort {
         liveUrl: f.state === 'live' && f.verified && f.host ? `https://${f.host}` : null,
         checks: [{ label: 'Domain verified', ok: f.verified === true, detail: f.verified ? f.host : 'DNS is not verified yet.' }, { label: 'Deployment ready', ok: ['ready', 'promoted'].includes(current?.state), detail: current?.state ?? 'No deployment yet.' }],
         history: deployments.map((d, i) => ({ version: d.git_sha?.slice(0, 7) ?? d.deployment_id, at: new Date(d.created_at).toISOString(), note: d.state, current: i === 0 })),
+        launchRequested: launch?.state === 'pending' || launch?.state === 'approved',
       };
     });
   }
@@ -229,6 +232,13 @@ export class PgControlPlane implements ControlPlanePort {
       if (latest.published_at) return { ok: false, message: 'There are no draft changes to publish.' };
       const result = (await client.query('select * from cp.publish_content_entry($1,$2,$3)', [storeId, 'page/home', 'merchant'])).rows[0];
       return result?.changed ? { ok: true, message: 'Homepage published.' } : { ok: false, message: 'The homepage could not be published. Refresh and try again.' };
+    });
+  }
+
+  requestLaunch(storeId: string) {
+    return this.tx(storeId, async client => {
+      const changed = (await client.query(`select cp.request_store_launch($1) changed`, [storeId])).rows[0]?.changed === true;
+      return changed ? { ok: true, message: 'Launch review requested. We will run the final checks and confirm the next step.' } : { ok: false, message: 'Launch review has already been requested.' };
     });
   }
 

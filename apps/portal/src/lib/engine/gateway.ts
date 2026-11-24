@@ -4,6 +4,7 @@ import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type MutationResult, typ
 import { createCollection as engineCreateCollection, previewCollection as enginePreview, type Exec } from './catalogue';
 import * as A from './adapter';
 import type { ControlPlanePort } from '../control-plane';
+import { launchBlockers, withTestOrder } from '../launch-readiness';
 
 const NOT_YET: MutationResult = { ok: false, message: 'This part is not connected for your store yet. Nothing was changed.' };
 const no = async () => NOT_YET;
@@ -29,9 +30,15 @@ export interface StoreMeta { storeId: string; name: string; host?: string }
 export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, control?: ControlPlanePort | null): CommerceGateway {
   const x: Exec = async (q, v) => (await exec())(q, v);
   const lowStockOf = async () => (await A.listProducts(x)).filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length;
+  const storeView = async () => {
+    if (!control) return { name: meta.name, store: { storeId: meta.storeId, organisationId: meta.storeId, cellId: 'cell', hostnames: [{ host: meta.host ?? '', verified: false }], region: 'eu-west-london', lifecycle: 'configuring', entitlementVersion: 1, paymentReadiness: 'not_started' } as never, readiness: LAUNCH_GATES.map(g => ({ gate: g, done: false, ...GATE_COPY[g] })) };
+    const result = { name: meta.name, ...(await control.store(meta.storeId, meta.name)) };
+    result.readiness = withTestOrder(result.readiness, await A.listOrders(x));
+    return result;
+  };
   return {
     async viewer() { const a = (await x('query{ activeAdministrator{ firstName lastName emailAddress } }')).activeAdministrator; const name = `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim() || a?.emailAddress || 'Signed in'; return { name, initials: name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase(), role: 'Store administrator' }; },
-    async store() { if (control) return { name: meta.name, ...(await control.store(meta.storeId, meta.name)) }; return { name: meta.name, store: { storeId: meta.storeId, organisationId: meta.storeId, cellId: 'cell', hostnames: [{ host: meta.host ?? '', verified: false }], region: 'eu-west-london', lifecycle: 'configuring', entitlementVersion: 1, paymentReadiness: 'not_started' } as never, readiness: LAUNCH_GATES.map(g => ({ gate: g, done: false, ...GATE_COPY[g] })) }; },
+    store: storeView,
     async summary() { return summarise(await A.listOrders(x), await lowStockOf()); },
     async live() { return { demo: false, asOf: new Date().toISOString(), visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } }; },
     async billing() { return { demo: false, planName: LAUNCH_PLAN.name, monthlyMinor: LAUNCH_PLAN.monthlyMinor, buildMinor: LAUNCH_PLAN.buildFromMinor, status: 'not_started', invoices: [] }; },
@@ -62,7 +69,8 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     setAutomation: (id, enabled) => control ? control.setAutomation(meta.storeId, id, enabled) : no(),
     createServiceRequest: (kind, title, detail) => control ? control.createServiceRequest(meta.storeId, kind, title, detail) : no(), decideQuote: (id, approve) => control ? control.decideQuote(meta.storeId, id, approve) : no(),
     saveEmailSettings: (brand, notifications) => control ? control.saveEmailSettings(meta.storeId, brand, notifications) : no(),
-    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(), savePreferences: no, createDiscount: d => A.createDiscount(x, d), saveZone: z => A.saveShippingZone(x, z), requestLaunch: no,
+    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(), savePreferences: no, createDiscount: d => A.createDiscount(x, d), saveZone: z => A.saveShippingZone(x, z),
+    async requestLaunch() { if (!control) return no(); const blockers = launchBlockers((await storeView()).readiness); if (blockers.length) return { ok: false, message: `Finish ${blockers.map(item => item.label.toLowerCase()).join(', ')} before requesting launch.` }; return control.requestLaunch(meta.storeId); },
     async checkDomain() { return { ok: false, message: 'Domain checks are not connected for your store yet.' }; },
   };
 }
