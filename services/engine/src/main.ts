@@ -16,6 +16,7 @@ import { buildCellConfig } from './cell/config.ts';
 import { CellPlugin, vendureWebhookDeps, type CheckoutGate } from './cell/plugin.ts';
 import { liveStripe } from './cell/stripe-live.ts';
 import { MERCHANT_PERMISSIONS } from './cell/merchant-role.ts';
+import { PackRefillPlugin } from './cell/pack-refill.ts';
 import { assetPlugin, readAssetEnv, ASSET_LIMITS } from './cell/assets.ts';
 
 const env = parseEnv(process.env);
@@ -46,7 +47,7 @@ function config(): VendureConfig {
     apiOptions: { port: extra.PORT, hostname: '0.0.0.0', trustProxy: 1, csrfPrevention: true,
       middleware: [{ route: '/health', beforeListen: true, handler: (_q: unknown, r: { json: (b: unknown) => void }) => r.json({ ok: true, cell: env.CELL_ID }) },
         { route: '/ready', beforeListen: true, handler: async (_q: unknown, r: { status: (n: number) => { json: (b: unknown) => void } }) => { try { await sql('select 1'); r.status(200).json({ ready: true }); } catch { r.status(503).json({ ready: false }); } } }] } as VendureConfig['apiOptions'],
-    plugins: [...(assets ? [assetPlugin(assets)] : []), DefaultSchedulerPlugin.init(), CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
+    plugins: [...(assets ? [assetPlugin(assets)] : []), DefaultSchedulerPlugin.init(), PackRefillPlugin, CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
   });
 }
 /** Internal work (webhooks, first-time setup) runs as the platform's superadmin. Merchants never get this identity. */
