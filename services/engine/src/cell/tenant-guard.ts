@@ -1,6 +1,6 @@
 import { Inject, Injectable, type CallHandler, type ExecutionContext, type NestInterceptor } from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
-import { ForbiddenError, internal_getRequestContext, TransactionalConnection, Permission, Product, ProductVariant, Collection, Asset, Promotion, Customer, Order, OrderLine, Payment, Fulfillment, type RequestContext } from '@vendure/core';
+import { ForbiddenError, internal_getRequestContext, TransactionalConnection, Permission, Product, ProductVariant, Collection, Asset, Promotion, ShippingMethod, Customer, Order, OrderLine, Payment, Fulfillment, type RequestContext } from '@vendure/core';
 import type { EntityTarget } from 'typeorm';
 
 /**
@@ -11,9 +11,10 @@ import type { EntityTarget } from 'typeorm';
  *   2. VERIFIES that every record the request names by id belongs to the caller's own channel before the operation runs.
  * Both are enforced on the server whatever the portal sends.
  */
-export const MERCHANT_QUERIES = new Set(['activeAdministrator', 'activeChannel', 'product', 'products', 'productVariant', 'productVariants', 'order', 'orders', 'customer', 'customers', 'collection', 'collections', 'previewCollectionVariants', 'taxCategories', 'asset', 'assets', 'facets', 'promotions', 'promotion', 'stockLocations', 'shippingMethods', 'countries', 'search']);
+export const MERCHANT_QUERIES = new Set(['activeAdministrator', 'activeChannel', 'product', 'products', 'productVariant', 'productVariants', 'order', 'orders', 'customer', 'customers', 'collection', 'collections', 'previewCollectionVariants', 'taxCategories', 'asset', 'assets', 'facets', 'promotions', 'promotion', 'stockLocations', 'shippingMethod', 'shippingMethods', 'countries', 'search']);
 export const MERCHANT_MUTATIONS = new Set(['createProduct', 'updateProduct', 'deleteProduct', 'createProductOptionGroup', 'addOptionGroupToProduct', 'createProductVariants', 'updateProductVariants', 'deleteProductVariant', 'createCollection', 'updateCollection', 'deleteCollection',
-  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'createPromotion', 'updatePromotion', 'deletePromotion']);
+  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'createPromotion', 'updatePromotion', 'deletePromotion',
+  'createShippingMethod', 'updateShippingMethod', 'deleteShippingMethod']);
 
 type Via = 'direct' | 'order' | 'optionGroup';
 type Check = { entity: EntityTarget<any>; ids: (a: any) => unknown[]; via?: Via };
@@ -29,6 +30,7 @@ export const OWNERSHIP: Record<string, Check[]> = {
   updateAsset: [{ entity: Asset, ids: a => arr(inp(a)?.id) }], deleteAssets: [{ entity: Asset, ids: a => arr(inp(a)?.assetIds) }],
   updateCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
   updatePromotion: [{ entity: Promotion, ids: a => arr(inp(a)?.id) }], deletePromotion: [{ entity: Promotion, ids: a => arr(a?.id) }],
+  updateShippingMethod: [{ entity: ShippingMethod, ids: a => arr(inp(a)?.id) }], deleteShippingMethod: [{ entity: ShippingMethod, ids: a => arr(a?.id) }],
   addFulfillmentToOrder: [{ entity: OrderLine, ids: a => arr(inp(a)?.lines).map((l: any) => l?.orderLineId), via: 'order' }],
   refundOrder: [{ entity: Payment, ids: a => arr(inp(a)?.paymentId), via: 'order' }, { entity: OrderLine, ids: a => arr(inp(a)?.lines).map((l: any) => l?.orderLineId), via: 'order' }],
   cancelOrder: [{ entity: Order, ids: a => arr(inp(a)?.orderId) }], addNoteToOrder: [{ entity: Order, ids: a => arr(inp(a)?.id) }],

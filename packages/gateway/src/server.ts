@@ -1,6 +1,8 @@
 import http from 'node:http';
 import { createGateway, type GatewayDeps } from './gateway.ts';
-import type { Upstream } from './ports.ts';
+import { createContentGateway } from './content-gateway.ts';
+import { createPreferencesGateway } from './preferences-gateway.ts';
+import type { ContentStore, PreferencesStore, Upstream } from './ports.ts';
 
 export const API_META = { apiVersion: 'v1', minSdk: '0.1.0' };
 const MAX_BODY = 64 * 1024;
@@ -17,13 +19,25 @@ export const fetchUpstream: Upstream = {
   },
 };
 
-export function createServer(deps: Omit<GatewayDeps, 'upstream'> & { upstream?: Upstream }) {
+export function createServer(deps: Omit<GatewayDeps, 'upstream'> & { upstream?: Upstream; content?: ContentStore; preferences?: PreferencesStore; ready?: () => Promise<boolean> }) {
   const handle = createGateway({ ...deps, upstream: deps.upstream ?? fetchUpstream });
+  const content = deps.content ? createContentGateway({ registry: deps.registry, content: deps.content, rateLimit: deps.storefrontLimit, audit: deps.audit }) : null;
+  const preferences = deps.preferences ? createPreferencesGateway({ registry: deps.registry, preferences: deps.preferences, rateLimit: deps.storefrontLimit, audit: deps.audit }) : null;
   return http.createServer(async (req, res) => {
     const send = (status: number, body: string, headers: Record<string, string> = {}) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers }); res.end(body); };
     try {
       if (req.method === 'GET' && req.url === '/healthz') return send(200, '{"ok":true}');
+      if (req.method === 'GET' && req.url === '/readyz') { const ready = await deps.ready?.().catch(() => false) ?? true; return send(ready ? 200 : 503, JSON.stringify({ ready })); }
       if (req.method === 'GET' && req.url === '/v1/meta') return send(200, JSON.stringify(API_META), { 'cache-control': 'public, max-age=60' });
+      if (req.method === 'GET' && req.url === '/v1/preferences') {
+        if (!preferences) return send(503, '{"error":"preferences unavailable"}');
+        const out = await preferences({ headers: req.headers as Record<string, string | undefined> }); return send(out.status, out.body, out.headers);
+      }
+      if (req.method === 'GET' && req.url?.startsWith('/v1/content/')) {
+        if (!content) return send(503, '{"error":"content unavailable"}');
+        let entry = ''; try { entry = decodeURIComponent(req.url.slice('/v1/content/'.length)); } catch { return send(400, '{"error":"invalid entry"}'); }
+        const out = await content({ headers: req.headers as Record<string, string | undefined>, entry }); return send(out.status, out.body, out.headers);
+      }
       if (req.method !== 'POST' || req.url !== '/v1/shop') return send(404, '{"error":"not found"}');
       const chunks: Buffer[] = []; let size = 0;
       for await (const c of req) { size += c.length; if (size > MAX_BODY) return send(413, '{"error":"too large"}'); chunks.push(c as Buffer); }

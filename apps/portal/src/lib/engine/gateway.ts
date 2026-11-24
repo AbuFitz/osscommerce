@@ -1,8 +1,10 @@
 import 'server-only';
 import { LAUNCH_PLAN } from '@oss-commerce/contracts';
-import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type MutationResult, type Notice, type Order, type Summary } from '../gateway';
+import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type MutationResult, type Notice, type Order, type Preferences, type Summary } from '../gateway';
 import { createCollection as engineCreateCollection, previewCollection as enginePreview, type Exec } from './catalogue';
 import * as A from './adapter';
+import type { ControlPlanePort } from '../control-plane';
+import { launchBlockers, withTestOrder } from '../launch-readiness';
 
 const NOT_YET: MutationResult = { ok: false, message: 'This part is not connected for your store yet. Nothing was changed.' };
 const no = async () => NOT_YET;
@@ -25,15 +27,22 @@ export interface StoreMeta { storeId: string; name: string; host?: string }
  * with the signed-in merchant's own session. Areas whose backing service is not connected yet return empty, honest states and refuse
  * changes with a clear message. They never return fixtures.
  */
-export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta): CommerceGateway {
+export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, control?: ControlPlanePort | null, setCheckoutPaused?: (paused: boolean) => Promise<MutationResult>): CommerceGateway {
   const x: Exec = async (q, v) => (await exec())(q, v);
   const lowStockOf = async () => (await A.listProducts(x)).filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length;
+  const storeView = async () => {
+    if (!control) return { name: meta.name, store: { storeId: meta.storeId, organisationId: meta.storeId, cellId: 'cell', hostnames: [{ host: meta.host ?? '', verified: false }], region: 'eu-west-london', lifecycle: 'configuring', entitlementVersion: 1, paymentReadiness: 'not_started' } as never, readiness: LAUNCH_GATES.map(g => ({ gate: g, done: false, ...GATE_COPY[g] })) };
+    const result = { name: meta.name, ...(await control.store(meta.storeId, meta.name)) };
+    result.readiness = withTestOrder(result.readiness, await A.listOrders(x));
+    return result;
+  };
   return {
     async viewer() { const a = (await x('query{ activeAdministrator{ firstName lastName emailAddress } }')).activeAdministrator; const name = `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim() || a?.emailAddress || 'Signed in'; return { name, initials: name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase(), role: 'Store administrator' }; },
-    async store() { return { name: meta.name, store: { storeId: meta.storeId, organisationId: meta.storeId, cellId: 'cell', hostnames: [{ host: meta.host ?? '', verified: false }], region: 'eu-west-london', lifecycle: 'configuring', entitlementVersion: 1, paymentReadiness: 'not_started' } as never, readiness: LAUNCH_GATES.map(g => ({ gate: g, done: false, ...GATE_COPY[g] })) }; },
+    store: storeView,
     async summary() { return summarise(await A.listOrders(x), await lowStockOf()); },
     async live() { return { demo: false, asOf: new Date().toISOString(), visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } }; },
-    async billing() { return { demo: false, planName: LAUNCH_PLAN.name, monthlyMinor: LAUNCH_PLAN.monthlyMinor, buildMinor: LAUNCH_PLAN.buildFromMinor, status: 'not_started', invoices: [] }; },
+    async billing() { return control ? control.billing(meta.storeId) : { demo: false, planName: LAUNCH_PLAN.name, monthlyMinor: LAUNCH_PLAN.monthlyMinor, buildMinor: LAUNCH_PLAN.buildFromMinor, status: 'not_started', invoices: [] }; },
+    async startBillingPortal() { return control ? control.startBillingPortal(meta.storeId) : { ok: false, message: 'Billing management is not connected for your store yet.' }; },
     orders: q => A.listOrders(x, q), order: id => A.getOrder(x, id), products: () => A.listProducts(x), product: id => A.getProduct(x, id), customers: () => A.listCustomers(x),
     addProduct: p => A.addProduct(x, p), adjustStock: a => A.adjustStock(x, a), saveVariants: (id, d) => A.saveVariants(x, id, d), fulfilOrder: (id, t) => A.fulfilOrder(x, id, t), refundOrder: i => A.refundOrder(x, i),
     async importProducts(rows) { let added = 0; const problems: string[] = []; for (const r of rows) { const res = await A.addProduct(x, r); if (res.ok) added++; else problems.push(res.message); } return added ? { ok: true, message: `${added} product${added > 1 ? 's' : ''} imported${problems.length ? `. ${problems.length} skipped: ${problems[0]}` : ''}.` } : { ok: false, message: problems[0] ?? 'Nothing was imported.' }; },
@@ -49,15 +58,36 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta): Comme
     },
     async markNoticesRead() { return { ok: true, message: 'Notifications clear on their own once the order or stock is dealt with.' }; },
     // ---- not connected yet: empty, honest states ----
-    async discounts() { return []; }, async team() { const v = await this.viewer(); return { members: [{ name: v.name, email: '', role: 'owner', status: 'active' }], grants: [] }; },
-    async storefront() { return { theme: { name: 'Your storefront', version: '0', deployedAt: new Date().toISOString(), state: 'building' }, previewUrl: '#', liveUrl: null, checks: [], history: [] }; },
-    async shippingTax() { const c = (await x('query{ activeChannel{ pricesIncludeTax } }')).activeChannel; return { zones: [], pricesIncludeTax: !!c?.pricesIncludeTax, vatRegistered: null, payments: { account: '', capabilities: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp, payouts: '' } }; },
-    async paymentSetup() { return { status: 'unknown', headline: 'Payment status is not available yet', detail: 'We are connecting payments for your store. Contact us if you expected this to be ready.', chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [], pending: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp }; },
-    async startPaymentSetup() { return { ok: false, message: 'Payment set-up is not connected for your store yet. Contact us and we will set it up with you.' }; },
-    async content() { return { page: { id: 'home', title: 'Home', path: '/' }, sections: [], publishedAt: '', previewUrl: '#', versions: [] }; },
-    async legalPages() { return []; }, async automations() { return { rules: [], runs: [], runsLimit: 0 }; }, async serviceRequests() { return []; },
-    async emailSettings() { return { brand: { shopName: meta.name, accent: '#0e1311', supportEmail: '', footer: '' }, notifications: {}, sendingDomain: { host: '', verified: false } }; },
-    saveSection: no, publishContent: no, saveLegal: no, setAutomation: no, createServiceRequest: no, decideQuote: no, saveEmailSettings: no, inviteMember: no, rollbackTheme: no, decideGrant: no, savePreferences: no, createDiscount: no, saveZone: no, requestLaunch: no,
-    async checkDomain() { return { ok: false, message: 'Domain checks are not connected for your store yet.' }; },
+    async discounts() { return A.listDiscounts(x); }, async team() { const v = await this.viewer(); return { members: [{ name: v.name, email: '', role: 'owner', status: 'active' }], grants: control ? await control.grants(meta.storeId) : [] }; },
+    async storefront() { return (control && await control.storefront(meta.storeId)) ?? { theme: { name: 'Your storefront', version: '0', deployedAt: new Date().toISOString(), state: 'building' }, previewUrl: '#', liveUrl: null, checks: [], history: [] }; },
+    async shippingTax() { const s = await A.listShippingTax(x); return { ...s, vatRegistered: null, payments: { account: '', capabilities: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp, payouts: '' } }; },
+    async paymentSetup() { return control ? control.payment(meta.storeId, LAUNCH_PLAN.fee.baseBp) : { status: 'unknown', headline: 'Payment status is not available yet', detail: 'We are connecting payments for your store. Contact us if you expected this to be ready.', chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [], pending: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp }; },
+    async startPaymentSetup() { return control ? control.startPaymentSetup(meta.storeId) : { ok: false, message: 'Payment set-up is not connected for your store yet. Contact us and we will set it up with you.' }; },
+    async content() { return control ? control.content(meta.storeId, meta.name) : { page: { id: 'home', title: 'Home', path: '/' }, sections: [], publishedAt: '', previewUrl: '#', versions: [] }; },
+    async legalPages() { return control ? control.legalPages(meta.storeId) : []; }, async automations() { return control ? control.automations(meta.storeId) : { rules: [], runs: [], runsLimit: 0 }; }, async serviceRequests() { return control ? control.serviceRequests(meta.storeId) : []; },
+    async emailSettings() { return control ? control.emailSettings(meta.storeId, meta.name) : { brand: { shopName: meta.name, accent: '#0e1311', supportEmail: '', footer: '' }, notifications: {}, sendingDomain: { host: '', verified: false } }; },
+    async preferences() { if (!control) throw new Error('Control plane is not configured.'); return control.preferences(meta.storeId); },
+    saveSection: (id, fields) => control ? control.saveSection(meta.storeId, meta.name, id, fields) : no(), publishContent: () => control ? control.publishContent(meta.storeId, meta.name) : no(), saveLegal: (slug, body, publish) => control ? control.saveLegal(meta.storeId, slug, body, publish) : no(),
+    setAutomation: (id, enabled) => control ? control.setAutomation(meta.storeId, id, enabled) : no(),
+    createServiceRequest: (kind, title, detail) => control ? control.createServiceRequest(meta.storeId, kind, title, detail) : no(), decideQuote: (id, approve) => control ? control.decideQuote(meta.storeId, id, approve) : no(),
+    saveEmailSettings: (brand, notifications) => control ? control.saveEmailSettings(meta.storeId, brand, notifications) : no(),
+    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(),
+    async savePreferences(p: Preferences) {
+      if (!control || !setCheckoutPaused) return no();
+      if (Object.keys(p).length !== 6 || !Object.values(p).every(value => typeof value === 'boolean')) return { ok: false, message: 'Preferences were invalid. Nothing was changed.' };
+      const current = await control.preferences(meta.storeId);
+      if (current.pause !== p.pause) { const synced = await setCheckoutPaused(p.pause); if (!synced.ok) return synced; }
+      try {
+        const saved = await control.savePreferences(meta.storeId, p);
+        if (!saved.ok && current.pause !== p.pause) await setCheckoutPaused(current.pause);
+        return saved;
+      } catch (error) {
+        if (current.pause !== p.pause) await setCheckoutPaused(current.pause);
+        throw error;
+      }
+    },
+    createDiscount: d => A.createDiscount(x, d), saveZone: z => A.saveShippingZone(x, z),
+    async requestLaunch() { if (!control) return no(); const blockers = launchBlockers((await storeView()).readiness); if (blockers.length) return { ok: false, message: `Finish ${blockers.map(item => item.label.toLowerCase()).join(', ')} before requesting launch.` }; return control.requestLaunch(meta.storeId); },
+    async checkDomain() { return control ? control.checkDomain(meta.storeId) : { ok: false, message: 'Domain verification is not configured for your store yet.' }; },
   };
 }

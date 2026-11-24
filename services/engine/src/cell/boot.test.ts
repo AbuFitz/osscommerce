@@ -67,6 +67,8 @@ test('full checkout: server derives amount and fee, verified payment settles the
   const done = (await pay(s.paymentIntentId)).addPaymentToOrder; assert.equal(done.state, 'PaymentSettled');
   const svc = server.app.get(OutboxService); await new Promise(r => setTimeout(r, 300));
   const due = await svc.outbox.due(Date.now(), 10); const ev = due.map(r => r.event).find(e => e.type === 'order.paid')!; assert.ok(ev, 'order.paid recorded'); assert.equal(ev.storeId, 'store_a'); assert.equal(ev.data.totalMinor, order.totalWithTax); assert.equal(ev.recipient.email, 'maya@example.com');
+  assert.match(String(ev.data.placedAt), /^\d{4}-\d{2}-\d{2}T/); assert.equal(ev.data.customerName, 'Maya Lee'); assert.match(String(ev.data.shipTo), /1 High St.*Watford.*WD24 6SX/);
+  assert.ok(Array.isArray(ev.data.lines) && ev.data.lines.length === 1); assert.equal((ev.data.lines as any[])[0].quantity, 2); assert.ok(Number(ev.data.vatMinor) > 0);
   assert.deepEqual(await svc.tick(CellPlugin.options.outbox!), { sent: due.length, failed: 0 }); assert.ok(delivered.length >= 1 && /^t=\d+,v1=[0-9a-f]{64}$/.test(delivered[0].sig));
   const b = JSON.parse(delivered[0].body); assert.equal(b.cellId, 'cell_a'); assert.equal(sign('s'.repeat(43), delivered[0].body, Number(/t=(\d+)/.exec(delivered[0].sig)![1])), delivered[0].sig);
 });
@@ -91,4 +93,12 @@ test('control plane can block and re-allow checkout; unsigned, forged and out-of
   await assert.rejects(shopClient.query(g(`mutation{ createPaymentSession{ clientSecret } }`)), /temporarily unavailable/);
   assert.equal((await (await control({ allowed: true, sequence: 4 })).json()).stale, true); assert.equal(gate.allowed, false, 'an older allow does not undo a newer block');
   assert.equal((await control({ allowed: true, sequence: 6 })).status, 200); assert.ok((await shopClient.query(g(`mutation{ createPaymentSession{ clientSecret } }`))).createPaymentSession.clientSecret);
+});
+test('merchant and payment restrictions are independent', async () => {
+  assert.equal((await control({ allowed: false, reason: 'merchant_paused', sequence: 10, source: 'merchant' })).status, 200);
+  assert.equal((await control({ allowed: false, reason: 'requirements.past_due', sequence: 10, source: 'payments' })).status, 200);
+  assert.equal((await control({ allowed: true, sequence: 11, source: 'merchant' })).status, 200);
+  assert.equal((await gate.get()).allowed, false, 'merchant unpause must not erase a Stripe restriction');
+  assert.equal((await control({ allowed: true, sequence: 11, source: 'payments' })).status, 200);
+  assert.equal((await gate.get()).allowed, true);
 });

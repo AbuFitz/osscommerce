@@ -1,4 +1,5 @@
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup } from '../gateway';
+import { randomUUID } from 'node:crypto';
+import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup } from '../gateway';
 import { createProductWithVariants, findTaxCategories, type Exec } from './catalogue';
 
 /**
@@ -63,6 +64,128 @@ export async function getProduct(x: Exec, id: string): Promise<ProductDetail | n
 export async function listCustomers(x: Exec): Promise<Customer[]> {
   const r = await x(`query{ customers(options:{ take: 200 }){ items{ id firstName lastName emailAddress orders(options:{ take: 100, filter:{ active:{ eq:false } } }){ totalItems items{ totalWithTax orderPlacedAt } } } } }`);
   return (r.customers.items as any[]).map(c => { const os = (c.orders.items as any[]).filter(o => o.orderPlacedAt); return { id: c.id, name: `${c.firstName} ${c.lastName}`.trim(), email: c.emailAddress, orders: os.length, spentMinor: os.reduce((s, o) => s + o.totalWithTax, 0), lastOrder: os.map(o => o.orderPlacedAt).sort().at(-1) ?? '', marketing: false }; }).filter(c => c.orders > 0);
+}
+
+type RawOperation = { code: string; args: { name: string; value: string }[] };
+type RawPromotion = { id: string; name: string; enabled: boolean; couponCode?: string | null; startsAt?: string | null; endsAt?: string | null; usageLimit?: number | null; conditions: RawOperation[]; actions: RawOperation[] };
+const arg = (op: RawOperation | undefined, name: string) => op?.args.find(a => a.name === name)?.value;
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+export function mapDiscount(p: RawPromotion, used = 0, now = new Date()): Discount | null {
+  if (!p.couponCode) return null;
+  const action = p.actions[0];
+  const kind: Discount['kind'] = action?.code === 'order_percentage_discount' ? 'percent' : action?.code === 'oss-fixed-order-discount' ? 'fixed' : action?.code === 'free_shipping' ? 'shipping' : 'shipping';
+  if (!['order_percentage_discount', 'oss-fixed-order-discount', 'free_shipping'].includes(action?.code ?? '')) return null;
+  const value = kind === 'percent' ? Number(arg(action, 'discount') ?? 0) : kind === 'fixed' ? Number(arg(action, 'amount') ?? 0) : 0;
+  const start = p.startsAt ? new Date(p.startsAt) : null; const end = p.endsAt ? new Date(p.endsAt) : null;
+  const status: Discount['status'] = !p.enabled || (end && end <= now) ? 'expired' : start && start > now ? 'scheduled' : 'active';
+  const min = p.conditions.find(c => c.code === 'minimum_order_amount');
+  const window = start && start > now ? `Starts ${shortDate(p.startsAt!)}` : end ? `Ends ${shortDate(p.endsAt!)}` : 'No end date';
+  return { code: p.couponCode, kind, value, status, used, limit: p.usageLimit ?? undefined, window, minSpendMinor: min ? Number(arg(min, 'amount') ?? 0) || undefined : undefined };
+}
+
+export async function listDiscounts(x: Exec): Promise<Discount[]> {
+  const [promotions, orders] = await Promise.all([
+    x(`query{ promotions(options:{ take:200, sort:{ createdAt:DESC } }){ items{ id name enabled couponCode startsAt endsAt usageLimit conditions{ code args{ name value } } actions{ code args{ name value } } } } }`),
+    x(`query{ orders(options:{ take:1000, filter:{ active:{ eq:false } } }){ items{ id orderPlacedAt promotions{ id } } } }`),
+  ]);
+  const use = new Map<string, number>();
+  for (const o of orders.orders.items as { orderPlacedAt?: string | null; promotions: { id: string }[] }[]) if (o.orderPlacedAt) for (const p of o.promotions) use.set(p.id, (use.get(p.id) ?? 0) + 1);
+  return (promotions.promotions.items as RawPromotion[]).map(p => mapDiscount(p, use.get(p.id) ?? 0)).filter((d): d is Discount => !!d);
+}
+
+export async function createDiscount(x: Exec, d: NewDiscount): Promise<MutationResult> {
+  try {
+    const code = d.code.trim().toUpperCase();
+    if (!/^[A-Z0-9]{2,24}$/.test(code)) return { ok: false, message: 'Use 2–24 letters and numbers for the discount code.' };
+    if (d.kind === 'percent' && (!Number.isFinite(d.value) || d.value < 1 || d.value > 100)) return { ok: false, message: 'Percentage discounts must be between 1 and 100.' };
+    if (d.kind === 'fixed' && (!Number.isInteger(d.value) || d.value < 1)) return { ok: false, message: 'Enter a fixed discount of at least 0.01.' };
+    if (d.limit !== undefined && (!Number.isInteger(d.limit) || d.limit < 1)) return { ok: false, message: 'Total uses must be at least 1.' };
+    const existing = (await x(`query{ promotions(options:{ take:200 }){ items{ couponCode } } }`)).promotions.items as { couponCode?: string | null }[];
+    if (existing.some(p => p.couponCode?.toUpperCase() === code)) return { ok: false, message: `${code} is already in use.` };
+    const conditions = d.minSpendMinor && d.minSpendMinor > 0 ? [{ code: 'minimum_order_amount', arguments: [{ name: 'amount', value: String(d.minSpendMinor) }, { name: 'taxInclusive', value: 'true' }] }] : [];
+    const action = d.kind === 'percent' ? { code: 'order_percentage_discount', arguments: [{ name: 'discount', value: String(d.value) }] }
+      : d.kind === 'fixed' ? { code: 'oss-fixed-order-discount', arguments: [{ name: 'amount', value: String(d.value) }] }
+      : { code: 'free_shipping', arguments: [] };
+    const endsAt = d.endDate ? new Date(`${d.endDate}T23:59:59.999Z`).toISOString() : undefined;
+    if (d.endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(d.endDate) || Number.isNaN(Date.parse(`${d.endDate}T23:59:59.999Z`)))) return { ok: false, message: 'Choose a valid end date.' };
+    const input = { enabled: true, couponCode: code, usageLimit: d.limit, endsAt, conditions, actions: [action], translations: [{ languageCode: 'en', name: `${code} discount`, description: 'Customer coupon created in OneSimpleCommerce.' }] };
+    const result = (await x(`mutation($i:CreatePromotionInput!){ createPromotion(input:$i){ __typename ... on Promotion{ id } ... on ErrorResult{ message } } }`, { i: input })).createPromotion;
+    if (result.__typename !== 'Promotion') return { ok: false, message: result.message ?? 'The discount could not be created.' };
+    return { ok: true, message: `${code} is active.` };
+  } catch (e) { return fail(e); }
+}
+
+type RawShippingMethod = { id: string; code: string; name: string; checker: RawOperation; calculator: RawOperation };
+const ZONE_CHECKER = 'oss-delivery-zone';
+const ZONE_CALCULATOR = 'oss-flat-rate-free-over';
+
+function mapShippingZones(methods: RawShippingMethod[]): ShippingZone[] {
+  const groups = new Map<string, ShippingZone>();
+  for (const m of methods) {
+    const legacy = m.code.startsWith('ship-') && m.calculator.code === 'default-shipping-calculator';
+    if (!legacy && (m.checker.code !== ZONE_CHECKER || m.calculator.code !== ZONE_CALCULATOR)) continue;
+    const name = legacy ? 'United Kingdom' : arg(m.checker, 'zoneName')?.trim(); const regions = legacy ? 'United Kingdom' : arg(m.checker, 'regionsLabel')?.trim();
+    if (!name || !regions) continue;
+    const zone = groups.get(name) ?? { name, regions, rates: [] };
+    const free = legacy ? 0 : Number(arg(m.calculator, 'freeOver') ?? 0);
+    zone.rates.push({ label: m.name, priceMinor: Number(arg(m.calculator, 'rate') ?? 0), freeOverMinor: free > 0 ? free : undefined });
+    groups.set(name, zone);
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function listShippingTax(x: Exec): Promise<{ zones: ShippingZone[]; pricesIncludeTax: boolean }> {
+  const r = await x(`query{ activeChannel{ pricesIncludeTax } shippingMethods(options:{ take:200, sort:{ createdAt:ASC } }){ items{ id code name checker{ code args{ name value } } calculator{ code args{ name value } } } } }`);
+  return { zones: mapShippingZones(r.shippingMethods.items as RawShippingMethod[]), pricesIncludeTax: !!r.activeChannel?.pricesIncludeTax };
+}
+
+export async function saveShippingZone(x: Exec, d: ZoneInput): Promise<MutationResult> {
+  try {
+    const name = d.name.trim(); const regionsLabel = d.regions.trim();
+    if (name.length < 2 || name.length > 60) return { ok: false, message: 'Use 2–60 characters for the zone name.' };
+    if (!regionsLabel) return { ok: false, message: 'Choose at least one country.' };
+    if (!d.rates.length || d.rates.length > 10) return { ok: false, message: 'Add between 1 and 10 delivery options.' };
+    for (const rate of d.rates) {
+      if (!rate.label.trim() || rate.label.trim().length > 80) return { ok: false, message: 'Each delivery option needs a name of no more than 80 characters.' };
+      if (!Number.isInteger(rate.priceMinor) || rate.priceMinor < 0) return { ok: false, message: 'Each delivery price must be zero or more.' };
+      if (rate.freeOverMinor !== undefined && (!Number.isInteger(rate.freeOverMinor) || rate.freeOverMinor < 1)) return { ok: false, message: 'A free-delivery threshold must be at least 0.01.' };
+    }
+    const [countryResult, methodResult] = await Promise.all([
+      x(`query{ activeChannel{ pricesIncludeTax } countries(options:{ take:250 }){ items{ code name enabled } } }`),
+      x(`query{ shippingMethods(options:{ take:200 }){ items{ id code name checker{ code args{ name value } } calculator{ code args{ name value } } } } }`),
+    ]);
+    const countries = (countryResult.countries.items as { code: string; name: string; enabled: boolean }[]).filter(c => c.enabled);
+    const aliases: Record<string, string> = { uk: 'GB', 'great britain': 'GB', britain: 'GB', usa: 'US', 'united states': 'US' };
+    const requested = regionsLabel.split(/[,;]+/).map(v => v.trim()).filter(Boolean);
+    const codes: string[] = []; const unknown: string[] = [];
+    for (const value of requested) {
+      const lower = value.toLowerCase(); const alias = aliases[lower];
+      const found = countries.find(c => c.code.toLowerCase() === lower || c.name.toLowerCase() === lower || c.code === alias);
+      if (found) codes.push(found.code.toUpperCase()); else unknown.push(value);
+    }
+    if (unknown.length) return { ok: false, message: `We could not match ${unknown.join(', ')} to an enabled country. Use country names or two-letter ISO codes.` };
+    const countryCodes = [...new Set(codes)].join(',');
+    const methods = methodResult.shippingMethods.items as RawShippingMethod[];
+    const managed = methods.filter(m => m.checker.code === ZONE_CHECKER || (m.code.startsWith('ship-') && m.calculator.code === 'default-shipping-calculator'));
+    const zoneName = (m: RawShippingMethod) => m.checker.code === ZONE_CHECKER ? arg(m.checker, 'zoneName')?.trim() : 'United Kingdom';
+    const original = (d.originalName ?? '').trim().toLowerCase();
+    if (managed.some(m => zoneName(m)?.toLowerCase() === name.toLowerCase() && zoneName(m)?.toLowerCase() !== original)) return { ok: false, message: `A zone named ${name} already exists.` };
+    const current = original ? managed.filter(m => zoneName(m)?.toLowerCase() === original) : [];
+    const pricesIncludeTax = !!countryResult.activeChannel?.pricesIncludeTax;
+    const operation = (rate: ZoneInput['rates'][number]) => ({
+      checker: { code: ZONE_CHECKER, arguments: [{ name: 'countries', value: countryCodes }, { name: 'zoneName', value: name }, { name: 'regionsLabel', value: regionsLabel }] },
+      calculator: { code: ZONE_CALCULATOR, arguments: [{ name: 'rate', value: String(rate.priceMinor) }, { name: 'freeOver', value: String(rate.freeOverMinor ?? 0) }, { name: 'includesTax', value: String(pricesIncludeTax) }, { name: 'taxRate', value: '20' }] },
+      fulfillmentHandler: 'manual-fulfillment', translations: [{ languageCode: 'en', name: rate.label.trim(), description: `Delivery to ${regionsLabel}` }],
+    });
+    for (let i = 0; i < d.rates.length; i++) {
+      const input = operation(d.rates[i]);
+      if (current[i]) await x(`mutation($i:UpdateShippingMethodInput!){ updateShippingMethod(input:$i){ id } }`, { i: { id: current[i].id, code: current[i].code, ...input } });
+      else await x(`mutation($i:CreateShippingMethodInput!){ createShippingMethod(input:$i){ id } }`, { i: { code: `oss-zone-${randomUUID()}`, ...input } });
+    }
+    for (const stale of current.slice(d.rates.length)) await x(`mutation($id:ID!){ deleteShippingMethod(id:$id){ result message } }`, { id: stale.id });
+    return { ok: true, message: `${name} delivery options are live.` };
+  } catch (e) { return fail(e); }
 }
 
 const fail = (e: unknown): MutationResult => ({ ok: false, message: e instanceof Error ? e.message : 'That did not go through. Nothing was changed.' });

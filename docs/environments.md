@@ -26,5 +26,5 @@ Three environments, fully separate: **dev**, **staging**, **production**. Nothin
 2. Create Vercel projects (portal, site, storefronts) and the Railway engine service per environment, with production deploys behind approval. Not created yet because they are outward-facing and cost money; say the word and I will.
 3. Stripe: separate test and live webhook endpoints; reject `sk_live_` keys outside production at startup.
 4. Secrets only in each platform's vault. Never in Git, never in `NEXT_PUBLIC_*`.
-5. Migration runner that applies `infra/control-plane/migrations` per environment (canary first) and records them in `cp.schema_migrations`.
+5. Run the checked-in control-plane migrator per environment (canary first): `CONTROL_PLANE_DATABASE_URL=... npm run migrate:control-plane`. Use `-- --check` as the deploy gate; it detects pending, unknown and changed migrations.
 6. Restore drill in staging, a load test of checkout and concurrent last-unit purchases, and an independent security review before real payments.

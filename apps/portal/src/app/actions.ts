@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings } from '@/lib/gateway';
+import type { OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -12,17 +12,36 @@ export async function fulfilOrder(id: string, tracking?: string) { return run(()
 export async function refundOrder(i: RefundInput) { return run(() => gateway().refundOrder(i), ['/orders', '/']); }
 export async function inviteMember(email: string, role: Member['role']) { return run(() => gateway().inviteMember(email, role), ['/settings/team']); }
 export async function rollbackTheme(v: string) { return run(() => gateway().rollbackTheme(v), ['/storefront']); }
-export async function decideGrant(id: string, d: 'approve' | 'decline' | 'revoke') { return run(() => gateway().decideGrant(id, d), ['/settings/team']); }
-export async function savePreferences(p: Record<string, boolean>) { return run(() => gateway().savePreferences(p), ['/settings/preferences']); }
+export async function decideGrant(id: string, d: 'approve' | 'decline' | 'revoke') {
+  const { LIVE, recentlyAuthenticated } = await import('@/lib/session');
+  if (LIVE && !await recentlyAuthenticated()) return { ok: false, message: 'Sign out and sign in again before changing support access.' };
+  return run(() => gateway().decideGrant(id, d), ['/settings/team']);
+}
+export async function savePreferences(p: Preferences) { return run(() => gateway().savePreferences(p), ['/settings/preferences']); }
 export async function saveSection(id: string, fields: Record<string, string>) { return run(() => gateway().saveSection(id, fields), ['/content']); }
 export async function publishContent() { return run(() => gateway().publishContent(), ['/content']); }
 export async function saveLegal(slug: LegalPage['slug'], body: string, publish: boolean) { return run(() => gateway().saveLegal(slug, body, publish), ['/settings/legal']); }
 export async function setAutomation(id: string, on: boolean) { return run(() => gateway().setAutomation(id, on), ['/automations']); }
 export async function createServiceRequest(kind: ServiceRequest['kind'], title: string, detail: string) { return run(() => gateway().createServiceRequest(kind, title, detail), ['/support']); }
-export async function decideQuote(id: string, approve: boolean) { return run(() => gateway().decideQuote(id, approve), ['/support']); }
+export async function decideQuote(id: string, approve: boolean) {
+  if (approve) { const { LIVE, recentlyAuthenticated } = await import('@/lib/session'); if (LIVE && !await recentlyAuthenticated()) return { ok: false, message: 'Sign out and sign in again before approving a paid quote.' }; }
+  return run(() => gateway().decideQuote(id, approve), ['/support']);
+}
 export async function saveEmailSettings(brand: Partial<EmailSettings['brand']>, n: Record<string, boolean>) { return run(() => gateway().saveEmailSettings(brand, n), ['/settings/emails']); }
 
-export async function startPaymentSetup() { return gateway().startPaymentSetup(); }
+export async function startPaymentSetup() {
+  const { LIVE, recentlyAuthenticated } = await import('@/lib/session');
+  if (LIVE && !await recentlyAuthenticated()) return { ok: false as const, message: 'Sign out and sign in again before changing payment details.' };
+  try { return await gateway().startPaymentSetup(); }
+  catch { return { ok: false as const, message: 'Stripe could not be opened just now. Nothing was changed. Try again in a moment.' }; }
+}
+
+export async function startBillingPortal() {
+  const { LIVE, recentlyAuthenticated } = await import('@/lib/session');
+  if (LIVE && !await recentlyAuthenticated()) return { ok: false as const, message: 'Sign out and sign in again before changing billing details.' };
+  try { return await gateway().startBillingPortal(); }
+  catch { return { ok: false as const, message: 'Stripe billing could not be opened just now. Nothing was changed. Try again in a moment.' }; }
+}
 
 // ---- Phone handoff (add photos from your phone) ----
 import { handoff, callerNow, origin, qrSvg, AVAILABLE, photoStore } from '@/lib/handoff';

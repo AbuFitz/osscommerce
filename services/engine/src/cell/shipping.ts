@@ -1,4 +1,4 @@
-import { ShippingCalculator, LanguageCode, type Order } from '@vendure/core';
+import { ShippingCalculator, ShippingEligibilityChecker, LanguageCode, type Order } from '@vendure/core';
 
 /** Calculators the engine does not ship with. The engine's only built-in is a fixed rate, so "free over £50", weight bands and per-item rates need these.
  *  All amounts are in minor units and tax-inclusive when `priceIncludesTax` is true, matching how the portal's shipping page speaks. */
@@ -36,5 +36,23 @@ export const weightBands = new ShippingCalculator({
     const bands = parseBands(a.bands); const w = orderWeight(order); const band = bands.find(b => w <= b.upToGrams) ?? bands[bands.length - 1];
     return { price: band.price, priceIncludesTax: !!a.includesTax, taxRate: a.taxRate, metadata: { weightGrams: w, band: band.upToGrams } };
   },
+});
+
+/** Country-level delivery zones owned by a merchant channel. Vendure Zone records are global,
+ * so they must never be editable by store administrators. The display fields also live in the
+ * checker arguments, which lets the portal reconstruct a zone without adding global records or
+ * leaking one merchant's configuration to another. */
+export const deliveryZoneChecker = new ShippingEligibilityChecker({
+  code: 'oss-delivery-zone', description: L('Deliver only to the selected countries'),
+  args: {
+    countries: { type: 'string', label: L('ISO country codes') },
+    zoneName: { type: 'string', label: L('Portal zone name') },
+    regionsLabel: { type: 'string', label: L('Portal regions label') },
+  },
+  check: (_ctx, order, a) => {
+    const allowed = new Set(a.countries.split(',').map(x => x.trim().toUpperCase()).filter(Boolean));
+    return !!order.shippingAddress?.countryCode && allowed.has(order.shippingAddress.countryCode.toUpperCase());
+  },
+  shouldRunCheck: (_ctx, order) => ({ countryCode: order.shippingAddress?.countryCode ?? '' }),
 });
 export const OSS_CALCULATORS = [flatRateFreeOver, perItem, weightBands];

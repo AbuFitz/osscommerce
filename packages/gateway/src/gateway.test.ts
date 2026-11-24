@@ -77,6 +77,11 @@ test('rate limit per storefront', async () => {
   const calls: any[] = []; const g = createGateway({ registry: { resolve: async h => REG[h.toString('hex')] ?? null }, cells: { get: async id => CELLS[id] }, storefrontLimit: new TokenBucket(2, 0), sessionLimit: new TokenBucket(9, 9), idempotency: { get: async () => undefined, put: async () => {} }, audit: { record() {} }, sessionKey: 'k'.repeat(40), upstream: { post: async (...a: any[]) => { calls.push(a); return { status: 200, headers: {}, body: '{"data":{}}' }; } } });
   const s = [await post(g, secretA, READ), await post(g, secretA, READ), await post(g, secretA, READ)].map(r => r.status); assert.deepEqual(s, [200, 200, 429]);
 });
+test('rate limiter bounds unique keys and releases idle entries', () => {
+  let now = 0; const b = new TokenBucket(1, 0, () => now, 10, 2);
+  assert.equal(b.take('a'), true); assert.equal(b.take('b'), true); assert.equal(b.take('c'), false);
+  now = 11; assert.equal(b.take('c'), true);
+});
 test('idempotent mutation replays the stored response without a second upstream call', async () => {
   const w = world(); const s = (await post(w.g, secretA, ADD)).headers['oss-session'];
   const pay = 'mutation { addPaymentToOrder(input:{method:"stripe-connect", metadata:{}}) { __typename } }';

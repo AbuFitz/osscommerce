@@ -44,6 +44,7 @@ export interface Automation { id: string; name: string; trigger: string; action:
 export interface AutomationRun { id: string; at: string; automation: string; event: string; outcome: 'sent' | 'skipped_no_consent' | 'failed_retrying' | 'failed'; detail: string }
 export interface ServiceRequest { id: string; kind: 'product_upload' | 'design_change' | 'content' | 'integration' | 'other'; title: string; status: 'submitted' | 'quoted' | 'in_progress' | 'done' | 'declined'; quoteMinor?: number; createdAt: string; detail: string }
 export interface EmailSettings { brand: { shopName: string; accent: string; supportEmail: string; footer: string }; notifications: Record<string, boolean>; sendingDomain: { host: string; verified: boolean } }
+export interface Preferences { lowStock: boolean; newOrder: boolean; guest: boolean; consent: boolean; showSoldOut: boolean; pause: boolean }
 export interface NewProduct { title: string; priceMinor: number; sku?: string; status: 'draft' | 'published'; onHand: number }
 export interface NewDiscount { code: string; kind: 'percent' | 'fixed' | 'shipping'; value: number; minSpendMinor?: number; limit?: number; endDate?: string }
 export interface ZoneInput { originalName?: string; name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
@@ -52,7 +53,7 @@ export interface DomainCheck { ok: boolean; message: string; record?: { type: st
 /** One thing that needs the merchant's attention. The same list feeds the Overview alerts and the notification centre, so they never disagree. */
 export interface Notice { id: string; tone: 'danger' | 'warn' | 'info' | 'success'; title: string; body: string; href: string; action: string; at: string; read: boolean; kind: 'payment' | 'stock' | 'order' | 'access' | 'quote' | 'setup' }
 export interface LiveView { demo: boolean; asOf: string; visitorsNow: number; sessions: { value: number; vsPrev: number }; salesMinor: { value: number; vsPrev: number }; orders: { value: number; vsPrev: number }; behaviour: { activeCarts: number; checkingOut: number; purchased: number }; locations: { place: string; sessions: number }[]; returning: { newCustomers: number; returning: number } }
-export interface Billing { demo: boolean; planName: string; monthlyMinor: number; buildMinor: number; status: 'not_started' | 'active' | 'past_due'; nextInvoiceAt?: string; invoices: { number: string; description: string; issuedAt: string; amountMinor: number; status: 'paid' | 'due' | 'overdue' }[] }
+export interface Billing { demo: boolean; planName: string; monthlyMinor: number; buildMinor: number; status: 'not_started' | 'active' | 'past_due'; nextInvoiceAt?: string; invoices: { number: string; description: string; issuedAt: string; amountMinor: number; status: 'paid' | 'due' | 'overdue'; url?: string }[] }
 export type TaxClass = 'standard' | 'reduced' | 'zero';
 export interface OptionGroup { name: string; options: string[] }
 export interface Variant { id: string; options: string[]; sku: string; priceMinor: number; onHand: number; allocated: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number }
@@ -71,6 +72,7 @@ export interface CommerceGateway {
   live(): Promise<LiveView>;
   /** The merchant's subscription to OneSimpleCommerce (platform billing account). Never the merchant's own Stripe Connect account. */
   billing(): Promise<Billing>;
+  startBillingPortal(): Promise<StartPaymentSetup>;
   orders(q?: { filter?: string; q?: string }): Promise<Order[]>;
   order(id: string): Promise<Order | null>;
   products(): Promise<Product[]>;
@@ -86,6 +88,7 @@ export interface CommerceGateway {
   automations(): Promise<{ rules: Automation[]; runs: AutomationRun[]; runsLimit: number }>;
   serviceRequests(): Promise<ServiceRequest[]>;
   emailSettings(): Promise<EmailSettings>;
+  preferences(): Promise<Preferences>;
   saveSection(sectionId: string, fields: Record<string, string>): Promise<MutationResult>;
   publishContent(): Promise<MutationResult>;
   saveLegal(slug: LegalPage['slug'], body: string, publish: boolean): Promise<MutationResult>;
@@ -98,7 +101,7 @@ export interface CommerceGateway {
   inviteMember(email: string, role: Member['role']): Promise<MutationResult>;
   rollbackTheme(version: string): Promise<MutationResult>;
   decideGrant(id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<MutationResult>;
-  savePreferences(prefs: Record<string, boolean>): Promise<MutationResult>;
+  savePreferences(prefs: Preferences): Promise<MutationResult>;
   product(id: string): Promise<ProductDetail | null>;
   saveVariants(productId: string, d: { optionGroups: OptionGroup[]; variants: VariantInput[] }): Promise<MutationResult>;
   collections(): Promise<Collection[]>;

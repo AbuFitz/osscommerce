@@ -2,6 +2,8 @@ import type { Pool, PoolClient } from 'pg';
 import type { DomainEvent, EventType, Rule, Run } from './model.ts';
 import type { EventStore, RuleStore, RunStore, SuppressionPort } from './ports.ts';
 import { createHash } from 'node:crypto';
+import type { CommerceEmailProfile } from './commerce-email.ts';
+import type { SuppressionReason } from './resend.ts';
 
 /** Postgres adapters for the control-plane tables. Every query runs inside a transaction that first sets app.store_id,
  *  so row-level security confines it to one merchant. Connect as a non-owner role (e.g. oss_runtime members), never the table owner. */
@@ -37,5 +39,62 @@ export class PgStores {
   suppression: SuppressionPort & { add(storeId: string, email: string, reason: 'bounce' | 'complaint' | 'unsubscribe' | 'manual'): Promise<void> } = {
     isSuppressed: (storeId, email) => this.tx(storeId, async c => (await c.query('select 1 from cp.email_suppressions where store_id = $1 and email = $2', [storeId, email.toLowerCase()])).rowCount === 1),
     add: (storeId, email, reason) => this.tx(storeId, async c => { await c.query('insert into cp.email_suppressions (store_id, email, reason) values ($1,$2,$3) on conflict do nothing', [storeId, email.toLowerCase(), reason]); }),
+  };
+
+  consent = {
+    hasMarketingConsent: (storeId: string, email: string): Promise<boolean> => this.tx(storeId, async c => {
+      const row = (await c.query('select granted from cp.marketing_consent where store_id=$1 and email=$2 order by occurred_at desc, id desc limit 1', [storeId, email.toLowerCase()])).rows[0];
+      return row?.granted === true;
+    }),
+    record: (storeId: string, email: string, granted: boolean, source: string): Promise<void> => this.tx(storeId, async c => { await c.query('insert into cp.marketing_consent(store_id,email,granted,source) values ($1,$2,$3,$4)', [storeId, email.toLowerCase(), granted, source]); }),
+  };
+
+  /** Record withdrawal and suppression together so an unsubscribe can never partially apply. */
+  unsubscribe = (storeId: string, email: string): Promise<void> => this.tx(storeId, async c => {
+    const normalized = email.toLowerCase();
+    await c.query('insert into cp.marketing_consent(store_id,email,granted,source) values ($1,$2,false,$3)', [storeId, normalized, 'unsubscribe_link']);
+    await c.query("insert into cp.email_suppressions (store_id, email, reason) values ($1,$2,'unsubscribe') on conflict (store_id, email) do update set reason = excluded.reason", [storeId, normalized]);
+  });
+
+  state = {
+    checkoutCompleted: (storeId: string, checkoutId: string): Promise<boolean> => this.tx(storeId, async c => (await c.query("select 1 from cp.automation_events where store_id=$1 and type='checkout.completed' and payload #>> '{subject,checkoutId}'=$2 limit 1", [storeId, checkoutId])).rowCount === 1),
+    orderCancelled: (storeId: string, orderId: string): Promise<boolean> => this.tx(storeId, async c => (await c.query("select 1 from cp.automation_events where store_id=$1 and type='order.cancelled' and payload #>> '{subject,orderId}'=$2 limit 1", [storeId, orderId])).rowCount === 1),
+  };
+
+  limits = {
+    automationRunsPerMonth: (storeId: string): Promise<number> => this.tx(storeId, async c => Number((await c.query('select automation_runs_per_month n from cp.automation_settings where store_id=$1', [storeId])).rows[0]?.n ?? 0)),
+    quietHours: (storeId: string): Promise<{ tz: string; from: number; to: number } | null> => this.tx(storeId, async c => { const r = (await c.query('select timezone, quiet_from, quiet_to from cp.automation_settings where store_id=$1', [storeId])).rows[0]; return r && r.quiet_from !== null && r.quiet_to !== null ? { tz: r.timezone, from: r.quiet_from, to: r.quiet_to } : null; }),
+  };
+
+  emailProfile = {
+    get: (storeId: string): Promise<CommerceEmailProfile | null> => this.tx(storeId, async c => {
+      const r = (await c.query(`select p.*, (select h.host from cp.storefronts f join cp.storefront_hosts h using (storefront_id)
+        where f.store_id = p.store_id and f.env = 'production' and f.state = 'live' and h.verified = true order by h.host limit 1) storefront_host
+        from cp.email_profiles p where p.store_id = $1 and p.domain_status = $2`, [storeId, 'verified'])).rows[0];
+      if (!r?.storefront_host) return null;
+      return {
+        fromName: r.from_name,
+        fromEmail: `${r.from_local_part}@${r.sending_domain}`,
+        replyTo: r.reply_to ?? undefined,
+        storefrontUrl: `https://${r.storefront_host}`,
+        brand: { shopName: r.shop_name, accent: r.accent, logoUrl: r.logo_url ?? undefined, supportEmail: r.support_email, address: r.postal_address ?? undefined, footer: r.footer ?? undefined },
+        edits: r.template_edits,
+      };
+    }),
+  };
+
+  /** Resolve the tenant from our stored provider message id, never from webhook-supplied store metadata. */
+  async resolveStoreForEmailMessage(messageId: string): Promise<string | null> {
+    const r = (await this.pool.query('select cp.resolve_email_message($1) store_id', [messageId])).rows[0];
+    return r?.store_id ?? null;
+  }
+
+  emailWebhook = {
+    apply: (input: { providerEventId: string; storeId: string; messageId: string; type: string; suppression?: { email: string; reason: SuppressionReason } }): Promise<'applied' | 'duplicate'> => this.tx(input.storeId, async c => {
+      const inserted = await c.query('insert into cp.email_webhook_events (provider_event_id, store_id, message_id, type) values ($1,$2,$3,$4) on conflict do nothing returning provider_event_id', [input.providerEventId, input.storeId, input.messageId, input.type]);
+      if (!inserted.rowCount) return 'duplicate';
+      if (input.suppression) await c.query('insert into cp.email_suppressions (store_id, email, reason) values ($1,$2,$3) on conflict (store_id, email) do update set reason = excluded.reason', [input.storeId, input.suppression.email.toLowerCase(), input.suppression.reason]);
+      return 'applied';
+    }),
   };
 }

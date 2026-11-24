@@ -12,9 +12,9 @@ export const Field: z.ZodType<any> = z.lazy(() => z.discriminatedUnion('type', [
   z.object({ ...Base, type: z.literal('select'), options: z.array(z.string()).min(1) }),
   z.object({ ...Base, type: z.literal('productRef'), max: z.number().int().positive().default(1) }),
   z.object({ ...Base, type: z.literal('collectionRef') }),
-  z.object({ ...Base, type: z.literal('list'), min: z.number().int().default(0), max: z.number().int().positive().default(12), of: z.record(Field) }),
+  z.object({ ...Base, type: z.literal('list'), min: z.number().int().default(0), max: z.number().int().positive().default(12), of: z.record(z.string(), Field) }),
 ]));
-export const Manifest = z.object({ version: z.number().int().positive(), entries: z.record(z.object({ label: z.string(), singleton: z.boolean().default(true), fields: z.record(Field) })) });
+export const Manifest = z.object({ version: z.number().int().positive(), entries: z.record(z.string(), z.object({ label: z.string(), singleton: z.boolean().default(true), fields: z.record(z.string(), Field) })) });
 export type Manifest = z.infer<typeof Manifest>;
 
 const SAFE_URL = /^(https:\/\/|\/(?!\/)|mailto:|tel:)/;

@@ -19,8 +19,8 @@ export class OutboxService implements OnApplicationBootstrap, OnApplicationShutd
   onApplicationShutdown() { if (this.timer) clearInterval(this.timer); }
 
   async record(orderId: string | number, toState: string) {
-    const order = await this.conn.rawConnection.getRepository(Order).findOne({ where: { id: orderId as any }, relations: ['customer'] }); if (!order) return;
-    const ev = fromOrderState(CellPlugin.options.storeId, { id: String(order.id), code: order.code, totalWithTax: order.totalWithTax, currencyCode: order.currencyCode, customer: order.customer }, toState, '1');
+    const order = await this.conn.rawConnection.getRepository(Order).findOne({ where: { id: orderId as any }, relations: ['customer', 'lines', 'lines.productVariant', 'surcharges', 'fulfillments'] }); if (!order) return;
+    const ev = fromOrderState(CellPlugin.options.storeId, order, toState, '1');
     if (ev) await this.store.add(ev);
   }
   /** Re-derive events for settled/shipped/cancelled orders that have none. Idempotent: the id is deterministic. */

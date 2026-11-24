@@ -16,7 +16,7 @@ const fakeCell = (key: 'a' | 'b') => http.createServer((req, res) => { let b = '
 
 before(async () => {
   if (skip) return;
-  admin = new pg.Pool({ connectionString: ADMIN });
+  admin = new pg.Pool({ connectionString: ADMIN! });
   cellA = fakeCell('a'); cellB = fakeCell('b'); const ua = await listen(cellA), ub = await listen(cellB);
   await admin.query(`drop role if exists gw_test`); await admin.query(`create role gw_test login password 'gw' in role oss_runtime`);
   await admin.query(`insert into cp.stores(store_id, organisation_id, cell_id, region, lifecycle) values ('it_a','o','it_cell_a','eu-west-london','live'),('it_b','o','it_cell_b','eu-west-london','live') on conflict do nothing`);
@@ -25,7 +25,7 @@ before(async () => {
     await admin.query(`insert into cp.storefront_credentials(credential_id, storefront_id, purpose, secret_hash, prefix, expires_at) values ($1,$2,'server',$3,$4, now()+interval '1 day') on conflict do nothing`, [id, sf, sha(s), s.slice(0, 6)]);
   // a cell is a "live" cell, a "test" cell; preview storefronts may only reach the test one
   await admin.query(`insert into cp.cells(cell_id, url, channel_token, mode) values ('it_cell_a',$1,'chan-token-a-0000000','live'),('it_cell_b',$2,'chan-token-b-0000000','live') on conflict do nothing`, [ua.replace('http://', 'https://') , ub.replace('http://', 'https://')]).catch(async () => { /* https check: use direct urls below */ });
-  runtime = new pg.Pool({ connectionString: ADMIN.replace(/\/\/[^@]*@/, '//gw_test:gw@') });
+  runtime = new pg.Pool({ connectionString: ADMIN!.replace(/\/\/[^@]*@/, '//gw_test:gw@') });
   // cells table enforces https; the integration rewrites to the local http servers at the upstream layer
   const cells = new PgCells(runtime); const map: Record<string, string> = { ['https://' + ua.slice(7)]: ua, ['https://' + ub.slice(7)]: ub };
   const server = createServer({

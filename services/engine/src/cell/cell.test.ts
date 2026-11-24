@@ -109,10 +109,13 @@ test('webhook route: bad signature 400, valid signed event 200 and applied once'
 });
 
 import { MemOutbox, flush, fromOrderState, sign as cellSign } from './outbox.ts';
-const ord = { id: '1', code: 'A1', totalWithTax: 7495, currencyCode: 'GBP', customer: { emailAddress: 'maya@example.com', firstName: 'Maya' } };
+const ord = { id: '1', code: 'A1', total: 6246, totalWithTax: 7495, subTotalWithTax: 7000, shippingWithTax: 495, currencyCode: 'GBP', orderPlacedAt: new Date('2026-11-23T12:00:00Z'),
+  customer: { emailAddress: 'maya@example.com', firstName: 'Maya', lastName: 'Lee' }, shippingAddress: { fullName: 'Maya Lee', streetLine1: '12 Mill Lane', city: 'Bristol', postalCode: 'BS1 4AX', country: 'United Kingdom' },
+  lines: [{ quantity: 2, discountedUnitPriceWithTax: 3500, productVariant: { name: 'Stoneware mug' } }], fulfillments: [] };
 test('outbox: only buyer/merchant-relevant states become events; id is stable and unique per transition', () => {
   assert.equal(fromOrderState('store_a', ord, 'AddingItems', '1'), null);
   const e = fromOrderState('store_a', ord, 'PaymentSettled', '7')!; assert.equal(e.type, 'order.paid'); assert.equal(e.storeId, 'store_a'); assert.equal(e.data.totalMinor, 7495);
+  assert.deepEqual(e.data.lines, [{ title: 'Stoneware mug', quantity: 2, unitMinor: 3500 }]); assert.equal(e.data.vatMinor, 1249); assert.match(String(e.data.shipTo), /Bristol/);
   assert.equal(e.id, fromOrderState('store_a', ord, 'PaymentSettled', '7')!.id); assert.notEqual(e.id, fromOrderState('store_a', ord, 'Shipped', '8')!.id);
 });
 test('signing format matches the control plane (shared vector)', () => assert.equal(cellSign('k'.repeat(40), '{"a":1}', 1700000000), 't=1700000000,v1=65bc88d8b5a50339be3468ec13d7cadb91095faf49ecf51063403f667356507d'));

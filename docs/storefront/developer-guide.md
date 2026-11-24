@@ -18,11 +18,12 @@
 2. Provision project, credentials, env, domain: `packages/provisioning` (resumable).
 3. Build the site with `@oss-commerce/storefront-sdk`: config, `createClient`, tags, `handleRevalidation`, content manifest.
 4. Connect: gateway resolves the credential; compatibility is checked with `checkCompatibility`.
-5. Content: declare a manifest; the portal edits it; the site reads validated published content.
+5. Content: declare a manifest; the portal edits it; the site reads a published entry with `client.content(entry)`. The managed homepage uses `page/home`; legal pages use `legal/privacy`, `legal/terms`, `legal/shipping` and `legal/returns`. Validate the returned `body` against the local manifest before rendering it.
 6. Launch: a production storefront moves `connected` -> `approved` -> `live`; only one live production storefront per store.
 
 ## Rules for storefront code
 - Call the commerce API only from server code (server components, route handlers, server actions).
 - Keep the shopper session in an HttpOnly cookie set by a same-origin route. Never put it in `localStorage` or a `NEXT_PUBLIC_` variable.
 - Cache only public catalogue and content, tagged with `tag(storeId, ...)`. Never cache cart, checkout, customer or order responses.
+- Read `client.preferences()` on the server and enforce all four public flags: hide sold-out products when `showSoldOut` is false, render an unticked marketing-consent control only when `askMarketingConsent` is true, require sign-in when `guestCheckout` is false, and stop before creating a payment session when `checkoutPaused` is true. The engine independently enforces the pause, so the UI is not the security boundary.
 - Mutations that must not duplicate (add payment, place order) pass an idempotency key.

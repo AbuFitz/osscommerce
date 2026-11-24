@@ -3,7 +3,8 @@ import { TenantGuard } from './tenant-guard.ts';
 import { VendurePlugin, PluginCommonModule, Injector, TransactionalConnection, Order, RequestContext, ID } from '@vendure/core';
 import { OssOutbox } from './outbox-entity.ts';
 import { OutboxService } from './events.ts';
-import { OSS_CALCULATORS } from './shipping.ts';
+import { OSS_CALCULATORS, deliveryZoneChecker } from './shipping.ts';
+import { fixedOrderDiscount } from './discounts.ts';
 import { PaymentSessionResolver, shopApiExtensions } from './shop-extension.ts';
 import Stripe from 'stripe';
 import { connectHandler } from './handler.ts';
@@ -12,9 +13,21 @@ import { controlMiddleware, CONTROL_PATH } from './control-route.ts';
 import type { StripePort } from './stripe-port.ts';
 import type { PaymentState, WebhookDeps } from './webhooks.ts';
 
-/** Whether this cell may start a new payment. The control plane sets it from the merchant's Stripe account state. Fails closed when unset in staging/production. */
-export interface CheckoutGate { get(): Promise<{ allowed: boolean; reason?: string }>; set(allowed: boolean, reason?: string): Promise<void> }
-export class MemGate implements CheckoutGate { constructor(public allowed = true, public reason?: string) {} async get() { return { allowed: this.allowed, reason: this.reason }; } async set(a: boolean, r?: string) { this.allowed = a; this.reason = r; } }
+/** Independent reasons that may close checkout. One source becoming healthy must never
+ * erase another source's restriction (for example, a merchant unpausing while Stripe is restricted). */
+export type CheckoutGateSource = 'payments' | 'merchant';
+export interface CheckoutGate {
+  get(): Promise<{ allowed: boolean; reason?: string }>;
+  set(allowed: boolean, reason?: string, source?: CheckoutGateSource): Promise<void>;
+}
+export class MemGate implements CheckoutGate {
+  private states = new Map<CheckoutGateSource, { allowed: boolean; reason?: string }>();
+  constructor(allowed = true, reason?: string) { this.states.set('payments', { allowed, reason }); }
+  get allowed() { return [...this.states.values()].every(state => state.allowed); }
+  get reason() { return [...this.states.values()].find(state => !state.allowed)?.reason; }
+  async get() { return { allowed: this.allowed, reason: this.reason }; }
+  async set(allowed: boolean, reason?: string, source: CheckoutGateSource = 'payments') { this.states.set(source, { allowed, reason }); }
+}
 export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: string; webhookSecret: string; feeBp: number; refundsReturnFee: boolean; storeId: string; publishableKey: string;
   checkoutGate?: CheckoutGate; controlSecret?: string;
   outbox?: { cellId: string; secret: string; url: string; post(url: string, init: { body: string; headers: Record<string, string> }): Promise<{ status: number }>; intervalMs?: number; onAlert?: (m: string) => void } }
@@ -31,6 +44,8 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
     config.apiOptions.middleware = [...(config.apiOptions.middleware ?? []), { route: WEBHOOK_PATH, beforeListen: true, handler: stripeWebhookMiddleware({ stripe: o.sdk, secret: o.webhookSecret, deps: CellPlugin.deps }) },
       ...(o.controlSecret && o.checkoutGate ? [{ route: CONTROL_PATH, beforeListen: true, handler: controlMiddleware({ secret: o.controlSecret, gate: o.checkoutGate }) }] : [])];
     config.shippingOptions.shippingCalculators = [...(config.shippingOptions.shippingCalculators ?? []), ...OSS_CALCULATORS];
+    config.shippingOptions.shippingEligibilityCheckers = [...(config.shippingOptions.shippingEligibilityCheckers ?? []), deliveryZoneChecker];
+    config.promotionOptions.promotionActions = [...(config.promotionOptions.promotionActions ?? []), fixedOrderDiscount];
     config.customFields.ProductVariant = [...(config.customFields.ProductVariant ?? []), { name: 'weightGrams', type: 'int', defaultValue: 0, public: true, label: [{ languageCode: 'en' as any, value: 'Weight (grams)' }] }];
     config.customFields.Order = [...(config.customFields.Order ?? []),
       { name: 'ossPaymentState', type: 'string', defaultValue: 'pending', public: false, internal: true },

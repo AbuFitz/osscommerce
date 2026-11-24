@@ -5,6 +5,13 @@
   "scripts": {
     "dev": "npm run dev -w @oss-commerce/portal",
     "build": "npm run build -w @oss-commerce/portal",
+    "build:all": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && npm run typecheck --prefix services/engine",
+    "test": "npm test --workspaces --if-present",
+    "verify": "npm run typecheck && npm test && npm run test:infra && npm test --prefix services/engine && npm run build:all",
+    "test:infra": "node --test infra/control-plane/*.test.mjs",
+    "migrate:control-plane": "node infra/control-plane/migrate.mjs",
     "proof:isolation": "npm run proof:isolation --prefix services/engine"
-  }
+  },
+  "devDependencies": { "pg": "^8.13.0" }
 }

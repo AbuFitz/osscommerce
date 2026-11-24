@@ -13,7 +13,7 @@ Date: 15 November 2026. Status: accepted, with open items below.
 - **VAT.** Whether £479 and £39 include VAT. No VAT number is on record.
 - **Build scope and support allowance.** The site describes them in general terms; the order form must define them.
 - **Existing Stripe products and subscriptions** were not touched. If any exist at the old prices they need changing by hand.
-- **Subscription billing is not connected.** `billing()` is demo data. It needs Stripe Billing on the platform account, an invoices feed and a payment-method update flow.
+- **Subscription billing is connected after provisioning.** The live portal reads the store's platform Stripe subscription and hosted invoices through a separately scoped billing key. A recently authenticated merchant can open Stripe's hosted Billing Portal to manage their payment method; creating subscriptions remains an operator-managed workflow.
 - **Merchant sign-in is not built.** The site hides "Sign in" until `NEXT_PUBLIC_PORTAL_URL` is set.
 - **Enquiries are stored but nobody is notified.** Add an email or an operations view before relying on the form. Retention period undecided.
 - **Migration 0008 is applied only to the local test database**, not to Neon dev or staging.

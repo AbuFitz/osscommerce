@@ -132,6 +132,7 @@ export const demoGateway: CommerceGateway = {
     if (st !== 'live') return { ...base, status: 'not_started', invoices: st === 'new' ? [] : [build] };
     return { ...base, status: 'active', nextInvoiceAt: '2026-12-01T09:00:00Z', invoices: [{ number: 'OSC-0004', description: 'OneSimpleCommerce, November', issuedAt: '2026-11-01T09:00:00Z', amountMinor: LAUNCH_PLAN.monthlyMinor, status: 'paid' }, { number: 'OSC-0003', description: 'OneSimpleCommerce, October', issuedAt: '2026-10-01T09:00:00Z', amountMinor: LAUNCH_PLAN.monthlyMinor, status: 'paid' }, { number: 'OSC-0002', description: 'OneSimpleCommerce, September', issuedAt: '2026-09-01T09:00:00Z', amountMinor: LAUNCH_PLAN.monthlyMinor, status: 'paid' }, build] };
   },
+  async startBillingPortal(): Promise<StartPaymentSetup> { return { ok: false, message: 'Billing management opens in Stripe once the store is connected to the live platform. This is a demo.' }; },
   async live(): Promise<LiveView> {
     const st = await state(); if (st === 'new') return { demo: true, asOf: AS_OF, visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } };
     return { demo: true, asOf: AS_OF, visitorsNow: 3, sessions: { value: 76, vsPrev: 62 }, salesMinor: { value: 14000, vsPrev: 1300 }, orders: { value: 8, vsPrev: 300 }, behaviour: { activeCarts: 2, checkingOut: 1, purchased: 1 }, locations: [{ place: 'United Kingdom · England · Bristol', sessions: 31 }, { place: 'United Kingdom · England · London', sessions: 24 }, { place: 'United Kingdom · Scotland · Glasgow', sessions: 9 }, { place: 'United Kingdom · Wales · Cardiff', sessions: 7 }, { place: 'Ireland · Dublin', sessions: 5 }], returning: { newCustomers: 5, returning: 3 } };
@@ -254,6 +255,7 @@ export const demoGateway: CommerceGateway = {
   async emailSettings() {
     return { brand: { shopName: 'Kiln & Thread', accent: '#2c3a15', supportEmail: 'hello@kilnandthread.example', footer: 'Thank you for supporting a small studio.' }, notifications: { newOrder: true, lowStock: true, paymentIssue: true, dailySummary: false }, sendingDomain: { host: 'mail.kilnandthread.example', verified: false } };
   },
+  async preferences() { return { lowStock: true, newOrder: true, guest: true, consent: false, showSoldOut: true, pause: false }; },
   async saveSection() { return okDemo('Section saved as a draft.'); },
   async publishContent() { return okDemo('Published to your storefront.'); },
   async saveLegal(_s, _b, publish) { return okDemo(publish ? 'Page published.' : 'Draft saved.'); },
