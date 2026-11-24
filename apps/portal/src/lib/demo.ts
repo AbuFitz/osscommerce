@@ -254,6 +254,7 @@ export const demoGateway: CommerceGateway = {
   async emailSettings() {
     return { brand: { shopName: 'Kiln & Thread', accent: '#2c3a15', supportEmail: 'hello@kilnandthread.example', footer: 'Thank you for supporting a small studio.' }, notifications: { newOrder: true, lowStock: true, paymentIssue: true, dailySummary: false }, sendingDomain: { host: 'mail.kilnandthread.example', verified: false } };
   },
+  async preferences() { return { lowStock: true, newOrder: true, guest: true, consent: false, showSoldOut: true, pause: false }; },
   async saveSection() { return okDemo('Section saved as a draft.'); },
   async publishContent() { return okDemo('Published to your storefront.'); },
   async saveLegal(_s, _b, publish) { return okDemo(publish ? 'Page published.' : 'Draft saved.'); },

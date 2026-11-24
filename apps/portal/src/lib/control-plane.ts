@@ -1,6 +1,6 @@
 import 'server-only';
 import { Pool, type PoolClient } from 'pg';
-import type { AccessGrant, Automation, AutomationRun, ContentView, EmailSettings, LegalPage, PaymentSetup, Readiness, ServiceRequest, StorefrontView } from './gateway';
+import type { AccessGrant, Automation, AutomationRun, ContentView, EmailSettings, LegalPage, PaymentSetup, Preferences, Readiness, ServiceRequest, StorefrontView } from './gateway';
 import { GATE_COPY, LAUNCH_GATES } from './gateway';
 import type { StoreRecord } from '@oss-commerce/contracts';
 import { automationOutcome, grantTransition, paymentView, stripeOnboardingConfig } from './control-plane-mapping';
@@ -18,6 +18,8 @@ export interface ControlPlanePort {
   automations(storeId: string): Promise<{ rules: Automation[]; runs: AutomationRun[]; runsLimit: number }>;
   setAutomation(storeId: string, id: string, enabled: boolean): Promise<{ ok: boolean; message: string }>;
   emailSettings(storeId: string, fallbackName: string): Promise<EmailSettings>;
+  preferences(storeId: string): Promise<Preferences>;
+  savePreferences(storeId: string, preferences: Preferences): Promise<{ ok: boolean; message: string }>;
   saveEmailSettings(storeId: string, brand: Partial<EmailSettings['brand']>, notifications: Record<string, boolean>): Promise<{ ok: boolean; message: string }>;
   storefront(storeId: string): Promise<StorefrontView | null>;
   grants(storeId: string): Promise<AccessGrant[]>;
@@ -129,6 +131,21 @@ export class PgControlPlane implements ControlPlanePort {
       const r = (await client.query('select * from cp.email_profiles where store_id=$1', [storeId])).rows[0];
       if (!r) return { brand: { shopName: fallbackName, accent: '#0e1311', supportEmail: '', footer: '' }, notifications: {}, sendingDomain: { host: '', verified: false } };
       return { brand: { shopName: r.shop_name, accent: r.accent, supportEmail: r.support_email, footer: r.footer ?? '' }, notifications: r.template_edits?.notifications ?? {}, sendingDomain: { host: r.sending_domain, verified: r.domain_status === 'verified' } };
+    });
+  }
+
+  preferences(storeId: string) {
+    return this.tx(storeId, async client => {
+      const row = (await client.query(`select low_stock_alert,new_order_alert,guest_checkout,ask_marketing_consent,show_sold_out,checkout_paused from cp.store_preferences where store_id=$1`, [storeId])).rows[0];
+      if (!row) throw new Error('Store preferences are not provisioned.');
+      return { lowStock: row.low_stock_alert, newOrder: row.new_order_alert, guest: row.guest_checkout, consent: row.ask_marketing_consent, showSoldOut: row.show_sold_out, pause: row.checkout_paused };
+    });
+  }
+
+  savePreferences(storeId: string, p: Preferences) {
+    return this.tx(storeId, async client => {
+      await client.query(`select cp.update_store_preferences($1,$2,$3,$4,$5,$6,$7)`, [storeId, p.lowStock, p.newOrder, p.guest, p.consent, p.showSoldOut, p.pause]);
+      return { ok: true, message: 'Preferences saved.' };
     });
   }
 

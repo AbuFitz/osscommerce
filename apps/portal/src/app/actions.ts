@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings } from '@/lib/gateway';
+import type { OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -17,7 +17,7 @@ export async function decideGrant(id: string, d: 'approve' | 'decline' | 'revoke
   if (LIVE && !await recentlyAuthenticated()) return { ok: false, message: 'Sign out and sign in again before changing support access.' };
   return run(() => gateway().decideGrant(id, d), ['/settings/team']);
 }
-export async function savePreferences(p: Record<string, boolean>) { return run(() => gateway().savePreferences(p), ['/settings/preferences']); }
+export async function savePreferences(p: Preferences) { return run(() => gateway().savePreferences(p), ['/settings/preferences']); }
 export async function saveSection(id: string, fields: Record<string, string>) { return run(() => gateway().saveSection(id, fields), ['/content']); }
 export async function publishContent() { return run(() => gateway().publishContent(), ['/content']); }
 export async function saveLegal(slug: LegalPage['slug'], body: string, publish: boolean) { return run(() => gateway().saveLegal(slug, body, publish), ['/settings/legal']); }

@@ -9,6 +9,7 @@ export interface ClientOptions { timeoutMs?: number; maxRetries?: number; fetch?
 export interface CallOptions { session?: string; idempotencyKey?: string; signal?: AbortSignal; mutation?: boolean; language?: string; currency?: string }
 export interface Result<T> { data: T; session?: string; requestId?: string }
 export interface PublishedContent<T> { entry: string; revision: number; schemaVersion: number; body: T; publishedAt: string }
+export interface StorefrontPreferences { configVersion: number; guestCheckout: boolean; askMarketingConsent: boolean; showSoldOut: boolean; checkoutPaused: boolean }
 
 /** Server-side client for the OSS gateway. Used from Next server components, route handlers and server actions only:
  *  the server secret is a header here and must never reach a browser. The storefront is identified by that secret; there is no
@@ -64,7 +65,26 @@ export function createClient(cfg: StorefrontConfig, o: ClientOptions = {}) {
       } finally { clearTimeout(timer); }
     }
   }
-  return { call, query: <T>(op: string, q: string, v: Record<string, unknown> = {}, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: false }), mutate: <T>(op: string, q: string, v: Record<string, unknown>, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: true }), content };
+  async function preferences(options: { signal?: AbortSignal; revalidateSeconds?: number } = {}): Promise<StorefrontPreferences> {
+    for (let attempt = 0; ; attempt++) {
+      const started = Date.now(); const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), timeout); options.signal?.addEventListener('abort', () => ac.abort(), { once: true });
+      try {
+        const res = await f(`${cfg.apiUrl}/v1/preferences`, {
+          method: 'GET', signal: ac.signal, headers: { authorization: `Bearer ${cfg.serverSecret}`, 'oss-storefront': cfg.storefrontId, 'oss-sdk': SDK_VERSION, 'oss-api': SUPPORTED_API },
+          ...(options.revalidateSeconds === 0 ? { cache: 'no-store' as const } : { next: { revalidate: options.revalidateSeconds ?? 60 } } as any),
+        });
+        const requestId = res.headers.get('oss-request-id') ?? undefined; if (!res.ok) throw fromStatus(res.status, requestId);
+        const json = await res.json() as Partial<StorefrontPreferences>;
+        const keys = ['configVersion','guestCheckout','askMarketingConsent','showSoldOut','checkoutPaused'];
+        if (Object.keys(json).length !== keys.length || !Number.isInteger(json.configVersion) || !keys.slice(1).every(k => typeof (json as any)[k] === 'boolean')) throw new OssApiError('Invalid preferences response.', 'server', 200, requestId, true);
+        o.onEvent?.({ operation: 'preferences', attempt, ms: Date.now() - started, status: res.status, requestId, outcome: 'ok' }); return json as StorefrontPreferences;
+      } catch (e) {
+        const err = e instanceof OssApiError ? e : ac.signal.aborted && !options.signal?.aborted ? new OssApiError('The commerce API timed out.', 'timeout', undefined, undefined, true) : new OssApiError('Could not reach the commerce API.', 'network', undefined, undefined, true);
+        const again = err.retryable && attempt < maxRetries; o.onEvent?.({ operation: 'preferences', attempt, ms: Date.now() - started, status: err.status, requestId: err.requestId, outcome: again ? 'retry' : 'error', code: err.code }); if (!again) throw err; await sleep(Math.min(2000, 200 * 2 ** attempt) * (0.5 + Math.random() / 2));
+      } finally { clearTimeout(timer); }
+    }
+  }
+  return { call, query: <T>(op: string, q: string, v: Record<string, unknown> = {}, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: false }), mutate: <T>(op: string, q: string, v: Record<string, unknown>, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: true }), content, preferences };
 }
 
 /** Compatibility handshake. Run at boot and in CI: the API states which SDK majors it supports. */

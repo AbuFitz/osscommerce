@@ -25,4 +25,5 @@
 - Call the commerce API only from server code (server components, route handlers, server actions).
 - Keep the shopper session in an HttpOnly cookie set by a same-origin route. Never put it in `localStorage` or a `NEXT_PUBLIC_` variable.
 - Cache only public catalogue and content, tagged with `tag(storeId, ...)`. Never cache cart, checkout, customer or order responses.
+- Read `client.preferences()` on the server and enforce all four public flags: hide sold-out products when `showSoldOut` is false, render an unticked marketing-consent control only when `askMarketingConsent` is true, require sign-in when `guestCheckout` is false, and stop before creating a payment session when `checkoutPaused` is true. The engine independently enforces the pause, so the UI is not the security boundary.
 - Mutations that must not duplicate (add payment, place order) pass an idempotency key.

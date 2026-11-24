@@ -13,9 +13,21 @@ import { controlMiddleware, CONTROL_PATH } from './control-route.ts';
 import type { StripePort } from './stripe-port.ts';
 import type { PaymentState, WebhookDeps } from './webhooks.ts';
 
-/** Whether this cell may start a new payment. The control plane sets it from the merchant's Stripe account state. Fails closed when unset in staging/production. */
-export interface CheckoutGate { get(): Promise<{ allowed: boolean; reason?: string }>; set(allowed: boolean, reason?: string): Promise<void> }
-export class MemGate implements CheckoutGate { constructor(public allowed = true, public reason?: string) {} async get() { return { allowed: this.allowed, reason: this.reason }; } async set(a: boolean, r?: string) { this.allowed = a; this.reason = r; } }
+/** Independent reasons that may close checkout. One source becoming healthy must never
+ * erase another source's restriction (for example, a merchant unpausing while Stripe is restricted). */
+export type CheckoutGateSource = 'payments' | 'merchant';
+export interface CheckoutGate {
+  get(): Promise<{ allowed: boolean; reason?: string }>;
+  set(allowed: boolean, reason?: string, source?: CheckoutGateSource): Promise<void>;
+}
+export class MemGate implements CheckoutGate {
+  private states = new Map<CheckoutGateSource, { allowed: boolean; reason?: string }>();
+  constructor(allowed = true, reason?: string) { this.states.set('payments', { allowed, reason }); }
+  get allowed() { return [...this.states.values()].every(state => state.allowed); }
+  get reason() { return [...this.states.values()].find(state => !state.allowed)?.reason; }
+  async get() { return { allowed: this.allowed, reason: this.reason }; }
+  async set(allowed: boolean, reason?: string, source: CheckoutGateSource = 'payments') { this.states.set(source, { allowed, reason }); }
+}
 export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: string; webhookSecret: string; feeBp: number; refundsReturnFee: boolean; storeId: string; publishableKey: string;
   checkoutGate?: CheckoutGate; controlSecret?: string;
   outbox?: { cellId: string; secret: string; url: string; post(url: string, init: { body: string; headers: Record<string, string> }): Promise<{ status: number }>; intervalMs?: number; onAlert?: (m: string) => void } }

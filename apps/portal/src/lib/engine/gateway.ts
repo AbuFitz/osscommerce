@@ -1,6 +1,6 @@
 import 'server-only';
 import { LAUNCH_PLAN } from '@oss-commerce/contracts';
-import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type MutationResult, type Notice, type Order, type Summary } from '../gateway';
+import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type MutationResult, type Notice, type Order, type Preferences, type Summary } from '../gateway';
 import { createCollection as engineCreateCollection, previewCollection as enginePreview, type Exec } from './catalogue';
 import * as A from './adapter';
 import type { ControlPlanePort } from '../control-plane';
@@ -27,7 +27,7 @@ export interface StoreMeta { storeId: string; name: string; host?: string }
  * with the signed-in merchant's own session. Areas whose backing service is not connected yet return empty, honest states and refuse
  * changes with a clear message. They never return fixtures.
  */
-export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, control?: ControlPlanePort | null): CommerceGateway {
+export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, control?: ControlPlanePort | null, setCheckoutPaused?: (paused: boolean) => Promise<MutationResult>): CommerceGateway {
   const x: Exec = async (q, v) => (await exec())(q, v);
   const lowStockOf = async () => (await A.listProducts(x)).filter(p => p.status === 'published' && p.onHand - p.allocated <= p.threshold).length;
   const storeView = async () => {
@@ -65,11 +65,27 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     async content() { return control ? control.content(meta.storeId, meta.name) : { page: { id: 'home', title: 'Home', path: '/' }, sections: [], publishedAt: '', previewUrl: '#', versions: [] }; },
     async legalPages() { return control ? control.legalPages(meta.storeId) : []; }, async automations() { return control ? control.automations(meta.storeId) : { rules: [], runs: [], runsLimit: 0 }; }, async serviceRequests() { return control ? control.serviceRequests(meta.storeId) : []; },
     async emailSettings() { return control ? control.emailSettings(meta.storeId, meta.name) : { brand: { shopName: meta.name, accent: '#0e1311', supportEmail: '', footer: '' }, notifications: {}, sendingDomain: { host: '', verified: false } }; },
+    async preferences() { if (!control) throw new Error('Control plane is not configured.'); return control.preferences(meta.storeId); },
     saveSection: (id, fields) => control ? control.saveSection(meta.storeId, meta.name, id, fields) : no(), publishContent: () => control ? control.publishContent(meta.storeId, meta.name) : no(), saveLegal: (slug, body, publish) => control ? control.saveLegal(meta.storeId, slug, body, publish) : no(),
     setAutomation: (id, enabled) => control ? control.setAutomation(meta.storeId, id, enabled) : no(),
     createServiceRequest: (kind, title, detail) => control ? control.createServiceRequest(meta.storeId, kind, title, detail) : no(), decideQuote: (id, approve) => control ? control.decideQuote(meta.storeId, id, approve) : no(),
     saveEmailSettings: (brand, notifications) => control ? control.saveEmailSettings(meta.storeId, brand, notifications) : no(),
-    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(), savePreferences: no, createDiscount: d => A.createDiscount(x, d), saveZone: z => A.saveShippingZone(x, z),
+    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(),
+    async savePreferences(p: Preferences) {
+      if (!control || !setCheckoutPaused) return no();
+      if (Object.keys(p).length !== 6 || !Object.values(p).every(value => typeof value === 'boolean')) return { ok: false, message: 'Preferences were invalid. Nothing was changed.' };
+      const current = await control.preferences(meta.storeId);
+      if (current.pause !== p.pause) { const synced = await setCheckoutPaused(p.pause); if (!synced.ok) return synced; }
+      try {
+        const saved = await control.savePreferences(meta.storeId, p);
+        if (!saved.ok && current.pause !== p.pause) await setCheckoutPaused(current.pause);
+        return saved;
+      } catch (error) {
+        if (current.pause !== p.pause) await setCheckoutPaused(current.pause);
+        throw error;
+      }
+    },
+    createDiscount: d => A.createDiscount(x, d), saveZone: z => A.saveShippingZone(x, z),
     async requestLaunch() { if (!control) return no(); const blockers = launchBlockers((await storeView()).readiness); if (blockers.length) return { ok: false, message: `Finish ${blockers.map(item => item.label.toLowerCase()).join(', ')} before requesting launch.` }; return control.requestLaunch(meta.storeId); },
     async checkDomain() { return { ok: false, message: 'Domain checks are not connected for your store yet.' }; },
   };

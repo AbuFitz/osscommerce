@@ -4,14 +4,12 @@ import { Toggle } from '@oss-commerce/ui';
 import { Dialog } from '@oss-commerce/ui';
 import { useRun } from './Actions';
 import { savePreferences } from '@/app/actions';
-
-type Prefs = { lowStock: boolean; newOrder: boolean; guest: boolean; consent: boolean; showSoldOut: boolean; pause: boolean };
-const START: Prefs = { lowStock: true, newOrder: true, guest: true, consent: false, showSoldOut: true, pause: false };
+import type { Preferences as Prefs } from '@/lib/gateway';
 
 /** Pattern for every settings form: edit freely, a save bar appears when dirty, leaving with unsaved edits warns. Risky switches confirm first. */
-export function Preferences() {
-  const [saved, setSaved] = useState<Prefs>(START);
-  const [v, setV] = useState<Prefs>(START);
+export function Preferences({ initial }: { initial: Prefs }) {
+  const [saved, setSaved] = useState<Prefs>(initial);
+  const [v, setV] = useState<Prefs>(initial);
   const [confirmPause, setConfirmPause] = useState(false);
   const { run, pending } = useRun();
   const dirty = (Object.keys(v) as (keyof Prefs)[]).some(k => v[k] !== saved[k]);

@@ -9,3 +9,5 @@ export interface Upstream { post(url: string, init: { headers: Record<string, st
 export interface Audit { record(e: { storefrontId?: string; storeId?: string; operation?: string; outcome: string; reason?: string; requestId: string }): void }
 export interface PublishedContent { entry: string; revision: number; schemaVersion: number; body: unknown; publishedAt: string }
 export interface ContentStore { get(storefrontId: string, entry: string): Promise<PublishedContent | null> }
+export interface PublicPreferences { configVersion: number; guestCheckout: boolean; askMarketingConsent: boolean; showSoldOut: boolean; checkoutPaused: boolean }
+export interface PreferencesStore { get(storefrontId: string): Promise<PublicPreferences | null> }

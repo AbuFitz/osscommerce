@@ -32,8 +32,16 @@ const sql = (q: string, p: unknown[] = []) => conn.rawConnection.query(q, p);
 const STATE_DDL = `create table if not exists oss_processed_event (account text not null, event_id text not null, seen_at timestamptz not null default now(), primary key (account, event_id));
 create table if not exists oss_cell_state (key text primary key, value jsonb not null, updated_at timestamptz not null default now());`;
 const gate: CheckoutGate = {
-  async get() { const r = await sql(`select value from oss_cell_state where key = 'checkout'`); return r[0]?.value ?? { allowed: true }; },
-  async set(allowed, reason) { await sql(`insert into oss_cell_state (key, value) values ('checkout', $1) on conflict (key) do update set value = excluded.value, updated_at = now()`, [JSON.stringify({ allowed, reason })]); },
+  async get() {
+    const rows = await sql(`select key,value from oss_cell_state where key = 'checkout' or key like 'checkout:%'`);
+    if (!rows.length) return { allowed: true };
+    const blocked = rows.map((row: { value: { allowed?: boolean; reason?: string } }) => row.value).find((state: { allowed?: boolean }) => state.allowed === false);
+    return blocked ? { allowed: false, reason: blocked.reason } : { allowed: true };
+  },
+  async set(allowed, reason, source = 'payments') {
+    if (source === 'payments') await sql(`with saved as (insert into oss_cell_state (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value, updated_at = now() returning key) delete from oss_cell_state where key='checkout'`, [`checkout:${source}`, JSON.stringify({ allowed, reason })]);
+    else await sql(`insert into oss_cell_state (key, value) values ($1, $2) on conflict (key) do update set value = excluded.value, updated_at = now()`, [`checkout:${source}`, JSON.stringify({ allowed, reason })]);
+  },
 };
 const markIfNew = async (account: string, id: string) => (await sql(`insert into oss_processed_event (account, event_id) values ($1, $2) on conflict do nothing returning event_id`, [account, id])).length > 0;
 

@@ -76,6 +76,14 @@ test('client: published content uses the server credential, returns null on 404 
   assert.equal(seen[0].init.headers.authorization, `Bearer ${cfg.serverSecret}`); assert.equal(seen[0].init.headers['oss-storefront'], cfg.storefrontId); assert.equal(seen[0].init.cache, 'no-store');
   await assert.rejects(client.content('../secret'), /Invalid content entry/);
 });
+
+test('client: storefront preferences are authenticated and validated', async () => {
+  let request: RequestInit | undefined;
+  const client = createClient(cfg, { fetch: async (_url, init) => { request = init; return new Response(JSON.stringify({ configVersion: 7, guestCheckout: true, askMarketingConsent: false, showSoldOut: true, checkoutPaused: false }), { status: 200, headers: { 'oss-request-id': 'req-pref' } }); } });
+  assert.equal((await client.preferences()).configVersion, 7); assert.equal((request?.headers as Record<string, string>)['oss-storefront'], cfg.storefrontId);
+  const bad = createClient(cfg, { maxRetries: 0, fetch: async () => new Response('{"configVersion":7}', { status: 200 }) });
+  await assert.rejects(bad.preferences(), /Invalid preferences response/);
+});
 test('compatibility handshake', () => {
   assert.equal(checkCompatibility({ apiVersion: 'v1', minSdk: '0.1.0' }, '0.1.0').ok, true);
   assert.equal(checkCompatibility({ apiVersion: 'v1', minSdk: '0.2.0' }, '0.1.0').ok, false);

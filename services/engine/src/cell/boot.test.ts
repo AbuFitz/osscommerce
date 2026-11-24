@@ -94,3 +94,11 @@ test('control plane can block and re-allow checkout; unsigned, forged and out-of
   assert.equal((await (await control({ allowed: true, sequence: 4 })).json()).stale, true); assert.equal(gate.allowed, false, 'an older allow does not undo a newer block');
   assert.equal((await control({ allowed: true, sequence: 6 })).status, 200); assert.ok((await shopClient.query(g(`mutation{ createPaymentSession{ clientSecret } }`))).createPaymentSession.clientSecret);
 });
+test('merchant and payment restrictions are independent', async () => {
+  assert.equal((await control({ allowed: false, reason: 'merchant_paused', sequence: 10, source: 'merchant' })).status, 200);
+  assert.equal((await control({ allowed: false, reason: 'requirements.past_due', sequence: 10, source: 'payments' })).status, 200);
+  assert.equal((await control({ allowed: true, sequence: 11, source: 'merchant' })).status, 200);
+  assert.equal((await gate.get()).allowed, false, 'merchant unpause must not erase a Stripe restriction');
+  assert.equal((await control({ allowed: true, sequence: 11, source: 'payments' })).status, 200);
+  assert.equal((await gate.get()).allowed, true);
+});
