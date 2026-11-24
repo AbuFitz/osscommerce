@@ -14,7 +14,8 @@ With neither set the portal refuses to start a request rather than show fixtures
 |---|---|
 | `ENGINE_ADMIN_URL` | The cell's Admin API, e.g. `https://cell.example/admin-api`. Server-side only |
 | `ENGINE_CHANNEL_TOKEN` | The store's channel token, when the cell hosts more than the default channel |
-| `STORE_NAME`, `STORE_ID`, `STORE_HOST` | Shown in the header. Will come from the control plane once the portal reads the store registry |
+| `STORE_NAME`, `STORE_ID`, `STORE_HOST` | Select the tenant cell and provide the display-name fallback. `STORE_ID` must match the signed-in merchant's control-plane store |
+| `CONTROL_PLANE_DATABASE_URL` | Non-owner `oss_runtime` connection. Store registry, domain/deployment state, Stripe readiness, automations and email settings are all read under `SET LOCAL app.store_id` |
 | `APP_ENV=production` | Blocks demo data |
 
 The engine must use bearer tokens (`authOptions.tokenMethod: 'bearer'`), as the cell configuration does.
@@ -29,8 +30,11 @@ The engine must use bearer tokens (`authOptions.tokenMethod: 'bearer'`), as the 
 **Backed by the engine and tested against a real Vendure** (`services/engine/src/cell/portal-adapter.test.ts`, `apps/portal/scripts/live.cjs`):
 orders list and detail, order filters and search, fulfilment with tracking, full and partial refunds through the Connect payment handler, products list, product detail and variants, add product, CSV import, stock adjustment for single-variant products, saving variant price, SKU, stock, VAT class, weight and on-sale, collections (list, preview, create), customers, overview and analytics figures computed from real orders, notifications derived from real orders and stock, the signed-in user's name.
 
+**Backed by the control plane when `CONTROL_PLANE_DATABASE_URL` is set:**
+store lifecycle and verified hostnames, persisted Stripe account readiness, storefront deployment/domain state, automation rules and recent runs, automation enable/disable, monthly automation limit, sender identity/domain verification, and email brand/notification settings. Every query runs in a transaction with tenant RLS set first. Stripe onboarding still needs the hosted onboarding endpoint; the portal never fabricates a URL.
+
 **Not connected yet. These show an empty, honest state and refuse changes with a message; they never show fixtures:**
-discounts, delivery zones, payment account status and onboarding, storefront theme and domain, content editing, legal pages, automations, team invitations and roles, service requests, email settings, preferences, billing invoices, live visitor analytics.
+discounts, delivery zones, content editing, legal pages, team invitations and roles, service requests, preferences, billing invoices, and live visitor analytics.
 
 **Known limits**
 - Adding or removing options on an existing product is refused (existing variants can be edited).
@@ -46,7 +50,8 @@ discounts, delivery zones, payment account status and onboarding, storefront the
 1. **A hosted engine cell.** Vendure needs a long-running Node server and worker, PostgreSQL and Redis. It cannot run on Vercel. Until one exists at a public HTTPS address there is nothing for `ENGINE_ADMIN_URL` to point to.
 2. **An administrator account per merchant** on that cell, with a role limited to their channel (never SuperAdmin).
 3. **Stripe**: live keys on the cell, the merchant's connected account onboarded, and Stripe's written confirmation of the fee arrangement.
-4. **Vercel**: set the variables above on the portal project and remove `NEXT_PUBLIC_OSS_DEMO`.
+4. **Control plane**: apply migrations through `0012_automation_policy` before adding the runtime database URL. The portal credential must inherit `oss_runtime`, never own the tables.
+5. **Vercel**: set the variables above on the portal project and remove `NEXT_PUBLIC_OSS_DEMO`.
 
 ## Trying it locally
 ```bash
