@@ -8,7 +8,9 @@ async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<
   try { const r = await fn(); if (r.ok) paths.forEach(p => revalidatePath(p)); return r; }
   catch { return { ok: false, message: 'That did not go through. Nothing was changed. Try again, or contact support.' }; }
 }
-export async function fulfilOrder(id: string, tracking?: string) { return run(() => gateway().fulfilOrder(id, tracking), ['/orders', '/']); }
+export async function fulfilOrder(id: string, tracking?: string, lines?: { sku: string; qty: number }[]) { return run(() => gateway().fulfilOrder(id, tracking?.trim().slice(0, 120) || undefined, lines), ['/orders', `/orders/${id}`, '/']); }
+export async function cancelOrder(i: { orderId: string; reason: string; refund: boolean }) { return run(() => gateway().cancelOrder({ ...i, reason: i.reason.trim().slice(0, 200) }), ['/orders', `/orders/${i.orderId}`, '/', '/inventory']); }
+export async function addOrderNote(orderId: string, note: string) { return run(() => gateway().addOrderNote(orderId, note), [`/orders/${orderId}`]); }
 export async function refundOrder(i: RefundInput) { return run(() => gateway().refundOrder(i), ['/orders', '/']); }
 export async function inviteMember(email: string, role: Member['role']) { return run(() => gateway().inviteMember(email, role), ['/settings/team']); }
 export async function rollbackTheme(v: string) { return run(() => gateway().rollbackTheme(v), ['/storefront']); }

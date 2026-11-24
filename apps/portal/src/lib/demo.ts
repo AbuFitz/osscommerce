@@ -292,12 +292,29 @@ export const demoGateway: CommerceGateway = {
     r.status = approve ? 'in_progress' : 'declined'; return { ok: true, message: approve ? 'Quote approved. The work is billed separately, as quoted.' : 'Quote declined. Nothing will be charged.' };
   },
   async saveEmailSettings() { return okDemo('Email settings saved.'); },
-  async fulfilOrder(id, tracking) {
+  async fulfilOrder(id, tracking, only) {
     const x = await S(); const o = x.orders.find(q => q.id === id); if (!o) return { ok: false, message: 'Order not found.' };
     if (o.state === 'cancelled' || o.payment === 'failed') return { ok: false, message: 'This order was not paid, so it cannot be fulfilled.' };
     if (o.fulfilment === 'fulfilled') return { ok: false, message: 'This order is already fulfilled.' };
-    o.fulfilment = 'fulfilled'; o.state = 'completed'; o.timeline.push({ at: new Date().toISOString(), text: tracking ? `Fulfilled. Tracking ${tracking} emailed to ${o.email}.` : `Fulfilled. Confirmation emailed to ${o.email}.` });
-    return { ok: true, message: `Order #${o.number} marked fulfilled. ${o.customer.split(' ')[0]} has been emailed.` };
+    const want = only ? new Map(only.map(l => [l.sku, l.qty])) : null; let sentNow = 0;
+    for (const l of o.lines) { const left = l.qty - (l.sent ?? 0); const q = want ? Math.min(left, Math.max(0, Math.floor(want.get(l.sku) ?? 0))) : left; l.sent = (l.sent ?? 0) + q; sentNow += q; }
+    if (!sentNow) return { ok: false, message: want ? 'Choose at least one item to send.' : 'This order is already fulfilled.' };
+    const all = o.lines.every(l => (l.sent ?? 0) >= l.qty); o.fulfilment = all ? 'fulfilled' : 'partial'; o.state = all ? 'completed' : 'open';
+    o.timeline.push({ at: new Date().toISOString(), text: `${all ? 'Fulfilled' : 'Part of the order sent'}${tracking ? `. Tracking ${tracking}` : ''}. Confirmation emailed to ${o.email}.` });
+    return { ok: true, message: `${all ? `Order #${o.number} marked fulfilled.` : `Part of order #${o.number} marked as sent.`} ${o.customer.split(' ')[0]} has been emailed.` };
+  },
+  async cancelOrder(i) {
+    const x = await S(); const o = x.orders.find(q => q.id === i.orderId); if (!o) return { ok: false, message: 'Order not found.' };
+    if (o.state === 'cancelled') return { ok: false, message: 'This order is already cancelled.' };
+    if (o.fulfilment !== 'unfulfilled' || o.lines.some(l => (l.sent ?? 0) > 0)) return { ok: false, message: 'Part of this order has already been sent, so it cannot be cancelled. Refund what is needed instead.' };
+    const hadPaid = o.payment === 'paid'; o.state = 'cancelled';
+    o.timeline.push({ at: new Date().toISOString(), text: `Order cancelled${i.reason ? `: ${i.reason}` : ''}.` });
+    if (i.refund && hadPaid) { const left = o.totalMinor - o.refundedMinor; o.refundedMinor += left; o.payment = 'refunded'; o.timeline.push({ at: new Date().toISOString(), text: `Refund of £${(left / 100).toFixed(2)} confirmed.` }); return { ok: true, message: `Order cancelled and £${(left / 100).toFixed(2)} refunded to ${o.customer.split(' ')[0]}.` }; }
+    return { ok: true, message: hadPaid ? 'Order cancelled and its stock released. The customer has not been refunded yet.' : 'Order cancelled and its stock released.' };
+  },
+  async addOrderNote(orderId, note) {
+    const x = await S(); const o = x.orders.find(q => q.id === orderId); if (!o) return { ok: false, message: 'Order not found.' }; const n = note.trim(); if (!n) return { ok: false, message: 'Write a note first.' }; if (n.length > 2000) return { ok: false, message: 'Notes are limited to 2,000 characters.' };
+    o.timeline.push({ at: new Date().toISOString(), text: n, note: true, by: 'Mo' }); return { ok: true, message: 'Note added. Only your team can see it.' };
   },
   async refundOrder(i) {
     const x = await S(); const o = x.orders.find(q => q.id === i.orderId); if (!o) return { ok: false, message: 'Order not found.' };

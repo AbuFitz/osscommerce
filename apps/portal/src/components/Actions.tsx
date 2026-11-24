@@ -1,10 +1,10 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { Dialog, useToast } from '@oss-commerce/ui';
 import { FormDialog } from './FormDialog';
 import { money } from '@/lib/format';
-import type { MutationResult, Member } from '@/lib/gateway';
-import { decideGrant, fulfilOrder, inviteMember, refundOrder, rollbackTheme } from '@/app/actions';
+import type { MutationResult, Member, OrderLine } from '@/lib/gateway';
+import { addOrderNote, cancelOrder, decideGrant, fulfilOrder, inviteMember, refundOrder, rollbackTheme } from '@/app/actions';
 
 /** Runs a server action, then tells the person the real outcome. Failures say nothing changed. */
 export function useRun() {
@@ -16,16 +16,52 @@ export function useRun() {
 }
 function useDialog() { const [open, setOpen] = useState(false); return { open, show: () => setOpen(true), hide: () => setOpen(false) }; }
 
-export function FulfilAction({ orderId, number, items }: { orderId: string; number: number; items: string[] }) {
+/** Send everything, or choose how many of each item went in this parcel. Items already sent are not offered again. */
+export function FulfilAction({ orderId, number, lines }: { orderId: string; number: number; lines: OrderLine[] }) {
   const d = useDialog(); const { run, pending } = useRun(); const [trk, setTrk] = useState('');
+  const left = lines.map(l => ({ sku: l.sku, title: l.variant ? `${l.title} (${l.variant})` : l.title, left: l.qty - (l.sent ?? 0) })).filter(l => l.left > 0);
+  const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(left.map(l => [l.sku, l.left])));
+  useEffect(() => { if (d.open) setQty(Object.fromEntries(left.map(l => [l.sku, l.left]))); }, [d.open]); // eslint-disable-line react-hooks/exhaustive-deps
+  const total = left.reduce((s, l) => s + (qty[l.sku] ?? 0), 0); const all = left.every(l => (qty[l.sku] ?? 0) === l.left); const sentBefore = lines.some(l => (l.sent ?? 0) > 0);
+  const set = (sku: string, n: number, max: number) => setQty(q => ({ ...q, [sku]: Math.max(0, Math.min(max, n)) }));
   return (<>
-    <button className="btn lime" type="button" onClick={d.show}>Mark as fulfilled</button>
+    <button className="btn lime" type="button" onClick={d.show}>{sentBefore ? 'Fulfil the rest' : 'Mark as fulfilled'}</button>
     <Dialog open={d.open} onClose={d.hide} title={`Fulfil order #${number}`} description="The customer is emailed a shipping confirmation with the tracking link."
-      footer={<><button className="btn" type="button" onClick={d.hide}>Cancel</button><button className="btn primary" type="button" disabled={pending} onClick={() => run(() => fulfilOrder(orderId, trk || undefined), d.hide)}>{pending ? 'Saving…' : 'Mark as fulfilled'}</button></>}>
-      <ul className="dlg-list">{items.map(i => <li key={i}>{i}</li>)}</ul>
-      <div className="field"><label htmlFor="trk">Tracking number <span className="muted">(optional)</span></label><input id="trk" autoComplete="off" value={trk} onChange={e => setTrk(e.target.value)} /></div>
+      footer={<><button className="btn" type="button" onClick={d.hide}>Cancel</button><button className="btn primary" type="button" disabled={pending || total === 0} onClick={() => run(() => fulfilOrder(orderId, trk || undefined, all ? undefined : left.map(l => ({ sku: l.sku, qty: qty[l.sku] ?? 0 }))), d.hide)}>{pending ? 'Saving…' : all ? 'Mark as fulfilled' : `Send ${total} item${total === 1 ? '' : 's'}`}</button></>}>
+      <ul className="fq" aria-label="Items to send">{left.map(l => (
+        <li key={l.sku}><span className="t"><b>{l.title}</b><span className="muted">{l.left} to send</span></span>
+          <div className="stepper" role="group" aria-label={`Quantity of ${l.title} to send`}><button type="button" onClick={() => set(l.sku, (qty[l.sku] ?? 0) - 1, l.left)} disabled={(qty[l.sku] ?? 0) <= 0} aria-label="One fewer">−</button><output aria-live="polite">{qty[l.sku] ?? 0}</output><button type="button" onClick={() => set(l.sku, (qty[l.sku] ?? 0) + 1, l.left)} disabled={(qty[l.sku] ?? 0) >= l.left} aria-label="One more">+</button></div></li>))}</ul>
+      {!all && total > 0 && <p className="note">This sends part of the order. You can fulfil the rest later.</p>}
+      <div className="field"><label htmlFor="trk">Tracking number <span className="muted">(optional)</span></label><input id="trk" autoComplete="off" maxLength={120} value={trk} onChange={e => setTrk(e.target.value)} /></div>
     </Dialog>
   </>);
+}
+
+const REASONS = ['Customer asked to cancel', 'Out of stock', 'Could not deliver to that address', 'Suspected fraud', 'Other'];
+/** For orders that have not shipped. Stock is released straight away; the customer can be refunded in the same step. */
+export function CancelAction({ orderId, number, paid }: { orderId: string; number: number; paid: boolean }) {
+  const d = useDialog(); const { run, pending } = useRun(); const [reason, setReason] = useState(REASONS[0]); const [more, setMore] = useState(''); const [refund, setRefund] = useState(true);
+  const text = reason === 'Other' && more.trim() ? more.trim() : reason;
+  return (<>
+    <button className="btn ghost" type="button" onClick={d.show}>Cancel order</button>
+    <Dialog open={d.open} onClose={d.hide} title={`Cancel order #${number}?`} description="Nothing has been sent yet. The items go back into stock."
+      footer={<><button className="btn" type="button" onClick={d.hide} disabled={pending}>Keep order</button><button className="btn danger" type="button" disabled={pending || (reason === 'Other' && !more.trim())} onClick={() => run(() => cancelOrder({ orderId, reason: text, refund: paid && refund }), d.hide)}>{pending ? 'Cancelling…' : paid && refund ? 'Cancel and refund' : 'Cancel order'}</button></>}>
+      <div className="field"><label htmlFor="cr">Reason</label><select id="cr" value={reason} onChange={e => setReason(e.target.value)}>{REASONS.map(r => <option key={r}>{r}</option>)}</select></div>
+      {reason === 'Other' && <div className="field"><label htmlFor="cm">Tell us more</label><input id="cm" maxLength={160} value={more} onChange={e => setMore(e.target.value)} /></div>}
+      {paid ? <label className="check1"><input type="checkbox" checked={refund} onChange={e => setRefund(e.target.checked)} /> Refund the customer in full, and return our platform fee on it</label> : <p className="note">This order was not paid, so there is nothing to refund.</p>}
+      {paid && !refund && <p className="note">The order is cancelled but the customer keeps being charged until you refund it.</p>}
+    </Dialog>
+  </>);
+}
+
+/** A private note on the order. Only the team sees it; it appears in the timeline with who wrote it. */
+export function NoteForm({ orderId }: { orderId: string }) {
+  const { run, pending } = useRun(); const [note, setNote] = useState('');
+  return (<form className="notef" onSubmit={e => { e.preventDefault(); if (note.trim()) run(() => addOrderNote(orderId, note), () => setNote('')); }}>
+    <label htmlFor="on" className="sr">Add a private note</label>
+    <textarea id="on" rows={2} maxLength={2000} value={note} onChange={e => setNote(e.target.value)} placeholder="Add a private note for your team" />
+    <div className="notef-row"><small className="muted">Only your team can see notes.</small><button className="btn" type="submit" disabled={pending || !note.trim()} aria-busy={pending}>{pending ? 'Adding…' : 'Add note'}</button></div>
+  </form>);
 }
 
 export function RefundAction({ orderId, number, totalMinor, refundedMinor, feeBp }: { orderId: string; number: number; totalMinor: number; refundedMinor: number; feeBp: number }) {

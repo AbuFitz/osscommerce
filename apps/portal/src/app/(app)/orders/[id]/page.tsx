@@ -6,7 +6,8 @@ import { gateway } from '@/lib/gateway-instance';
 import { money, when } from '@/lib/format';
 import { PayBadge, FulBadge, Avatar } from '@/components/ui';
 import { Media } from '@/components/art';
-import { FulfilAction, RefundAction } from '@/components/Actions';
+import { CancelAction, FulfilAction, NoteForm, RefundAction } from '@/components/Actions';
+import { Printer } from 'lucide-react';
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const o = await gateway().order((await params).id);
@@ -27,8 +28,10 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           <div className={placed ? 'on' : ''}>Placed</div><div className={paid ? 'on' : ''}>{o.payment === 'failed' ? 'Payment failed' : 'Paid'}</div><div className={shipped ? 'on' : ''}>Fulfilled</div>
         </div>
         <div className="acts" style={{ marginTop: 18 }}>
-          {canFulfil && <FulfilAction orderId={o.id} number={o.number} items={o.lines.map(l => `${l.qty} × ${l.title}`)} />}
+          {canFulfil && <FulfilAction orderId={o.id} number={o.number} lines={o.lines} />}
+          {o.state === 'open' && o.fulfilment === 'unfulfilled' && <CancelAction orderId={o.id} number={o.number} paid={o.payment === 'paid'} />}
           {(o.payment === 'paid' || o.payment === 'partially_refunded') && <RefundAction orderId={o.id} number={o.number} totalMinor={o.totalMinor} refundedMinor={o.refundedMinor} feeBp={50} />}
+        <Link className="btn ghost" href={`/slip/${o.id}`} target="_blank"><Printer size={15} aria-hidden />Packing slip</Link>
         </div>
       </section>
       {o.payment === 'failed' && <div className="w flat" style={{ marginBottom: 16 }}>Payment failed. No charge was made and nothing needs fulfilling.</div>}
@@ -36,7 +39,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <section className="w c-8" aria-labelledby="items">
           <h2 id="items" style={{ marginBottom: 12 }}>Items</h2>
           <div className="rows">{o.lines.map(l => (
-            <div key={l.sku} className="row"><Media src={l.imageUrl} alt="" size={44} /><span className="t"><b>{l.title}</b><span className="mono">{l.sku} · {l.qty} × {money(l.unitMinor)}</span></span><span className="num">{money(l.qty * l.unitMinor)}</span></div>))}</div>
+            <div key={l.sku} className="row"><Media src={l.imageUrl} alt="" size={44} /><span className="t"><b>{l.title}</b><span className="mono">{l.sku} · {l.qty} × {money(l.unitMinor)}{(l.sent ?? 0) > 0 ? ` · ${l.sent} of ${l.qty} sent` : ''}</span></span><span className="num">{money(l.qty * l.unitMinor)}</span></div>))}</div>
           <dl className="kv" style={{ marginTop: 18 }}>
             <dt>Subtotal</dt><dd className="num">{money(sub)}</dd>
             {o.discountMinor > 0 && <><dt>Discount</dt><dd className="num">−{money(o.discountMinor)}</dd></>}
@@ -53,7 +56,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
             <div className="row"><Avatar name={o.customer} /><span className="t"><b>{o.customer}</b><span>{o.email}</span></span></div>
             <div className="muted" style={{ marginTop: 12 }}>{o.shipTo}</div></section>
           <section className="w" aria-labelledby="tl"><h2 id="tl" style={{ marginBottom: 14 }}>Timeline</h2>
-            <ol className="tl">{o.timeline.map((e, i) => <li key={i}>{e.text}<div className="muted" style={{ fontSize: 12 }}>{when(e.at)}</div></li>)}</ol></section>
+            <NoteForm orderId={o.id} /><ol className="tl">{[...o.timeline].reverse().map((e, i) => <li key={i} className={e.note ? 'note' : ''}>{e.note ? <><span className="nt">Note{e.by ? ` from ${e.by}` : ''}</span><p>{e.text}</p></> : e.text}<div className="muted" style={{ fontSize: 12 }}>{when(e.at)}</div></li>)}</ol></section>
         </aside>
       </div>
     </>

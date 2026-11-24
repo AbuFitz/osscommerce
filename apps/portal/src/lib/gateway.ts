@@ -5,8 +5,8 @@ export type PaymentStatus = 'pending' | 'authorised' | 'paid' | 'failed' | 'part
 export type FulfilmentStatus = 'unfulfilled' | 'partial' | 'fulfilled' | 'returned';
 export type OrderState = 'open' | 'cancelled' | 'completed';
 
-export interface OrderLine { sku: string; title: string; variant?: string; qty: number; unitMinor: number; imageUrl?: string }
-export interface OrderEvent { at: string; text: string }
+export interface OrderLine { /** The engine's id for this line, needed to fulfil part of an order. */ id?: string; sku: string; title: string; variant?: string; qty: number; /** How many of `qty` have already been sent. */ sent?: number; unitMinor: number; imageUrl?: string }
+export interface OrderEvent { at: string; text: string; /** A note a team member wrote, as opposed to something that happened. */ note?: boolean; by?: string }
 export interface Order {
   id: string; number: number; placedAt: string; customer: string; email: string;
   lines: OrderLine[]; shippingMinor: number; discountMinor: number; taxMinor: number; totalMinor: number;
@@ -105,7 +105,12 @@ export interface CommerceGateway {
   createServiceRequest(kind: ServiceRequest['kind'], title: string, detail: string): Promise<MutationResult>;
   decideQuote(id: string, approve: boolean): Promise<MutationResult>;
   saveEmailSettings(brand: Partial<EmailSettings['brand']>, notifications: Record<string, boolean>): Promise<MutationResult>;
-  fulfilOrder(orderId: string, tracking?: string): Promise<MutationResult>;
+  /** Fulfil an order, or only some of it when `lines` is given (quantities per line, by sku). */
+  fulfilOrder(orderId: string, tracking?: string, lines?: { sku: string; qty: number }[]): Promise<MutationResult>;
+  /** Cancel an order that has not shipped. Stock is released. With `refund`, the customer is also refunded in full. */
+  cancelOrder(i: { orderId: string; reason: string; refund: boolean }): Promise<MutationResult>;
+  /** A private note on the order, visible to the team only. */
+  addOrderNote(orderId: string, note: string): Promise<MutationResult>;
   refundOrder(i: RefundInput): Promise<MutationResult>;
   inviteMember(email: string, role: Member['role']): Promise<MutationResult>;
   rollbackTheme(version: string): Promise<MutationResult>;

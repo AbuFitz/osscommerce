@@ -117,3 +117,25 @@ test('refund: a partial refund goes through the payment handler on the merchant 
   const o = (await A.getOrder(x, order.id))!; assert.equal(o.payment, 'partially_refunded'); assert.equal(o.refundedMinor, 1000);
   const over = await A.refundOrder(x, { orderId: order.id, amountMinor: order.total, reason: 'x', restock: false, refundFee: true }); assert.equal(over.ok, false); assert.match(over.message, /refund up to/);
 });
+
+test('partial fulfilment: send one of two, the order shows part sent, then the rest completes it', async () => {
+  const o2 = await paidOrder(); const before = (await A.getOrder(x, o2.id))!; assert.equal(before.lines[0].qty, 2); assert.equal(before.lines[0].sent, 0);
+  const none = await A.fulfilOrder(x, o2.id, undefined, [{ sku: 'MUG-1', qty: 0 }]); assert.equal(none.ok, false); assert.match(none.message, /at least one/);
+  const part = await A.fulfilOrder(x, o2.id, 'TRK1', [{ sku: 'MUG-1', qty: 1 }]); assert.equal(part.ok, true, part.message); assert.match(part.message, /Part of the order/);
+  let o = (await A.getOrder(x, o2.id))!; assert.equal(o.fulfilment, 'partial'); assert.equal(o.state, 'open'); assert.equal(o.lines[0].sent, 1);
+  const over = await A.fulfilOrder(x, o2.id, undefined, [{ sku: 'MUG-1', qty: 5 }]); assert.equal(over.ok, true, 'asking for more than is left sends only what is left'); o = (await A.getOrder(x, o2.id))!; assert.equal(o.lines[0].sent, 2); assert.equal(o.fulfilment, 'fulfilled'); assert.equal(o.state, 'completed');
+  const cancel = await A.cancelOrder(x, { orderId: o2.id, reason: 'x', refund: false }); assert.equal(cancel.ok, false, 'a shipped order cannot be cancelled'); assert.match(cancel.message, /sent|already/);
+});
+test('notes: a private note is stored in the engine and comes back in the timeline marked as a note', async () => {
+  const r = await A.addOrderNote(x, order.id, '  Customer called about gift wrap.  '); assert.equal(r.ok, true, r.message);
+  const o = (await A.getOrder(x, order.id))!; const n = o.timeline.find(t => t.note); assert.ok(n); assert.equal(n!.text, 'Customer called about gift wrap.');
+  assert.equal((await A.addOrderNote(x, order.id, '   ')).ok, false); assert.equal((await A.addOrderNote(x, order.id, 'x'.repeat(2001))).ok, false);
+});
+test('cancel: an unshipped paid order is cancelled, its stock released, and the customer refunded in full when asked', async () => {
+  const stockBefore = (await A.listProducts(x)).find(p => p.sku === 'MUG-1')!; const o3 = await paidOrder();
+  assert.equal((await A.listProducts(x)).find(p => p.sku === 'MUG-1')!.allocated, stockBefore.allocated + 2, 'two reserved for the new order');
+  const refundsBefore = refunds.length; const r = await A.cancelOrder(x, { orderId: o3.id, reason: 'Out of stock', refund: true }); assert.equal(r.ok, true, r.message); assert.match(r.message, /cancelled/i);
+  const o = (await A.getOrder(x, o3.id))!; assert.equal(o.state, 'cancelled'); assert.equal(o.payment, 'refunded'); assert.equal(o.refundedMinor, o3.total); assert.equal(refunds.length, refundsBefore + 1); assert.ok(o.timeline.some(t => /cancelled: Out of stock/i.test(t.text)));
+  assert.equal((await A.listProducts(x)).find(p => p.sku === 'MUG-1')!.allocated, stockBefore.allocated, 'the two reserved units are released');
+  assert.equal((await A.cancelOrder(x, { orderId: o3.id, reason: 'again', refund: false })).ok, false, 'cancelling twice is refused');
+});
