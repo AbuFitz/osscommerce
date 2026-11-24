@@ -4,11 +4,11 @@ Two Vercel projects from the same GitHub repo (`AbuFitz/osscommerce`, branch `cl
 
 | | Marketing site | Portal (demo) |
 |---|---|---|
-| Project name | `oss-commerce-site` | `oss-commerce-portal-demo` |
+| Project name | `osscommerce-site` | `osscommerce-portal` |
 | Root Directory | `apps/site` | `apps/portal` |
 | Framework | Next.js | Next.js |
 | Environment variables | none | `NEXT_PUBLIC_OSS_DEMO=1` (Production and Preview) |
-| Protection | public once you are happy with it | keep **Vercel Authentication** on: it is demo data, not a live store |
+| Protection | public once DNS and the enquiry destination are verified | keep **Vercel Authentication** on while it is demo data, not a live store |
 
 Notes
 - The portal refuses to run on live data with the demo flag off; the demo flag is what enables fixtures, the `?state=` payment-state previews and phone photo upload (in-memory storage, resets on each deploy or cold start, so treat it as a preview only).
