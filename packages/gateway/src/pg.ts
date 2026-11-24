@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { Registry, CellDirectory, IdempotencyStore, Audit, Resolved } from './ports.ts';
+import type { Registry, CellDirectory, IdempotencyStore, Audit, Resolved, ContentStore } from './ports.ts';
 
 /** Postgres adapters. The pool must connect as a role that is a member of oss_runtime and NOT the table owner,
  *  so row-level security and the narrow security-definer functions are the only way in. */
@@ -23,6 +23,13 @@ export class PgIdempotency implements IdempotencyStore {
   constructor(private pool: Pool) {}
   async get(key: string) { const [sf, k] = split(key); const r = await this.pool.query('select status, body from cp.gateway_idempotency where storefront_id=$1 and key=$2', [sf, k]); return r.rows[0]; }
   async put(key: string, v: { status: number; body: string }) { const [sf, k] = split(key); await this.pool.query('insert into cp.gateway_idempotency(storefront_id,key,status,body) values ($1,$2,$3,$4) on conflict do nothing', [sf, k, v.status, v.body]); }
+}
+export class PgContent implements ContentStore {
+  constructor(private pool: Pool) {}
+  async get(storefrontId: string, entry: string) {
+    const x = (await this.pool.query('select * from cp.get_published_content($1,$2)', [storefrontId, entry])).rows[0];
+    return x ? { entry: x.entry, revision: Number(x.revision), schemaVersion: Number(x.schema_version), body: x.body, publishedAt: new Date(x.published_at).toISOString() } : null;
+  }
 }
 const split = (k: string): [string, string] => { const i = k.indexOf(':'); return [k.slice(0, i), k.slice(i + 1)]; };
 

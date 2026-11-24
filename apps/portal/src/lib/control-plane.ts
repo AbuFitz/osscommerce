@@ -1,11 +1,12 @@
 import 'server-only';
 import { Pool, type PoolClient } from 'pg';
-import type { AccessGrant, Automation, AutomationRun, EmailSettings, PaymentSetup, Readiness, ServiceRequest, StorefrontView } from './gateway';
+import type { AccessGrant, Automation, AutomationRun, EmailSettings, LegalPage, PaymentSetup, Readiness, ServiceRequest, StorefrontView } from './gateway';
 import { GATE_COPY, LAUNCH_GATES } from './gateway';
 import type { StoreRecord } from '@oss-commerce/contracts';
 import { automationOutcome, grantTransition, paymentView, stripeOnboardingConfig } from './control-plane-mapping';
 import { liveConnect, type ConnectPort } from '@oss-commerce/payments';
 import { isUuid, serviceRequestView, validateServiceRequest } from './service-requests';
+import { legalPagesFromRows, validateLegalBody } from './legal-content';
 
 type Row = Record<string, any>;
 
@@ -23,6 +24,8 @@ export interface ControlPlanePort {
   serviceRequests(storeId: string): Promise<ServiceRequest[]>;
   createServiceRequest(storeId: string, kind: ServiceRequest['kind'], title: string, detail: string): Promise<{ ok: boolean; message: string }>;
   decideQuote(storeId: string, id: string, approve: boolean): Promise<{ ok: boolean; message: string }>;
+  legalPages(storeId: string): Promise<LegalPage[]>;
+  saveLegal(storeId: string, slug: LegalPage['slug'], body: string, publish: boolean): Promise<{ ok: boolean; message: string }>;
 }
 
 export class PgControlPlane implements ControlPlanePort {
@@ -186,6 +189,22 @@ export class PgControlPlane implements ControlPlanePort {
       const row = (await client.query('select * from cp.decide_service_quote($1,$2::uuid,$3)', [storeId, id, approve])).rows[0];
       if (!row?.changed) return { ok: false, message: 'That quote is no longer open. Refresh the page.' };
       return { ok: true, message: approve ? 'Quote approved. Work can now begin.' : 'Quote declined. Nothing will be charged.' };
+    });
+  }
+
+  legalPages(storeId: string) {
+    return this.tx(storeId, async client => {
+      const rows = (await client.query(`select distinct on(entry) entry,body,published_at,created_at from cp.content_revisions where store_id=$1 and entry=any($2::text[]) order by entry,revision desc`, [storeId, ['legal/privacy','legal/terms','legal/shipping','legal/returns']])).rows;
+      return legalPagesFromRows(rows);
+    });
+  }
+
+  saveLegal(storeId: string, slug: LegalPage['slug'], body: string, publish: boolean) {
+    const valid = validateLegalBody(slug, body, publish); if (!valid.ok) return Promise.resolve(valid);
+    return this.tx(storeId, async client => {
+      const entry = `legal/${valid.slug}`; await client.query('select * from cp.save_content_draft($1,$2,$3::jsonb,$4)', [storeId, entry, JSON.stringify({ body: valid.body }), 'merchant']);
+      if (publish) { const result = (await client.query('select * from cp.publish_content_entry($1,$2,$3)', [storeId, entry, 'merchant'])).rows[0]; if (!result?.changed) throw new Error('The draft could not be published.'); }
+      return { ok: true, message: publish ? 'Page published.' : 'Draft saved.' };
     });
   }
 }

@@ -25,8 +25,8 @@ export function LegalEditor({ page }: { page: LegalPage }) {
         <div className="field"><label htmlFor="lb" className="sr">Policy text</label>
           <textarea id="lb" value={body} onChange={e => setBody(e.target.value)} rows={16} style={{ padding: 14, borderRadius: 14, border: '1px solid var(--line)', font: 'inherit', lineHeight: 1.55, minHeight: 320 }} /></div>
         <div style={{ margin: '12px 0', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}><span className="muted" style={{ fontSize: 12.5 }}>Insert:</span>{TOKENS.map(t => <button key={t} type="button" className="btn sm" onClick={() => setBody(b => `${b}${b.endsWith('\n') || !b ? '' : ' '}${t}`)}>{t.replace(/[{}]/g, '')}</button>)}</div>
-        {unresolved > 0 && <p className="note" style={{ margin: '0 0 12px' }}>{unresolved} placeholder{unresolved > 1 ? 's' : ''} still need filling in. We fill your business details when you publish; you must still replace any other placeholders.</p>}
-        <div className="acts"><button className="btn" type="button" disabled={!dirty || pending} onClick={() => run(() => saveLegal(page.slug, body, false))}>{pending ? 'Saving…' : 'Save draft'}</button><button className="btn primary" type="button" disabled={pending || !body.trim()} onClick={() => setConfirm(true)}>Publish</button></div>
+        {unresolved > 0 && <p className="note" style={{ margin: '0 0 12px' }}>{unresolved} placeholder{unresolved > 1 ? 's' : ''} still need filling in. Replace each one with the correct detail before publishing.</p>}
+        <div className="acts"><button className="btn" type="button" disabled={!dirty || pending} onClick={() => run(() => saveLegal(page.slug, body, false))}>{pending ? 'Saving…' : 'Save draft'}</button><button className="btn primary" type="button" disabled={pending || !body.trim() || unresolved > 0} onClick={() => setConfirm(true)}>Publish</button></div>
       </section>
       <aside className="c-4" style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
         <section className="w tint-blue"><div className="wh"><h2>Guidance</h2></div><ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 8 }}>{GUIDE[page.slug].map(g => <li key={g}>{g}</li>)}</ul></section>
@@ -34,7 +34,7 @@ export function LegalEditor({ page }: { page: LegalPage }) {
       </aside>
       <Dialog open={confirm} onClose={() => setConfirm(false)} title={`Publish ${page.title.toLowerCase()}?`} description="It goes live on your shop and replaces the current version. We keep the previous version."
         footer={<><button className="btn" type="button" onClick={() => setConfirm(false)}>Cancel</button><button className="btn primary" type="button" disabled={pending} onClick={() => run(() => saveLegal(page.slug, body, true), () => setConfirm(false))}>{pending ? 'Publishing…' : 'Publish'}</button></>}>
-        {unresolved > 0 && <p className="note">This page still contains placeholders. Check the text before publishing.</p>}
+        {unresolved > 0 && <p className="note">Replace every placeholder before publishing.</p>}
       </Dialog>
     </div>
   );

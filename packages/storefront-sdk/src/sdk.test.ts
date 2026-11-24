@@ -68,6 +68,14 @@ test('client: graphql errors surface, events are emitted', async () => {
   const ev: any[] = []; const c = createClient(cfg, { onEvent: e => ev.push(e), fetch: (async () => res(200, { errors: [{ message: 'bad' }] })) as any });
   await assert.rejects(c.query('Q', 'query{a}'), /bad/); assert.equal(ev[0].outcome, 'error');
 });
+test('client: published content uses the server credential, returns null on 404 and rejects unsafe entry names', async () => {
+  const seen: any[] = []; const cfg = loadConfig(env);
+  const client = createClient(cfg, { fetch: (async (url: string, init: any) => { seen.push({ url, init }); return url.endsWith('legal%2Fmissing') ? new Response('{"error":"not found"}', { status: 404 }) : new Response(JSON.stringify({ entry: 'legal/privacy', revision: 2, schemaVersion: 0, body: { body: 'Text' }, publishedAt: '2026-11-24T10:00:00Z' }), { status: 200, headers: { 'content-type': 'application/json' } }); }) as any });
+  assert.equal((await client.content<{ body: string }>('legal/privacy', { revalidateSeconds: 0 }))?.body.body, 'Text');
+  assert.equal(await client.content('legal/missing'), null);
+  assert.equal(seen[0].init.headers.authorization, `Bearer ${cfg.serverSecret}`); assert.equal(seen[0].init.headers['oss-storefront'], cfg.storefrontId); assert.equal(seen[0].init.cache, 'no-store');
+  await assert.rejects(client.content('../secret'), /Invalid content entry/);
+});
 test('compatibility handshake', () => {
   assert.equal(checkCompatibility({ apiVersion: 'v1', minSdk: '0.1.0' }, '0.1.0').ok, true);
   assert.equal(checkCompatibility({ apiVersion: 'v1', minSdk: '0.2.0' }, '0.1.0').ok, false);
