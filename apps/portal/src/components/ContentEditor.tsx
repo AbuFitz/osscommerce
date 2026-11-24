@@ -5,24 +5,16 @@ import { Dialog } from '@oss-commerce/ui';
 import { useRun } from './Actions';
 import { publishContent, saveSection } from '@/app/actions';
 import type { ContentSection } from '@/lib/gateway';
+import { HOME_SECTION_SCHEMA, safeContentLink, type ContentField } from '@/lib/homepage-content';
 import { when } from '@/lib/format';
 
 /** Merchants edit content, never layout. Each section type declares its fields, limits and validation. */
-type F = { key: string; label: string; max: number; required?: boolean; multiline?: boolean; hint?: string; link?: boolean };
-const SCHEMA: Record<ContentSection['type'], F[]> = {
-  announcement: [{ key: 'text', label: 'Message', max: 90, required: true }, { key: 'link', label: 'Link', max: 120, link: true, hint: 'A page on your shop (starts with /) or a full https:// address.' }],
-  hero: [{ key: 'headline', label: 'Headline', max: 60, required: true }, { key: 'subheading', label: 'Subheading', max: 120 }, { key: 'buttonLabel', label: 'Button label', max: 24 }, { key: 'buttonLink', label: 'Button link', max: 120, link: true }],
-  image_text: [{ key: 'heading', label: 'Heading', max: 60, required: true }, { key: 'body', label: 'Text', max: 280, multiline: true }],
-  product_row: [{ key: 'heading', label: 'Heading', max: 60, required: true }, { key: 'collection', label: 'Collection', max: 60, hint: 'The collection to show products from.' }],
-  faq: [{ key: 'heading', label: 'Heading', max: 60, required: true }, { key: 'body', label: 'Text', max: 400, multiline: true }],
-};
-const okLink = (v: string) => !v || v.startsWith('/') || /^https:\/\/\S+$/.test(v);
 const label = { announcement: 'Announcement', hero: 'Hero', image_text: 'Text block', product_row: 'Product row', faq: 'FAQ' } as const;
 
 function Editor({ s, onClose }: { s: ContentSection; onClose: () => void }) {
   const { run, pending } = useRun();
-  const fields = SCHEMA[s.type]; const [v, setV] = useState<Record<string, string>>(s.fields);
-  const err = (f: F) => (f.required && !v[f.key]?.trim() ? 'Required.' : (v[f.key] ?? '').length > f.max ? `Keep it under ${f.max} characters.` : f.link && !okLink(v[f.key] ?? '') ? 'Use a page starting with / or a full https:// address.' : '');
+  const fields = HOME_SECTION_SCHEMA[s.type]; const [v, setV] = useState<Record<string, string>>(s.fields);
+  const err = (f: ContentField) => (f.required && !v[f.key]?.trim() ? 'Required.' : (v[f.key] ?? '').length > f.max ? `Keep it under ${f.max} characters.` : f.link && !safeContentLink(v[f.key] ?? '') ? 'Use a page starting with / or a full https:// address.' : '');
   const bad = fields.some(f => err(f));
   return (
     <Dialog open onClose={onClose} title={`Edit ${s.label.toLowerCase()}`} description="Saved as a draft. Nothing changes on your live shop until you publish."
@@ -43,8 +35,8 @@ export function ContentEditor({ sections, previewUrl, publishedAt }: { sections:
   return (
     <>
       <div className="w" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
-        <div><b style={{ fontWeight: 600 }}>{changed.length ? `${changed.length} section${changed.length > 1 ? 's' : ''} changed since you last published` : 'Everything is published'}</b><div className="muted" style={{ fontSize: 13 }}>Last published {when(publishedAt)}</div></div>
-        <div className="acts"><a className="btn" href={previewUrl} target="_blank" rel="noreferrer">Preview <ExternalLink size={15} aria-hidden /></a><button className="btn primary" type="button" disabled={!changed.length} onClick={() => setConfirm(true)}>Publish changes</button></div>
+        <div><b style={{ fontWeight: 600 }}>{changed.length ? `${changed.length} section${changed.length > 1 ? 's' : ''} changed since you last published` : 'Everything is published'}</b><div className="muted" style={{ fontSize: 13 }}>{publishedAt ? `Last published ${when(publishedAt)}` : 'Not published yet'}</div></div>
+        <div className="acts">{previewUrl !== '#' && <a className="btn" href={previewUrl} target="_blank" rel="noreferrer">View shop <ExternalLink size={15} aria-hidden /></a>}<button className="btn primary" type="button" disabled={!changed.length} onClick={() => setConfirm(true)}>Publish changes</button></div>
       </div>
       <div className="rows" style={{ gap: 10 }}>
         {sections.map((s, i) => (
@@ -60,7 +52,7 @@ export function ContentEditor({ sections, previewUrl, publishedAt }: { sections:
       </div>
       <p className="muted" style={{ fontSize: 12.5, marginTop: 14 }}>Sections and their order are part of your design. To add a new kind of section or change the layout, send a request from Support.</p>
       {edit && <Editor s={edit} onClose={() => setEdit(null)} />}
-      <Dialog open={confirm} onClose={() => setConfirm(false)} title="Publish to your live shop?" description={`${changed.length} section${changed.length > 1 ? 's' : ''} will go live within about a minute. You can roll back from the Storefront page.`}
+      <Dialog open={confirm} onClose={() => setConfirm(false)} title="Publish to your live shop?" description={`${changed.length} section${changed.length > 1 ? 's' : ''} will go live within about a minute. The previous published revision is retained.`}
         footer={<><button className="btn" type="button" onClick={() => setConfirm(false)}>Keep editing</button><button className="btn primary" type="button" disabled={pending} onClick={() => run(() => publishContent(), () => setConfirm(false))}>{pending ? 'Publishing…' : 'Publish'}</button></>}>
         <ul className="dlg-list">{changed.map(s => <li key={s.id}>{s.label}</li>)}</ul>
       </Dialog>

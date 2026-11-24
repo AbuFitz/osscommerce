@@ -18,7 +18,7 @@
 2. Provision project, credentials, env, domain: `packages/provisioning` (resumable).
 3. Build the site with `@oss-commerce/storefront-sdk`: config, `createClient`, tags, `handleRevalidation`, content manifest.
 4. Connect: gateway resolves the credential; compatibility is checked with `checkCompatibility`.
-5. Content: declare a manifest; the portal edits it; the site reads a published entry with `client.content(entry)`. Legal pages use `legal/privacy`, `legal/terms`, `legal/shipping` and `legal/returns`. Validate the returned `body` against the local manifest before rendering it.
+5. Content: declare a manifest; the portal edits it; the site reads a published entry with `client.content(entry)`. The managed homepage uses `page/home`; legal pages use `legal/privacy`, `legal/terms`, `legal/shipping` and `legal/returns`. Validate the returned `body` against the local manifest before rendering it.
 6. Launch: a production storefront moves `connected` -> `approved` -> `live`; only one live production storefront per store.
 
 ## Rules for storefront code

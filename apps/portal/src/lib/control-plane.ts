@@ -1,12 +1,13 @@
 import 'server-only';
 import { Pool, type PoolClient } from 'pg';
-import type { AccessGrant, Automation, AutomationRun, EmailSettings, LegalPage, PaymentSetup, Readiness, ServiceRequest, StorefrontView } from './gateway';
+import type { AccessGrant, Automation, AutomationRun, ContentView, EmailSettings, LegalPage, PaymentSetup, Readiness, ServiceRequest, StorefrontView } from './gateway';
 import { GATE_COPY, LAUNCH_GATES } from './gateway';
 import type { StoreRecord } from '@oss-commerce/contracts';
 import { automationOutcome, grantTransition, paymentView, stripeOnboardingConfig } from './control-plane-mapping';
 import { liveConnect, type ConnectPort } from '@oss-commerce/payments';
 import { isUuid, serviceRequestView, validateServiceRequest } from './service-requests';
 import { legalPagesFromRows, validateLegalBody } from './legal-content';
+import { defaultHomepage, homepageView, parseHomepageBody, validateSectionFields } from './homepage-content';
 
 type Row = Record<string, any>;
 
@@ -24,6 +25,9 @@ export interface ControlPlanePort {
   serviceRequests(storeId: string): Promise<ServiceRequest[]>;
   createServiceRequest(storeId: string, kind: ServiceRequest['kind'], title: string, detail: string): Promise<{ ok: boolean; message: string }>;
   decideQuote(storeId: string, id: string, approve: boolean): Promise<{ ok: boolean; message: string }>;
+  content(storeId: string, storeName: string): Promise<ContentView>;
+  saveSection(storeId: string, storeName: string, sectionId: string, fields: Record<string, string>): Promise<{ ok: boolean; message: string }>;
+  publishContent(storeId: string, storeName: string): Promise<{ ok: boolean; message: string }>;
   legalPages(storeId: string): Promise<LegalPage[]>;
   saveLegal(storeId: string, slug: LegalPage['slug'], body: string, publish: boolean): Promise<{ ok: boolean; message: string }>;
 }
@@ -189,6 +193,42 @@ export class PgControlPlane implements ControlPlanePort {
       const row = (await client.query('select * from cp.decide_service_quote($1,$2::uuid,$3)', [storeId, id, approve])).rows[0];
       if (!row?.changed) return { ok: false, message: 'That quote is no longer open. Refresh the page.' };
       return { ok: true, message: approve ? 'Quote approved. Work can now begin.' : 'Quote declined. Nothing will be charged.' };
+    });
+  }
+
+  content(storeId: string, storeName: string) {
+    return this.tx(storeId, async client => {
+      const rows = (await client.query(`select revision,body,published_at,created_at from cp.content_revisions where store_id=$1 and entry='page/home' order by revision desc limit 20`, [storeId])).rows;
+      const host = (await client.query(`select h.host from cp.storefront_hosts h join cp.storefronts f using(storefront_id) where f.store_id=$1 and h.verified order by (f.env='production') desc limit 1`, [storeId])).rows[0]?.host;
+      const deployment = (await client.query(`select d.url from cp.storefront_deployments d where d.store_id=$1 and d.state in ('ready','promoted') and d.url is not null order by d.created_at desc limit 1`, [storeId])).rows[0]?.url;
+      const rawUrl = host ?? deployment; const shopUrl = rawUrl ? `https://${String(rawUrl).replace(/^https?:\/\//, '')}` : undefined;
+      return homepageView(rows, storeName, shopUrl);
+    });
+  }
+
+  saveSection(storeId: string, storeName: string, sectionId: string, fields: Record<string, string>) {
+    if (!/^[a-z0-9][a-z0-9_-]{0,49}$/.test(sectionId)) return Promise.resolve({ ok: false, message: 'That section does not exist.' });
+    return this.tx(storeId, async client => {
+      const latest = (await client.query(`select body from cp.content_revisions where store_id=$1 and entry='page/home' order by revision desc limit 1`, [storeId])).rows[0];
+      const body = latest ? parseHomepageBody(latest.body) : defaultHomepage(storeName); const section = body.sections.find(item => item.id === sectionId);
+      if (!section) return { ok: false, message: 'That section does not exist.' };
+      const checked = validateSectionFields(section.type, fields); if (!checked.ok) return checked;
+      const next = { sections: body.sections.map(item => item.id === sectionId ? { ...item, fields: checked.fields } : item) };
+      await client.query('select * from cp.save_content_draft($1,$2,$3::jsonb,$4)', [storeId, 'page/home', JSON.stringify(next), 'merchant']);
+      return { ok: true, message: 'Section saved as a draft.' };
+    });
+  }
+
+  publishContent(storeId: string, storeName: string) {
+    return this.tx(storeId, async client => {
+      let latest = (await client.query(`select revision,body,published_at from cp.content_revisions where store_id=$1 and entry='page/home' order by revision desc limit 1`, [storeId])).rows[0];
+      if (!latest) {
+        await client.query('select * from cp.save_content_draft($1,$2,$3::jsonb,$4)', [storeId, 'page/home', JSON.stringify(defaultHomepage(storeName)), 'merchant']);
+        latest = { published_at: null };
+      } else parseHomepageBody(latest.body);
+      if (latest.published_at) return { ok: false, message: 'There are no draft changes to publish.' };
+      const result = (await client.query('select * from cp.publish_content_entry($1,$2,$3)', [storeId, 'page/home', 'merchant'])).rows[0];
+      return result?.changed ? { ok: true, message: 'Homepage published.' } : { ok: false, message: 'The homepage could not be published. Refresh and try again.' };
     });
   }
 
