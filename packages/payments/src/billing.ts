@@ -6,7 +6,10 @@ export interface PlatformInvoice {
   currency: string; status: 'paid' | 'due' | 'overdue'; url?: string;
 }
 export interface PlatformBillingSnapshot { status: 'not_started' | 'active' | 'past_due'; nextInvoiceAt?: number; invoices: PlatformInvoice[] }
-export interface BillingPort { read(customerId: string, subscriptionId?: string): Promise<PlatformBillingSnapshot> }
+export interface BillingPort {
+  read(customerId: string, subscriptionId?: string): Promise<PlatformBillingSnapshot>;
+  createPortalSession(customerId: string, returnUrl: string): Promise<{ url: string }>;
+}
 
 export function invoiceStatus(invoice: { status: string | null; due_date?: number | null; amount_remaining: number }, now = Math.floor(Date.now() / 1000)): 'paid' | 'due' | 'overdue' | null {
   if (invoice.status === 'paid') return 'paid';
@@ -33,5 +36,10 @@ export function liveBilling(secretKey: string, stripeOverride?: Stripe): Billing
       return [{ id: invoice.id, number: invoice.number ?? invoice.id, description: invoice.lines.data[0]?.description ?? 'OneSimpleCommerce', created: invoice.created, amountMinor: invoice.amount_due, currency: invoice.currency, status: mapped, ...(url ? { url } : {}) }];
     });
     return { status, ...(periods.length ? { nextInvoiceAt: Math.min(...periods) } : {}), invoices };
+  }, async createPortalSession(customerId, returnUrl) {
+    if (!/^cus_[A-Za-z0-9_]+$/.test(customerId) || !/^https:\/\/[^/]+(?:\/.*)?$/.test(returnUrl)) throw new Error('Invalid billing portal request.');
+    const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: returnUrl });
+    if (!/^https:\/\//.test(session.url)) throw new Error('Stripe returned an invalid billing portal URL.');
+    return { url: session.url };
   } };
 }

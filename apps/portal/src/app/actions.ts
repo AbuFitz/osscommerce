@@ -36,6 +36,13 @@ export async function startPaymentSetup() {
   catch { return { ok: false as const, message: 'Stripe could not be opened just now. Nothing was changed. Try again in a moment.' }; }
 }
 
+export async function startBillingPortal() {
+  const { LIVE, recentlyAuthenticated } = await import('@/lib/session');
+  if (LIVE && !await recentlyAuthenticated()) return { ok: false as const, message: 'Sign out and sign in again before changing billing details.' };
+  try { return await gateway().startBillingPortal(); }
+  catch { return { ok: false as const, message: 'Stripe billing could not be opened just now. Nothing was changed. Try again in a moment.' }; }
+}
+
 // ---- Phone handoff (add photos from your phone) ----
 import { handoff, callerNow, origin, qrSvg, AVAILABLE, photoStore } from '@/lib/handoff';
 import { HandoffError } from '@oss-commerce/handoff';

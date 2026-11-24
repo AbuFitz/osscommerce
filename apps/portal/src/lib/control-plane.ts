@@ -3,7 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import type { AccessGrant, Automation, AutomationRun, Billing, ContentView, EmailSettings, LegalPage, PaymentSetup, Preferences, Readiness, ServiceRequest, StorefrontView } from './gateway';
 import { GATE_COPY, LAUNCH_GATES } from './gateway';
 import { LAUNCH_PLAN, type StoreRecord } from '@oss-commerce/contracts';
-import { automationOutcome, grantTransition, paymentView, platformBillingView, stripeBillingSecret, stripeOnboardingConfig } from './control-plane-mapping';
+import { automationOutcome, grantTransition, paymentView, platformBillingView, portalPublicBaseUrl, stripeBillingSecret, stripeOnboardingConfig } from './control-plane-mapping';
 import { liveBilling, liveConnect, type BillingPort, type ConnectPort } from '@oss-commerce/payments';
 import { isUuid, serviceRequestView, validateServiceRequest } from './service-requests';
 import { legalPagesFromRows, validateLegalBody } from './legal-content';
@@ -15,6 +15,7 @@ export interface ControlPlanePort {
   store(storeId: string, fallbackName: string): Promise<{ store: StoreRecord; readiness: Readiness[] }>;
   payment(storeId: string, applicationFeeBp: number): Promise<PaymentSetup>;
   billing(storeId: string): Promise<Billing>;
+  startBillingPortal(storeId: string): Promise<{ ok: true; mode: 'hosted'; url: string } | { ok: false; message: string }>;
   startPaymentSetup(storeId: string): Promise<{ ok: true; mode: 'hosted'; url: string } | { ok: false; message: string }>;
   automations(storeId: string): Promise<{ rules: Automation[]; runs: AutomationRun[]; runsLimit: number }>;
   setAutomation(storeId: string, id: string, enabled: boolean): Promise<{ ok: boolean; message: string }>;
@@ -40,7 +41,7 @@ export class PgControlPlane implements ControlPlanePort {
   constructor(
     private readonly pool: Pool,
     private readonly payments?: { connect: ConnectPort; publicBaseUrl: string },
-    private readonly platformBilling?: BillingPort,
+    private readonly platformBilling?: { billing: BillingPort; publicBaseUrl?: string },
   ) {}
 
   private async tx<T>(storeId: string, fn: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -104,7 +105,16 @@ export class PgControlPlane implements ControlPlanePort {
     )).rows[0]);
     if (!account || !this.platformBilling) return { ...base, status: 'not_started', invoices: [] };
     if (account.plan_id !== LAUNCH_PLAN.id) throw new Error('The store billing plan is not supported by this portal deployment.');
-    return platformBillingView(base, await this.platformBilling.read(account.stripe_customer_id, account.stripe_subscription_id ?? undefined));
+    return platformBillingView(base, await this.platformBilling.billing.read(account.stripe_customer_id, account.stripe_subscription_id ?? undefined));
+  }
+
+  async startBillingPortal(storeId: string) {
+    if (!this.platformBilling?.publicBaseUrl) return { ok: false as const, message: 'Billing management is not configured on this deployment.' };
+    const customer = await this.tx(storeId, async client => (await client.query('select stripe_customer_id from cp.platform_billing_accounts where store_id=$1', [storeId])).rows[0]?.stripe_customer_id as string | undefined);
+    if (!customer) return { ok: false as const, message: 'Your billing account is still being provisioned. Nothing was changed.' };
+    const session = await this.platformBilling.billing.createPortalSession(customer, `${this.platformBilling.publicBaseUrl}/account/billing`);
+    await this.tx(storeId, async client => { await client.query(`insert into cp.audit_log(store_id,actor,action,after) values ($1,'merchant','billing.portal_opened',$2::jsonb)`, [storeId, JSON.stringify({ customer: `${customer.slice(0, 8)}…` })]); });
+    return { ok: true as const, mode: 'hosted' as const, url: session.url };
   }
 
   async startPaymentSetup(storeId: string) {
@@ -300,5 +310,6 @@ export function controlPlaneFromEnv(): ControlPlanePort | null {
   const config = stripeOnboardingConfig({ secret: process.env.STRIPE_SECRET_KEY, appEnv: process.env.APP_ENV, publicUrl: process.env.PORTAL_PUBLIC_URL, vercelProductionUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL });
   const payments = config ? { connect: liveConnect(config.secret), publicBaseUrl: config.publicBaseUrl } : undefined;
   const billingSecret = stripeBillingSecret(process.env.STRIPE_BILLING_SECRET_KEY, process.env.APP_ENV);
-  return new PgControlPlane(pool, payments, billingSecret ? liveBilling(billingSecret) : undefined);
+  const publicBaseUrl = portalPublicBaseUrl(process.env.PORTAL_PUBLIC_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL) ?? undefined;
+  return new PgControlPlane(pool, payments, billingSecret ? { billing: liveBilling(billingSecret), publicBaseUrl } : undefined);
 }

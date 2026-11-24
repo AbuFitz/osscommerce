@@ -1,6 +1,7 @@
 import { gateway } from '@/lib/gateway-instance';
 import { money } from '@/lib/format';
 import { Header } from '@/components/ui';
+import { BillingPortalAction } from '@/components/BillingPortalAction';
 export const metadata = { title: 'Plan and billing' };
 const day = (d: string) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 const ST = { paid: ['Paid', 'ok'], due: ['Due', 'warn'], overdue: ['Overdue', 'bad'] } as const;
@@ -9,7 +10,7 @@ const ST = { paid: ['Paid', 'ok'], due: ['Due', 'warn'], overdue: ['Overdue', 'b
 export default async function Billing() {
   const b = await gateway().billing();
   return (<>
-    <Header title="Plan and billing" back={{ href: '/settings', label: 'Settings' }} />
+    <Header title="Plan and billing" back={{ href: '/settings', label: 'Settings' }}>{!b.demo && b.status !== 'not_started' && <BillingPortalAction />}</Header>
     <div className="grid">
       <section className="w dark c-5" aria-labelledby="pl"><div className="wh"><h2 id="pl">{b.planName}</h2><span className={`badge ${b.status === 'active' ? 'ok' : 'warn'}`}>{b.status === 'active' ? 'Active' : b.status === 'past_due' ? 'Payment overdue' : 'Not started'}</span></div>
         <div className="kpi">{money(b.monthlyMinor)}<span className="muted" style={{ fontSize: 15, marginLeft: 8 }}>a month</span></div>

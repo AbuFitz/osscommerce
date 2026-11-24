@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { automationOutcome, grantTransition, isRecentAuthentication, paymentView, platformBillingView, stripeBillingSecret, stripeOnboardingConfig } from './control-plane-mapping.ts';
+import { automationOutcome, grantTransition, isRecentAuthentication, paymentView, platformBillingView, portalPublicBaseUrl, stripeBillingSecret, stripeOnboardingConfig } from './control-plane-mapping.ts';
 
 test('payment view fails closed when no account exists or a stored status is unknown', () => {
   const none = paymentView(undefined, 50);
@@ -47,6 +47,8 @@ test('platform billing accepts only environment-matched keys and maps provider t
   assert.equal(stripeBillingSecret(`rk_test_${'a'.repeat(24)}`, 'staging')?.startsWith('rk_test_'), true);
   assert.equal(stripeBillingSecret(`sk_live_${'a'.repeat(24)}`, 'staging'), null);
   assert.equal(stripeBillingSecret(`rk_test_${'a'.repeat(24)}`, 'production'), null);
+  assert.equal(portalPublicBaseUrl('https://portal.example/'), 'https://portal.example');
+  assert.equal(portalPublicBaseUrl('http://portal.example'), null);
   const view = platformBillingView(
     { demo: false, planName: 'OneSimpleCommerce', monthlyMinor: 3900, buildMinor: 47900 },
     { status: 'active', nextInvoiceAt: 200, invoices: [{ id: 'in_1', number: 'OSC-1', description: 'November', created: 100, amountMinor: 3900, currency: 'gbp', status: 'paid', url: 'https://invoice.stripe.com/i/1' }] },

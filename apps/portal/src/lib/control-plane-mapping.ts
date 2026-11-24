@@ -12,9 +12,14 @@ export function stripeOnboardingConfig(input: { secret?: string; appEnv?: string
   const env = input.appEnv ?? 'development';
   const placeholder = /placeholder|change[-_]?me|replace|example|dummy|fake|todo/i.test(secret);
   const keyOk = !placeholder && (env === 'production' ? /^sk_live_[A-Za-z0-9]{16,}$/.test(secret) : /^sk_test_[A-Za-z0-9]{16,}$/.test(secret));
-  const candidate = input.publicUrl ?? (input.vercelProductionUrl ? `https://${input.vercelProductionUrl}` : '');
-  const publicBaseUrl = candidate.replace(/\/$/, '');
-  return keyOk && /^https:\/\/[^/]+$/.test(publicBaseUrl) ? { secret, publicBaseUrl } : null;
+  const publicBaseUrl = portalPublicBaseUrl(input.publicUrl, input.vercelProductionUrl);
+  return keyOk && publicBaseUrl ? { secret, publicBaseUrl } : null;
+}
+
+export function portalPublicBaseUrl(publicUrl?: string, vercelProductionUrl?: string): string | null {
+  const candidate = publicUrl ?? (vercelProductionUrl ? `https://${vercelProductionUrl}` : '');
+  const value = candidate.replace(/\/$/, '');
+  return /^https:\/\/[^/]+$/.test(value) ? value : null;
 }
 
 export function stripeBillingSecret(secret: string | undefined, appEnv = 'development'): string | null {
