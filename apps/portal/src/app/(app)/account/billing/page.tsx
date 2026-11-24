@@ -19,7 +19,7 @@ export default async function Billing() {
         <p className="muted" style={{ marginBottom: 0, fontSize: 13 }}>Money your customers pay goes to your own Stripe account and is not part of this bill. See Settings, Payments.</p></section>
       <section className="w c-12" aria-labelledby="inv"><div className="wh"><h2 id="inv">Invoices</h2></div>
         {b.invoices.length === 0 ? <div className="empty">No invoices yet. They appear here as soon as one is raised.</div>
-          : <div className="rows">{b.invoices.map(i => <div key={i.number} className="row"><span className="t"><b>{i.description}</b><span>{i.number} · {day(i.issuedAt)}</span></span><span className={`badge ${ST[i.status][1]}`}>{ST[i.status][0]}</span><span className="num">{money(i.amountMinor)}</span></div>)}</div>}
+          : <div className="rows">{b.invoices.map(i => <div key={i.number} className="row"><span className="t"><b>{i.description}</b><span>{i.number} · {day(i.issuedAt)}{i.url && <> · <a href={i.url} target="_blank" rel="noreferrer">View invoice</a></>}</span></span><span className={`badge ${ST[i.status][1]}`}>{ST[i.status][0]}</span><span className="num">{money(i.amountMinor)}</span></div>)}</div>}
         {b.demo && <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Demo figures. Real invoices come from the OneSimpleCommerce billing account once it is connected.</p>}</section>
     </div></>);
 }

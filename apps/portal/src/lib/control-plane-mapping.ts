@@ -1,4 +1,5 @@
-import type { AutomationRun, PaymentSetup } from './gateway';
+import type { PlatformBillingSnapshot } from '@oss-commerce/payments';
+import type { AutomationRun, Billing, PaymentSetup } from './gateway';
 
 export type ControlPlaneRow = Record<string, any>;
 
@@ -14,6 +15,29 @@ export function stripeOnboardingConfig(input: { secret?: string; appEnv?: string
   const candidate = input.publicUrl ?? (input.vercelProductionUrl ? `https://${input.vercelProductionUrl}` : '');
   const publicBaseUrl = candidate.replace(/\/$/, '');
   return keyOk && /^https:\/\/[^/]+$/.test(publicBaseUrl) ? { secret, publicBaseUrl } : null;
+}
+
+export function stripeBillingSecret(secret: string | undefined, appEnv = 'development'): string | null {
+  const value = secret?.trim() ?? '';
+  if (/placeholder|change[-_]?me|replace|example|dummy|fake|todo/i.test(value)) return null;
+  const mode = appEnv === 'production' ? 'live' : 'test';
+  return new RegExp(`^(?:sk|rk)_${mode}_[A-Za-z0-9]{16,}$`).test(value) ? value : null;
+}
+
+export function platformBillingView(base: Pick<Billing, 'demo' | 'planName' | 'monthlyMinor' | 'buildMinor'>, snapshot: PlatformBillingSnapshot): Billing {
+  return {
+    ...base,
+    status: snapshot.status,
+    ...(snapshot.nextInvoiceAt ? { nextInvoiceAt: new Date(snapshot.nextInvoiceAt * 1000).toISOString() } : {}),
+    invoices: snapshot.invoices.map(invoice => ({
+      number: invoice.number,
+      description: invoice.description,
+      issuedAt: new Date(invoice.created * 1000).toISOString(),
+      amountMinor: invoice.amountMinor,
+      status: invoice.status,
+      ...(invoice.url ? { url: invoice.url } : {}),
+    })),
+  };
 }
 
 export function grantTransition(current: string, decision: 'approve' | 'decline' | 'revoke', expiresAt: Date, now = new Date()): 'active' | 'declined' | 'revoked' | 'expired' | null {

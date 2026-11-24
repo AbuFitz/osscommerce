@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { automationOutcome, grantTransition, isRecentAuthentication, paymentView, stripeOnboardingConfig } from './control-plane-mapping.ts';
+import { automationOutcome, grantTransition, isRecentAuthentication, paymentView, platformBillingView, stripeBillingSecret, stripeOnboardingConfig } from './control-plane-mapping.ts';
 
 test('payment view fails closed when no account exists or a stored status is unknown', () => {
   const none = paymentView(undefined, 50);
@@ -41,6 +41,19 @@ test('payment onboarding requires a recent sign-in, correctly scoped key and can
   assert.equal(stripeOnboardingConfig({ secret: `sk_test_${'a'.repeat(24)}`, appEnv: 'production', publicUrl: 'https://portal.example' }), null);
   assert.equal(stripeOnboardingConfig({ secret: `sk_live_${'a'.repeat(24)}`, appEnv: 'production', publicUrl: 'http://portal.example' }), null);
   assert.equal(stripeOnboardingConfig({ secret: 'sk_live_placeholder_placeholder', appEnv: 'production', publicUrl: 'https://portal.example' }), null);
+});
+
+test('platform billing accepts only environment-matched keys and maps provider timestamps and hosted links', () => {
+  assert.equal(stripeBillingSecret(`rk_test_${'a'.repeat(24)}`, 'staging')?.startsWith('rk_test_'), true);
+  assert.equal(stripeBillingSecret(`sk_live_${'a'.repeat(24)}`, 'staging'), null);
+  assert.equal(stripeBillingSecret(`rk_test_${'a'.repeat(24)}`, 'production'), null);
+  const view = platformBillingView(
+    { demo: false, planName: 'OneSimpleCommerce', monthlyMinor: 3900, buildMinor: 47900 },
+    { status: 'active', nextInvoiceAt: 200, invoices: [{ id: 'in_1', number: 'OSC-1', description: 'November', created: 100, amountMinor: 3900, currency: 'gbp', status: 'paid', url: 'https://invoice.stripe.com/i/1' }] },
+  );
+  assert.equal(view.nextInvoiceAt, '1970-01-01T00:03:20.000Z');
+  assert.equal(view.invoices[0].issuedAt, '1970-01-01T00:01:40.000Z');
+  assert.equal(view.invoices[0].url, 'https://invoice.stripe.com/i/1');
 });
 
 test('support grants only follow valid, unexpired merchant decisions', () => {

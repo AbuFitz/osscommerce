@@ -41,7 +41,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     store: storeView,
     async summary() { return summarise(await A.listOrders(x), await lowStockOf()); },
     async live() { return { demo: false, asOf: new Date().toISOString(), visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } }; },
-    async billing() { return { demo: false, planName: LAUNCH_PLAN.name, monthlyMinor: LAUNCH_PLAN.monthlyMinor, buildMinor: LAUNCH_PLAN.buildFromMinor, status: 'not_started', invoices: [] }; },
+    async billing() { return control ? control.billing(meta.storeId) : { demo: false, planName: LAUNCH_PLAN.name, monthlyMinor: LAUNCH_PLAN.monthlyMinor, buildMinor: LAUNCH_PLAN.buildFromMinor, status: 'not_started', invoices: [] }; },
     orders: q => A.listOrders(x, q), order: id => A.getOrder(x, id), products: () => A.listProducts(x), product: id => A.getProduct(x, id), customers: () => A.listCustomers(x),
     addProduct: p => A.addProduct(x, p), adjustStock: a => A.adjustStock(x, a), saveVariants: (id, d) => A.saveVariants(x, id, d), fulfilOrder: (id, t) => A.fulfilOrder(x, id, t), refundOrder: i => A.refundOrder(x, i),
     async importProducts(rows) { let added = 0; const problems: string[] = []; for (const r of rows) { const res = await A.addProduct(x, r); if (res.ok) added++; else problems.push(res.message); } return added ? { ok: true, message: `${added} product${added > 1 ? 's' : ''} imported${problems.length ? `. ${problems.length} skipped: ${problems[0]}` : ''}.` } : { ok: false, message: problems[0] ?? 'Nothing was imported.' }; },
