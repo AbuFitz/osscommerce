@@ -8,6 +8,7 @@ import { liveBilling, liveConnect, type BillingPort, type ConnectPort } from '@o
 import { isUuid, serviceRequestView, validateServiceRequest } from './service-requests';
 import { legalPagesFromRows, validateLegalBody } from './legal-content';
 import { defaultHomepage, homepageView, parseHomepageBody, validateSectionFields } from './homepage-content';
+import { liveDomainVerification, VERCEL_CNAME, type DomainVerificationPort } from './domain-verification';
 
 type Row = Record<string, any>;
 
@@ -33,6 +34,7 @@ export interface ControlPlanePort {
   saveSection(storeId: string, storeName: string, sectionId: string, fields: Record<string, string>): Promise<{ ok: boolean; message: string }>;
   publishContent(storeId: string, storeName: string): Promise<{ ok: boolean; message: string }>;
   requestLaunch(storeId: string): Promise<{ ok: boolean; message: string }>;
+  checkDomain(storeId: string): Promise<{ ok: boolean; message: string; record?: { type: string; name: string; value: string } }>;
   legalPages(storeId: string): Promise<LegalPage[]>;
   saveLegal(storeId: string, slug: LegalPage['slug'], body: string, publish: boolean): Promise<{ ok: boolean; message: string }>;
 }
@@ -42,6 +44,7 @@ export class PgControlPlane implements ControlPlanePort {
     private readonly pool: Pool,
     private readonly payments?: { connect: ConnectPort; publicBaseUrl: string },
     private readonly platformBilling?: { billing: BillingPort; publicBaseUrl?: string },
+    private readonly domainVerification: DomainVerificationPort = liveDomainVerification(),
   ) {}
 
   private async tx<T>(storeId: string, fn: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -283,6 +286,16 @@ export class PgControlPlane implements ControlPlanePort {
       const changed = (await client.query(`select cp.request_store_launch($1) changed`, [storeId])).rows[0]?.changed === true;
       return changed ? { ok: true, message: 'Launch review requested. We will run the final checks and confirm the next step.' } : { ok: false, message: 'Launch review has already been requested.' };
     });
+  }
+
+  async checkDomain(storeId: string) {
+    const row = await this.tx(storeId, async client => (await client.query(`select h.host,h.verified from cp.storefront_hosts h join cp.storefronts f using(storefront_id) where f.store_id=$1 order by (f.env='production') desc,h.verified desc,f.created_at desc limit 1`, [storeId])).rows[0]);
+    if (!row?.host) return { ok: false, message: 'No storefront domain has been registered yet.' };
+    if (row.verified) return { ok: true, message: `${row.host} is verified.` };
+    const record = { type: 'CNAME', name: row.host, value: VERCEL_CNAME };
+    if (!await this.domainVerification.check(row.host)) return { ok: false, message: 'Add this DNS record, wait for it to propagate, then check again.', record };
+    const changed = await this.tx(storeId, async client => (await client.query('select cp.record_domain_verification($1,$2) verified', [storeId, row.host])).rows[0]?.verified === true);
+    return changed ? { ok: true, message: `${row.host} is verified. SSL will finish automatically.` } : { ok: false, message: 'The DNS record is correct, but this domain is no longer registered to the storefront.' };
   }
 
   legalPages(storeId: string) {

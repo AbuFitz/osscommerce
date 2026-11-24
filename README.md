@@ -10,7 +10,7 @@ Managed commerce for independent businesses. Research is in `research/`; decisio
 | `packages/ui` | Shared dialog, toggle and toast used by both apps | In use |
 | `packages/contracts` | Roles and operations, plus config-driven plans, entitlements, fee tiers, overrides and promotions with a pure resolver | Shared by the site, portal, engine and billing flows |
 | `services/engine` | Vendure 3.8.2 (GPL, isolated service). Catalogue, orders, tenant guard, Stripe Connect handler, outbox, R2 assets and launch readiness. | Built and verified; hosted staging remains an external deployment gate |
-| `infra/control-plane` | Postgres control plane: registry, storefronts, payments, integrations, automation, sender identity, enquiries, preferences and platform billing. | Checksummed migrations through `0017`; apply per environment with the schema-owner credential |
+| `infra/control-plane` | Postgres control plane: registry, storefronts, payments, integrations, automation, sender identity, enquiries, preferences and platform billing. | Checksummed migrations through `0018`; apply per environment with the schema-owner credential |
 | `apps/automation-worker` | Always-on pg-boss automation and email worker with signed ingest, Resend webhook and secure unsubscribe. | Deployable container; hosted runtime and credentials still required |
 | `docs/product-direction.md` | Responsibility boundary, self-service coverage, checkout, email, automation, content, legal, pricing, trust; decisions and open questions | Written |
 | `docs/adr/0001-engine-and-tenancy.md` | Engine decision with executed evidence | Accepted for pilot build |

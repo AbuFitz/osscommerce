@@ -88,6 +88,6 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     },
     createDiscount: d => A.createDiscount(x, d), saveZone: z => A.saveShippingZone(x, z),
     async requestLaunch() { if (!control) return no(); const blockers = launchBlockers((await storeView()).readiness); if (blockers.length) return { ok: false, message: `Finish ${blockers.map(item => item.label.toLowerCase()).join(', ')} before requesting launch.` }; return control.requestLaunch(meta.storeId); },
-    async checkDomain() { return { ok: false, message: 'Domain checks are not connected for your store yet.' }; },
+    async checkDomain() { return control ? control.checkDomain(meta.storeId) : { ok: false, message: 'Domain verification is not configured for your store yet.' }; },
   };
 }
