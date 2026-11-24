@@ -19,7 +19,22 @@ export interface Product { id: string; imageUrl?: string; title: string; status:
 export interface Customer { id: string; name: string; email: string; orders: number; spentMinor: number; lastOrder: string; marketing: boolean }
 export interface SalesPoint { day: string; netMinor: number; grossMinor: number }
 export interface Summary { netMinor: number; grossMinor: number; orders: number; aovMinor: number; refundedMinor: number; toFulfil: number; lowStock: number; fulfilled: number; paidOrders: number; series: SalesPoint[]; topProducts: { title: string; netMinor: number }[]; statusMix: { label: string; count: number }[]; asOf: string }
-export interface Discount { code: string; kind: 'percent' | 'fixed' | 'shipping'; value: number; status: 'active' | 'scheduled' | 'expired'; used: number; limit?: number; window: string; minSpendMinor?: number }
+export type DiscountKind = 'percent' | 'fixed' | 'shipping' | 'bogo' | 'custom';
+export interface Discount {
+  /** The engine's id, needed to edit, pause or delete it. */
+  id?: string; name?: string;
+  /** The code customers type. Empty for an automatic discount, which applies by itself when its conditions are met. */
+  code: string; automatic?: boolean;
+  kind: DiscountKind; value: number; status: 'active' | 'scheduled' | 'expired' | 'paused'; used: number; limit?: number; perCustomer?: number; window: string; minSpendMinor?: number;
+  /** Product ids it is limited to; empty means the whole order. */
+  productIds?: string[]; buy?: number; get?: number; startsAt?: string; endsAt?: string;
+}
+/** Everything the discount form can set. With `id` it changes an existing discount. */
+export interface DiscountInput {
+  id?: string; method: 'code' | 'automatic'; code?: string; name?: string; kind: Exclude<DiscountKind, 'custom'>; value: number; minSpendMinor?: number;
+  productIds?: string[]; buy?: number; get?: number; limit?: number; perCustomer?: number; startDate?: string; endDate?: string; enabled: boolean;
+}
+export interface DiscountProduct { id: string; title: string; variantIds: string[] }
 export interface StorefrontView {
   theme: { name: string; version: string; deployedAt: string; state: 'healthy' | 'building' | 'failed' };
   previewUrl: string; liveUrl: string | null; launchRequested?: boolean;
@@ -133,6 +148,10 @@ export interface CommerceGateway {
   importProducts(rows: NewProduct[]): Promise<MutationResult>;
   adjustStock(a: StockAdjust): Promise<MutationResult>;
   createDiscount(d: NewDiscount): Promise<MutationResult>;
+  discountProducts(): Promise<DiscountProduct[]>;
+  saveDiscount(d: DiscountInput): Promise<MutationResult>;
+  setDiscountEnabled(id: string, enabled: boolean): Promise<MutationResult>;
+  deleteDiscount(id: string): Promise<MutationResult>;
   saveZone(z: ZoneInput): Promise<MutationResult>;
   checkDomain(): Promise<DomainCheck>;
   requestLaunch(): Promise<MutationResult>;

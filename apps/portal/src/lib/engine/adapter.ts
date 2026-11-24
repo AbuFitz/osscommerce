@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload } from '../gateway';
+import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct } from '../gateway';
 import { createProductWithVariants, findTaxCategories, type Exec } from './catalogue';
 import { slugify } from '@oss-commerce/contracts';
+import { statusOf, validateDiscount } from '../discounts';
 
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
@@ -80,31 +81,82 @@ export async function listCustomers(x: Exec): Promise<Customer[]> {
 }
 
 type RawOperation = { code: string; args: { name: string; value: string }[] };
-type RawPromotion = { id: string; name: string; enabled: boolean; couponCode?: string | null; startsAt?: string | null; endsAt?: string | null; usageLimit?: number | null; conditions: RawOperation[]; actions: RawOperation[] };
+type RawPromotion = { id: string; name: string; enabled: boolean; couponCode?: string | null; startsAt?: string | null; endsAt?: string | null; usageLimit?: number | null; perCustomerUsageLimit?: number | null; conditions: RawOperation[]; actions: RawOperation[] };
 const arg = (op: RawOperation | undefined, name: string) => op?.args.find(a => a.name === name)?.value;
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
-export function mapDiscount(p: RawPromotion, used = 0, now = new Date()): Discount | null {
-  if (!p.couponCode) return null;
-  const action = p.actions[0];
-  const kind: Discount['kind'] = action?.code === 'order_percentage_discount' ? 'percent' : action?.code === 'oss-fixed-order-discount' ? 'fixed' : action?.code === 'free_shipping' ? 'shipping' : 'shipping';
-  if (!['order_percentage_discount', 'oss-fixed-order-discount', 'free_shipping'].includes(action?.code ?? '')) return null;
-  const value = kind === 'percent' ? Number(arg(action, 'discount') ?? 0) : kind === 'fixed' ? Number(arg(action, 'amount') ?? 0) : 0;
+const ids = (v: string | undefined): string[] => { try { const a = JSON.parse(v ?? '[]'); return Array.isArray(a) ? a.map(String) : []; } catch { return []; } };
+/** Reads any promotion into the portal's shape. `productOf` maps a variant id back to its product id so scopes can be shown by product. */
+export function mapDiscount(p: RawPromotion, used = 0, now = new Date(), productOf: (variantId: string) => string | undefined = () => undefined): Discount {
+  const action = p.actions[0]; const cond = (c: string) => p.conditions.find(x => x.code === c);
+  let kind: Discount['kind'] = 'custom'; let value = 0; let productIds: string[] | undefined; let buy: number | undefined; let get: number | undefined;
+  switch (action?.code) {
+    case 'order_percentage_discount': kind = 'percent'; value = Number(arg(action, 'discount') ?? 0); break;
+    case 'products_percentage_discount': kind = 'percent'; value = Number(arg(action, 'discount') ?? 0); productIds = [...new Set(ids(arg(action, 'productVariantIds')).map(v => productOf(v)).filter((x): x is string => !!x))]; break;
+    case 'oss-fixed-order-discount': kind = 'fixed'; value = Number(arg(action, 'amount') ?? 0); break;
+    case 'order_fixed_discount': kind = 'fixed'; value = Number(arg(action, 'discount') ?? 0); break;
+    case 'free_shipping': kind = 'shipping'; break;
+    case 'oss-buy-x-get-y': kind = 'bogo'; buy = Number(arg(action, 'buy') ?? 0); get = Number(arg(action, 'get') ?? 0); productIds = [...new Set(ids(arg(action, 'productVariantIds')).map(v => productOf(v)).filter((x): x is string => !!x))]; break;
+    case 'buy_x_get_y_free': { /* the engine asks for buy + get in the basket, with `get` of them free */ const c = cond('buy_x_get_y_free'); kind = 'bogo'; get = Number(arg(c, 'amountY') ?? 0); buy = Math.max(Number(arg(c, 'amountX') ?? 0) - get, 0); productIds = [...new Set(ids(arg(c, 'variantIdsX')).map(v => productOf(v)).filter((x): x is string => !!x))]; break; }
+  }
   const start = p.startsAt ? new Date(p.startsAt) : null; const end = p.endsAt ? new Date(p.endsAt) : null;
-  const status: Discount['status'] = !p.enabled || (end && end <= now) ? 'expired' : start && start > now ? 'scheduled' : 'active';
-  const min = p.conditions.find(c => c.code === 'minimum_order_amount');
-  const window = start && start > now ? `Starts ${shortDate(p.startsAt!)}` : end ? `Ends ${shortDate(p.endsAt!)}` : 'No end date';
-  return { code: p.couponCode, kind, value, status, used, limit: p.usageLimit ?? undefined, window, minSpendMinor: min ? Number(arg(min, 'amount') ?? 0) || undefined : undefined };
+  const window = start && start > now ? `Starts ${shortDate(p.startsAt!)}${end ? `, ends ${shortDate(p.endsAt!)}` : ''}` : end ? (end <= now ? `Ended ${shortDate(p.endsAt!)}` : `Ends ${shortDate(p.endsAt!)}`) : 'No end date';
+  const min = cond('minimum_order_amount');
+  return { id: p.id, name: p.name, code: p.couponCode ?? '', automatic: !p.couponCode, kind, value, status: statusOf(p, now), used, limit: p.usageLimit ?? undefined, perCustomer: p.perCustomerUsageLimit ?? undefined, window, minSpendMinor: min ? Number(arg(min, 'amount') ?? 0) || undefined : undefined,
+    productIds, buy, get, startsAt: p.startsAt ?? undefined, endsAt: p.endsAt ?? undefined };
 }
 
+const PROMO = `id name enabled couponCode startsAt endsAt usageLimit perCustomerUsageLimit conditions{ code args{ name value } } actions{ code args{ name value } }`;
 export async function listDiscounts(x: Exec): Promise<Discount[]> {
-  const [promotions, orders] = await Promise.all([
-    x(`query{ promotions(options:{ take:200, sort:{ createdAt:DESC } }){ items{ id name enabled couponCode startsAt endsAt usageLimit conditions{ code args{ name value } } actions{ code args{ name value } } } } }`),
+  const [promotions, orders, products] = await Promise.all([
+    x(`query{ promotions(options:{ take:200, sort:{ createdAt:DESC } }){ items{ ${PROMO} } } }`),
     x(`query{ orders(options:{ take:1000, filter:{ active:{ eq:false } } }){ items{ id orderPlacedAt promotions{ id } } } }`),
+    x(`query{ products(options:{ take:500 }){ items{ id variants{ id } } } }`),
   ]);
   const use = new Map<string, number>();
   for (const o of orders.orders.items as { orderPlacedAt?: string | null; promotions: { id: string }[] }[]) if (o.orderPlacedAt) for (const p of o.promotions) use.set(p.id, (use.get(p.id) ?? 0) + 1);
-  return (promotions.promotions.items as RawPromotion[]).map(p => mapDiscount(p, use.get(p.id) ?? 0)).filter((d): d is Discount => !!d);
+  const owner = new Map<string, string>(); for (const p of products.products.items as { id: string; variants: { id: string }[] }[]) for (const v of p.variants) owner.set(v.id, p.id);
+  return (promotions.promotions.items as RawPromotion[]).map(p => mapDiscount(p, use.get(p.id) ?? 0, new Date(), v => owner.get(v)));
+}
+export async function listDiscountProducts(x: Exec): Promise<DiscountProduct[]> {
+  return ((await x(`query{ products(options:{ take:500, sort:{ name:ASC } }){ items{ id name variants{ id } } } }`)).products.items as { id: string; name: string; variants: { id: string }[] }[]).map(p => ({ id: p.id, title: p.name, variantIds: p.variants.map(v => v.id) }));
+}
+/** Builds the engine's conditions and action for a form. Product scopes are checked against this store's own catalogue first. */
+async function promotionParts(x: Exec, d: DiscountInput): Promise<{ conditions: unknown[]; actions: unknown[] } | string> {
+  const conditions: { code: string; arguments: { name: string; value: string }[] }[] = []; let variantIds: string[] = [];
+  if (d.productIds?.length) { const own = await listDiscountProducts(x); const picked = own.filter(p => d.productIds!.includes(p.id)); if (picked.length !== new Set(d.productIds).size) return 'One of the chosen products is not in your catalogue.'; variantIds = picked.flatMap(p => p.variantIds); }
+  if (d.minSpendMinor && d.minSpendMinor > 0) conditions.push({ code: 'minimum_order_amount', arguments: [{ name: 'amount', value: String(d.minSpendMinor) }, { name: 'taxInclusive', value: 'true' }] });
+  let action: { code: string; arguments: { name: string; value: string }[] };
+  if (d.kind === 'percent') action = variantIds.length ? { code: 'products_percentage_discount', arguments: [{ name: 'discount', value: String(d.value) }, { name: 'productVariantIds', value: JSON.stringify(variantIds) }] } : { code: 'order_percentage_discount', arguments: [{ name: 'discount', value: String(d.value) }] };
+  else if (d.kind === 'fixed') action = { code: 'oss-fixed-order-discount', arguments: [{ name: 'amount', value: String(d.value) }] };
+  else if (d.kind === 'shipping') action = { code: 'free_shipping', arguments: [] };
+  else action = { code: 'oss-buy-x-get-y', arguments: [{ name: 'buy', value: String(d.buy) }, { name: 'get', value: String(d.get) }, { name: 'productVariantIds', value: JSON.stringify(variantIds) }] };
+  // The engine needs a code or at least one condition. An automatic offer with no other rule gets an always-true one: an order of at least £0.
+  if (d.method === 'automatic' && !conditions.length) conditions.push({ code: 'minimum_order_amount', arguments: [{ name: 'amount', value: '0' }, { name: 'taxInclusive', value: 'true' }] });
+  return { conditions, actions: [action] };
+}
+const todayYmd = () => new Date().toISOString().slice(0, 10);
+export async function saveDiscount(x: Exec, d: DiscountInput): Promise<MutationResult> {
+  try {
+    const problem = validateDiscount(d, todayYmd()); if (problem) return { ok: false, message: problem };
+    const code = d.method === 'code' ? (d.code ?? '').trim().toUpperCase() : null;
+    const all = (await x(`query{ promotions(options:{ take:200 }){ items{ id couponCode } } }`)).promotions.items as { id: string; couponCode?: string | null }[];
+    if (code && all.some(p => p.id !== d.id && p.couponCode?.toUpperCase() === code)) return { ok: false, message: `${code} is already in use.` };
+    const parts = await promotionParts(x, d); if (typeof parts === 'string') return { ok: false, message: parts };
+    const startsAt = d.startDate ? new Date(`${d.startDate}T00:00:00.000Z`).toISOString() : null; const endsAt = d.endDate ? new Date(`${d.endDate}T23:59:59.999Z`).toISOString() : null;
+    const name = (d.name?.trim() || (code ? `${code} discount` : 'Automatic discount')).slice(0, 120);
+    const input = { ...(d.id ? { id: d.id } : {}), enabled: d.enabled, couponCode: code, startsAt, endsAt, usageLimit: d.limit ?? null, perCustomerUsageLimit: d.perCustomer ?? null, ...parts, translations: [{ languageCode: 'en', name, description: 'Created in OneSimpleCommerce.' }] };
+    const r = d.id ? (await x(`mutation($i:UpdatePromotionInput!){ updatePromotion(input:$i){ __typename ... on Promotion{ id } ... on ErrorResult{ message } } }`, { i: input })).updatePromotion
+      : (await x(`mutation($i:CreatePromotionInput!){ createPromotion(input:$i){ __typename ... on Promotion{ id } ... on ErrorResult{ message } } }`, { i: input })).createPromotion;
+    if (r.__typename !== 'Promotion') return { ok: false, message: r.message ?? 'The discount could not be saved.' };
+    return { ok: true, id: r.id, message: d.id ? 'Discount saved.' : code ? `${code} is ${d.enabled ? 'active' : 'saved as paused'}.` : `The automatic discount is ${d.enabled ? 'active' : 'saved as paused'}.` };
+  } catch (e) { return fail(e); }
+}
+export async function setDiscountEnabled(x: Exec, id: string, enabled: boolean): Promise<MutationResult> {
+  try { const r = (await x(`mutation($i:UpdatePromotionInput!){ updatePromotion(input:$i){ __typename ... on Promotion{ id } ... on ErrorResult{ message } } }`, { i: { id, enabled } })).updatePromotion; return r.__typename === 'Promotion' ? { ok: true, message: enabled ? 'Discount resumed. Customers can use it again.' : 'Discount paused. Customers cannot use it until you resume it.' } : { ok: false, message: r.message ?? 'That did not go through.' }; } catch (e) { return fail(e); }
+}
+export async function deleteDiscount(x: Exec, id: string): Promise<MutationResult> {
+  try { const r = (await x(`mutation($id:ID!){ deletePromotion(id:$id){ result message } }`, { id })).deletePromotion; return r?.result === 'DELETED' ? { ok: true, message: 'Discount deleted. Past orders keep what they were charged.' } : { ok: false, message: r?.message ?? 'The discount could not be deleted.' }; } catch (e) { return fail(e); }
 }
 
 export async function createDiscount(x: Exec, d: NewDiscount): Promise<MutationResult> {

@@ -84,7 +84,7 @@ test('discounts: percentage, fixed and free-delivery coupons are created and rea
   const fixed = await A.createDiscount(x, { code: 'LESS5', kind: 'fixed', value: 500 }); assert.equal(fixed.ok, true, fixed.message);
   const shipping = await A.createDiscount(x, { code: 'SHIPFREE', kind: 'shipping', value: 0 }); assert.equal(shipping.ok, true, shipping.message);
   const rows = await A.listDiscounts(x); assert.equal(rows.length, 3);
-  assert.deepEqual(rows.find(d => d.code === 'SAVE10'), { code: 'SAVE10', kind: 'percent', value: 10, status: 'active', used: 0, limit: 25, window: 'No end date', minSpendMinor: 2000 });
+  const s10 = rows.find(d => d.code === 'SAVE10')!; assert.deepEqual({ code: s10.code, kind: s10.kind, value: s10.value, status: s10.status, used: s10.used, limit: s10.limit, window: s10.window, minSpendMinor: s10.minSpendMinor, automatic: s10.automatic }, { code: 'SAVE10', kind: 'percent', value: 10, status: 'active', used: 0, limit: 25, window: 'No end date', minSpendMinor: 2000, automatic: false });
   assert.equal(rows.find(d => d.code === 'LESS5')?.value, 500);
   assert.equal(rows.find(d => d.code === 'SHIPFREE')?.kind, 'shipping');
   const duplicate = await A.createDiscount(x, { code: 'save10', kind: 'percent', value: 5 }); assert.equal(duplicate.ok, false); assert.match(duplicate.message, /already in use/);
@@ -138,4 +138,42 @@ test('cancel: an unshipped paid order is cancelled, its stock released, and the 
   const o = (await A.getOrder(x, o3.id))!; assert.equal(o.state, 'cancelled'); assert.equal(o.payment, 'refunded'); assert.equal(o.refundedMinor, o3.total); assert.equal(refunds.length, refundsBefore + 1); assert.ok(o.timeline.some(t => /cancelled: Out of stock/i.test(t.text)));
   assert.equal((await A.listProducts(x)).find(p => p.sku === 'MUG-1')!.allocated, stockBefore.allocated, 'the two reserved units are released');
   assert.equal((await A.cancelOrder(x, { orderId: o3.id, reason: 'again', refund: false })).ok, false, 'cancelling twice is refused');
+});
+
+async function basketWith(variantId: string, qty: number, coupon?: string) {
+  await shopClient.asAnonymousUser();
+  await shopClient.query(g(`mutation($id:ID!,$q:Int!){ addItemToOrder(productVariantId:$id, quantity:$q){ __typename } }`), { id: variantId, q: qty });
+  if (coupon) await shopClient.query(g(`mutation($c:String!){ applyCouponCode(couponCode:$c){ __typename } }`), { c: coupon });
+  const o = (await shopClient.query(g(`query{ activeOrder{ subTotalWithTax discounts{ description amountWithTax } totalWithTax } }`))).activeOrder; return o as { subTotalWithTax: number; discounts: { description: string; amountWithTax: number }[]; totalWithTax: number };
+}
+test('discounts v2: chosen-product percentage, buy X get Y, automatic, edit, pause and delete all work against the real engine', async () => {
+  const prod = (await A.listProducts(x)).find(p => p.sku === 'MUG-1')!; const unit = prod.priceMinor; const variant = (await A.getProduct(x, prod.id))!.variantList[0].id;
+  const other = await A.addProduct(x, { title: 'Plain bowl', priceMinor: 3000, status: 'published', onHand: 20, sku: 'BOWL-1' }); assert.equal(other.ok, true, other.message); const bowl = (await A.listProducts(x)).find(p => p.sku === 'BOWL-1')!; const bowlVariant = (await A.getProduct(x, bowl.id))!.variantList[0].id;
+  // chosen products only, by code
+  const pct = await A.saveDiscount(x, { method: 'code', code: 'MUGS20', kind: 'percent', value: 20, productIds: [prod.id], enabled: true, perCustomer: 1 }); assert.equal(pct.ok, true, pct.message); assert.ok(pct.id);
+  const mugBasket = await basketWith(variant, 1, 'MUGS20'); assert.equal(mugBasket.discounts.reduce((s, d) => s + d.amountWithTax, 0), -Math.round(unit * 0.2), 'the mug gets 20% off');
+  const bowlBasket = await basketWith(bowlVariant, 1, 'MUGS20'); assert.equal(bowlBasket.discounts.length, 0, 'the bowl is not in the chosen products');
+  // buy 2 get 1 free, automatic (no code)
+  const bogo = await A.saveDiscount(x, { method: 'automatic', name: 'Mugs 3 for 2', kind: 'bogo', value: 0, buy: 2, get: 1, productIds: [prod.id], enabled: true }); assert.equal(bogo.ok, true, bogo.message);
+  const three = await basketWith(variant, 3); assert.equal(three.discounts.reduce((s, d) => s + d.amountWithTax, 0), -unit, 'one of three is free, with no code typed');
+  const two = await basketWith(variant, 2); assert.equal(two.discounts.length, 0, 'two is not enough: buy 2 means the third is the free one');
+  const six = await basketWith(variant, 6); assert.equal(six.discounts.reduce((s, d) => s + d.amountWithTax, 0), -2 * unit, 'six units: two free (it repeats)');
+  const rows = await A.listDiscounts(x); const b = rows.find(d => d.id === bogo.id)!; assert.deepEqual({ kind: b.kind, buy: b.buy, get: b.get, automatic: b.automatic, products: b.productIds, name: b.name }, { kind: 'bogo', buy: 2, get: 1, automatic: true, products: [prod.id], name: 'Mugs 3 for 2' });
+  const m = rows.find(d => d.id === pct.id)!; assert.deepEqual({ kind: m.kind, value: m.value, products: m.productIds, perCustomer: m.perCustomer }, { kind: 'percent', value: 20, products: [prod.id], perCustomer: 1 });
+  // edit
+  const edit = await A.saveDiscount(x, { id: bogo.id, method: 'automatic', name: 'Mugs 4 for 3', kind: 'bogo', value: 0, buy: 3, get: 1, productIds: [prod.id], enabled: true }); assert.equal(edit.ok, true, edit.message);
+  assert.equal((await basketWith(variant, 3)).discounts.length, 0, 'now three is not enough'); assert.equal((await basketWith(variant, 4)).discounts.reduce((s, d) => s + d.amountWithTax, 0), -unit, 'buy 3 get 1: the fourth is free');
+  // pause and resume
+  assert.equal((await A.setDiscountEnabled(x, bogo.id!, false)).ok, true); assert.equal((await A.listDiscounts(x)).find(d => d.id === bogo.id)!.status, 'paused'); assert.equal((await basketWith(variant, 4)).discounts.length, 0, 'paused means no discount');
+  assert.equal((await A.setDiscountEnabled(x, bogo.id!, true)).ok, true); assert.equal((await basketWith(variant, 4)).discounts.length, 1, 'resumed');
+  // refuse bad input and a product that is not ours
+  assert.equal((await A.saveDiscount(x, { method: 'code', code: 'mugs20', kind: 'percent', value: 5, enabled: true })).ok, false, 'code already in use');
+  assert.equal((await A.saveDiscount(x, { method: 'automatic', kind: 'bogo', value: 0, buy: 2, get: 1, productIds: ['9999'], enabled: true })).ok, false, 'unknown product');
+  assert.equal((await A.saveDiscount(x, { method: 'code', code: 'X', kind: 'percent', value: 5, enabled: true })).ok, false);
+  // schedule: a future start is scheduled and does not apply yet
+  const future = await A.saveDiscount(x, { method: 'automatic', kind: 'percent', value: 50, startDate: '2099-01-01', enabled: true }); assert.equal(future.ok, true, future.message);
+  assert.equal((await A.listDiscounts(x)).find(d => d.id === future.id)!.status, 'scheduled'); assert.equal((await basketWith(bowlVariant, 1)).discounts.length, 0);
+  // delete
+  for (const id of [pct.id!, bogo.id!, future.id!]) assert.equal((await A.deleteDiscount(x, id)).ok, true);
+  assert.equal((await A.listDiscounts(x)).some(d => [pct.id, bogo.id, future.id].includes(d.id)), false); assert.equal((await basketWith(variant, 4)).discounts.length, 0);
 });

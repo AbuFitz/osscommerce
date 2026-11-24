@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
+import type { DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -154,3 +154,9 @@ export async function addProductImages(id: string, form: FormData) {
   const r = await run(() => gateway().uploadProductImages(id, files), ['/products', `/products/${id}`]); return problems.length && r.ok ? { ...r, message: `${r.message}. ${problems.join('. ')}.` } : r;
 }
 export async function saveProductImages(id: string, ordered: string[]) { return run(() => gateway().setProductImages(id, ordered), ['/products', `/products/${id}`]); }
+
+// ---- Discounts ----
+export async function saveDiscountAction(d: DiscountInput) { return run(() => gateway().saveDiscount(d), ['/discounts']); }
+export async function setDiscountEnabledAction(id: string, enabled: boolean) { return run(() => gateway().setDiscountEnabled(id, enabled), ['/discounts']); }
+export async function deleteDiscountAction(id: string) { return run(() => gateway().deleteDiscount(id), ['/discounts']); }
+export async function discountProductsAction() { return gateway().discountProducts(); }

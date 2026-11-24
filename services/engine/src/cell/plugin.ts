@@ -4,7 +4,7 @@ import { VendurePlugin, PluginCommonModule, Injector, TransactionalConnection, O
 import { OssOutbox } from './outbox-entity.ts';
 import { OutboxService } from './events.ts';
 import { OSS_CALCULATORS, deliveryZoneChecker } from './shipping.ts';
-import { fixedOrderDiscount } from './discounts.ts';
+import { fixedOrderDiscount, buyXGetYAction } from './discounts.ts';
 import { PaymentSessionResolver, shopApiExtensions } from './shop-extension.ts';
 import Stripe from 'stripe';
 import { connectHandler } from './handler.ts';
@@ -45,7 +45,7 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
       ...(o.controlSecret && o.checkoutGate ? [{ route: CONTROL_PATH, beforeListen: true, handler: controlMiddleware({ secret: o.controlSecret, gate: o.checkoutGate }) }] : [])];
     config.shippingOptions.shippingCalculators = [...(config.shippingOptions.shippingCalculators ?? []), ...OSS_CALCULATORS];
     config.shippingOptions.shippingEligibilityCheckers = [...(config.shippingOptions.shippingEligibilityCheckers ?? []), deliveryZoneChecker];
-    config.promotionOptions.promotionActions = [...(config.promotionOptions.promotionActions ?? []), fixedOrderDiscount];
+    config.promotionOptions.promotionActions = [...(config.promotionOptions.promotionActions ?? []), fixedOrderDiscount, buyXGetYAction];
     config.customFields.ProductVariant = [...(config.customFields.ProductVariant ?? []), { name: 'weightGrams', type: 'int', defaultValue: 0, public: true, label: [{ languageCode: 'en' as any, value: 'Weight (grams)' }] }];
     config.customFields.Order = [...(config.customFields.Order ?? []),
       { name: 'ossPaymentState', type: 'string', defaultValue: 'pending', public: false, internal: true },

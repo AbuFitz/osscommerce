@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { LAUNCH_PLAN } from '@oss-commerce/contracts';
 import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
+import { statusOf, validateDiscount } from './discounts';
 
 /**
  * Deterministic synthetic fixtures (no real merchant data). Swap for HttpGateway
@@ -72,10 +73,12 @@ const CUSTOMERS: Customer[] = names.map((n, i) => ({ id: `c${i}`, name: n, email
 
 
 const DISCOUNTS: Discount[] = [
-      { code: 'WELCOME10', kind: 'percent', value: 10, status: 'active', used: 14, limit: 200, window: 'No end date' },
-      { code: 'FREESHIP50', kind: 'shipping', value: 0, status: 'active', used: 31, window: 'Until 31 Dec', minSpendMinor: 5000 },
-      { code: 'BLACKFRIDAY', kind: 'percent', value: 20, status: 'scheduled', used: 0, limit: 500, window: '27–30 Nov' },
-      { code: 'SUMMER5', kind: 'fixed', value: 500, status: 'expired', used: 88, limit: 100, window: 'Ended 31 Aug' },
+      { id: 'd1', code: 'WELCOME10', name: 'Welcome 10%', kind: 'percent', value: 10, status: 'active', used: 14, limit: 200, perCustomer: 1, window: 'No end date' },
+      { id: 'd2', code: 'FREESHIP50', name: 'Free delivery over £50', kind: 'shipping', value: 0, status: 'active', used: 31, window: 'Ends 31 Dec 2026', endsAt: '2026-12-31T23:59:59.999Z', minSpendMinor: 5000 },
+      { id: 'd3', code: 'BLACKFRIDAY', name: 'Black Friday', kind: 'percent', value: 20, status: 'scheduled', used: 0, limit: 500, window: 'Starts 27 Nov 2026, ends 30 Nov 2026', startsAt: '2026-11-27T00:00:00.000Z', endsAt: '2026-11-30T23:59:59.999Z' },
+      { id: 'd4', code: 'SUMMER5', name: 'Summer £5 off', kind: 'fixed', value: 500, status: 'expired', used: 88, limit: 100, window: 'Ended 31 Aug 2026', endsAt: '2026-08-31T23:59:59.999Z' },
+      { id: 'd5', code: '', automatic: true, name: 'Tea towels, 3 for 2', kind: 'bogo', value: 0, buy: 2, get: 1, productIds: ['p4'], status: 'active', used: 9, window: 'No end date' },
+      { id: 'd6', code: 'LINEN15', name: 'Linen 15%', kind: 'percent', value: 15, productIds: ['p2'], status: 'paused', used: 3, window: 'No end date' },
     ];
 const ZONES: ShippingZone[] = [
         { name: 'United Kingdom', regions: 'England, Scotland, Wales, Northern Ireland', rates: [{ label: 'Standard, 2–4 days', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Next day', priceMinor: 795 }] },
@@ -410,9 +413,28 @@ export const demoGateway: CommerceGateway = {
   },
   async createDiscount(d) {
     const x = await S(); const code = d.code.trim().toUpperCase(); if (x.discounts.some(q => q.code === code)) return { ok: false, message: `The code ${code} already exists.` };
-    x.discounts.unshift({ code, kind: d.kind, value: d.value, status: 'active', used: 0, limit: d.limit, window: d.endDate ? `Until ${new Date(d.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : 'No end date', minSpendMinor: d.minSpendMinor });
+    x.discounts.unshift({ id: `d${Date.now().toString(36)}`, code, name: `${code} discount`, kind: d.kind, value: d.value, status: 'active', used: 0, limit: d.limit, window: d.endDate ? `Ends ${new Date(d.endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'No end date', minSpendMinor: d.minSpendMinor });
     return { ok: true, message: `${code} is live. Customers can use it at checkout now.` };
   },
+  async discountProducts() { const x = await S(); return x.products.filter(p => p.status !== 'archived').map(p => ({ id: p.id, title: p.title, variantIds: detail(x, p).list.map(v => v.id) })); },
+  async saveDiscount(d) {
+    const x = await S(); const problem = validateDiscount(d, AS_OF.slice(0, 10)); if (problem) return { ok: false, message: problem };
+    const code = d.method === 'code' ? (d.code ?? '').trim().toUpperCase() : ''; if (code && x.discounts.some(q => q.id !== d.id && q.code === code)) return { ok: false, message: `${code} is already in use.` };
+    if (d.productIds?.some(id => !x.products.some(p => p.id === id))) return { ok: false, message: 'One of the chosen products is not in your catalogue.' };
+    const startsAt = d.startDate ? `${d.startDate}T00:00:00.000Z` : undefined; const endsAt = d.endDate ? `${d.endDate}T23:59:59.999Z` : undefined; const now = new Date(AS_OF);
+    const sd = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    const prev = d.id ? x.discounts.find(q => q.id === d.id) : undefined; if (d.id && !prev) return { ok: false, message: 'That discount no longer exists.' };
+    const row: Discount = { id: d.id ?? `d${Date.now().toString(36)}`, code, automatic: !code, name: d.name?.trim() || (code ? `${code} discount` : 'Automatic discount'), kind: d.kind, value: d.value, used: prev?.used ?? 0, limit: d.limit, perCustomer: d.perCustomer, minSpendMinor: d.minSpendMinor || undefined, productIds: d.productIds?.length ? d.productIds : undefined, buy: d.buy, get: d.get, startsAt, endsAt,
+      status: statusOf({ enabled: d.enabled, startsAt, endsAt }, now), window: startsAt && new Date(startsAt) > now ? `Starts ${sd(startsAt)}${endsAt ? `, ends ${sd(endsAt)}` : ''}` : endsAt ? (new Date(endsAt) <= now ? `Ended ${sd(endsAt)}` : `Ends ${sd(endsAt)}`) : 'No end date' };
+    if (prev) Object.assign(prev, row); else x.discounts.unshift(row);
+    return { ok: true, id: row.id, message: d.id ? 'Discount saved.' : code ? `${code} is ${d.enabled ? 'active' : 'saved as paused'}.` : `The automatic discount is ${d.enabled ? 'active' : 'saved as paused'}.` };
+  },
+  async setDiscountEnabled(id, enabled) {
+    const x = await S(); const d = x.discounts.find(q => q.id === id); if (!d) return { ok: false, message: 'That discount no longer exists.' }; if (d.status === 'expired') return { ok: false, message: 'This discount has ended. Edit its dates to run it again.' };
+    d.status = enabled ? (d.startsAt && new Date(d.startsAt) > new Date(AS_OF) ? 'scheduled' : 'active') : 'paused';
+    return { ok: true, message: enabled ? 'Discount resumed. Customers can use it again.' : 'Discount paused. Customers cannot use it until you resume it.' };
+  },
+  async deleteDiscount(id) { const x = await S(); const i = x.discounts.findIndex(q => q.id === id); if (i < 0) return { ok: false, message: 'That discount no longer exists.' }; x.discounts.splice(i, 1); return { ok: true, message: 'Discount deleted. Past orders keep what they were charged.' }; },
   async saveZone(z) {
     const x = await S(); const name = z.name.trim(); const i = z.originalName ? x.zones.findIndex(q => q.name === z.originalName) : -1;
     if (x.zones.some((q, k) => q.name.toLowerCase() === name.toLowerCase() && k !== i)) return { ok: false, message: `A zone called ${name} already exists.` };
