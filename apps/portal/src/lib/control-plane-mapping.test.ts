@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { automationOutcome, isRecentAuthentication, paymentView, stripeOnboardingConfig } from './control-plane-mapping.ts';
+import { automationOutcome, grantTransition, isRecentAuthentication, paymentView, stripeOnboardingConfig } from './control-plane-mapping.ts';
 
 test('payment view fails closed when no account exists or a stored status is unknown', () => {
   const none = paymentView(undefined, 50);
@@ -41,4 +41,13 @@ test('payment onboarding requires a recent sign-in, correctly scoped key and can
   assert.equal(stripeOnboardingConfig({ secret: `sk_test_${'a'.repeat(24)}`, appEnv: 'production', publicUrl: 'https://portal.example' }), null);
   assert.equal(stripeOnboardingConfig({ secret: `sk_live_${'a'.repeat(24)}`, appEnv: 'production', publicUrl: 'http://portal.example' }), null);
   assert.equal(stripeOnboardingConfig({ secret: 'sk_live_placeholder_placeholder', appEnv: 'production', publicUrl: 'https://portal.example' }), null);
+});
+
+test('support grants only follow valid, unexpired merchant decisions', () => {
+  const now = new Date('2027-01-01T00:00:00Z'); const future = new Date('2027-01-01T01:00:00Z'); const past = new Date('2026-12-31T23:59:00Z');
+  assert.equal(grantTransition('pending', 'approve', future, now), 'active');
+  assert.equal(grantTransition('pending', 'decline', future, now), 'declined');
+  assert.equal(grantTransition('active', 'revoke', future, now), 'revoked');
+  assert.equal(grantTransition('active', 'approve', future, now), null);
+  assert.equal(grantTransition('pending', 'approve', past, now), 'expired');
 });

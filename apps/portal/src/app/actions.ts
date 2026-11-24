@@ -12,7 +12,11 @@ export async function fulfilOrder(id: string, tracking?: string) { return run(()
 export async function refundOrder(i: RefundInput) { return run(() => gateway().refundOrder(i), ['/orders', '/']); }
 export async function inviteMember(email: string, role: Member['role']) { return run(() => gateway().inviteMember(email, role), ['/settings/team']); }
 export async function rollbackTheme(v: string) { return run(() => gateway().rollbackTheme(v), ['/storefront']); }
-export async function decideGrant(id: string, d: 'approve' | 'decline' | 'revoke') { return run(() => gateway().decideGrant(id, d), ['/settings/team']); }
+export async function decideGrant(id: string, d: 'approve' | 'decline' | 'revoke') {
+  const { LIVE, recentlyAuthenticated } = await import('@/lib/session');
+  if (LIVE && !await recentlyAuthenticated()) return { ok: false, message: 'Sign out and sign in again before changing support access.' };
+  return run(() => gateway().decideGrant(id, d), ['/settings/team']);
+}
 export async function savePreferences(p: Record<string, boolean>) { return run(() => gateway().savePreferences(p), ['/settings/preferences']); }
 export async function saveSection(id: string, fields: Record<string, string>) { return run(() => gateway().saveSection(id, fields), ['/content']); }
 export async function publishContent() { return run(() => gateway().publishContent(), ['/content']); }
@@ -23,8 +27,8 @@ export async function decideQuote(id: string, approve: boolean) { return run(() 
 export async function saveEmailSettings(brand: Partial<EmailSettings['brand']>, n: Record<string, boolean>) { return run(() => gateway().saveEmailSettings(brand, n), ['/settings/emails']); }
 
 export async function startPaymentSetup() {
-  const { recentlyAuthenticated } = await import('@/lib/session');
-  if (!await recentlyAuthenticated()) return { ok: false as const, message: 'Sign out and sign in again before changing payment details.' };
+  const { LIVE, recentlyAuthenticated } = await import('@/lib/session');
+  if (LIVE && !await recentlyAuthenticated()) return { ok: false as const, message: 'Sign out and sign in again before changing payment details.' };
   try { return await gateway().startPaymentSetup(); }
   catch { return { ok: false as const, message: 'Stripe could not be opened just now. Nothing was changed. Try again in a moment.' }; }
 }

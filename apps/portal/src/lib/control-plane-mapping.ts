@@ -16,6 +16,14 @@ export function stripeOnboardingConfig(input: { secret?: string; appEnv?: string
   return keyOk && /^https:\/\/[^/]+$/.test(publicBaseUrl) ? { secret, publicBaseUrl } : null;
 }
 
+export function grantTransition(current: string, decision: 'approve' | 'decline' | 'revoke', expiresAt: Date, now = new Date()): 'active' | 'declined' | 'revoked' | 'expired' | null {
+  if (expiresAt.getTime() <= now.getTime()) return current === 'pending' || current === 'active' ? 'expired' : null;
+  if (current === 'pending' && decision === 'approve') return 'active';
+  if (current === 'pending' && decision === 'decline') return 'declined';
+  if (current === 'active' && decision === 'revoke') return 'revoked';
+  return null;
+}
+
 export function paymentView(row: ControlPlaneRow | undefined, applicationFeeBp: number): PaymentSetup {
   const empty = { chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [] as string[], pending: [] as string[] };
   if (!row) return { ...empty, status: 'not_started', headline: 'Set up payments', detail: 'Connect your bank account so customers can pay and you get paid directly.', applicationFeeBp };

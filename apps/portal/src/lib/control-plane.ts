@@ -1,9 +1,9 @@
 import 'server-only';
 import { Pool, type PoolClient } from 'pg';
-import type { Automation, AutomationRun, EmailSettings, PaymentSetup, Readiness, StorefrontView } from './gateway';
+import type { AccessGrant, Automation, AutomationRun, EmailSettings, PaymentSetup, Readiness, StorefrontView } from './gateway';
 import { GATE_COPY, LAUNCH_GATES } from './gateway';
 import type { StoreRecord } from '@oss-commerce/contracts';
-import { automationOutcome, paymentView, stripeOnboardingConfig } from './control-plane-mapping';
+import { automationOutcome, grantTransition, paymentView, stripeOnboardingConfig } from './control-plane-mapping';
 import { liveConnect, type ConnectPort } from '@oss-commerce/payments';
 
 type Row = Record<string, any>;
@@ -17,6 +17,8 @@ export interface ControlPlanePort {
   emailSettings(storeId: string, fallbackName: string): Promise<EmailSettings>;
   saveEmailSettings(storeId: string, brand: Partial<EmailSettings['brand']>, notifications: Record<string, boolean>): Promise<{ ok: boolean; message: string }>;
   storefront(storeId: string): Promise<StorefrontView | null>;
+  grants(storeId: string): Promise<AccessGrant[]>;
+  decideGrant(storeId: string, id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<{ ok: boolean; message: string }>;
 }
 
 export class PgControlPlane implements ControlPlanePort {
@@ -138,6 +140,26 @@ export class PgControlPlane implements ControlPlanePort {
         checks: [{ label: 'Domain verified', ok: f.verified === true, detail: f.verified ? f.host : 'DNS is not verified yet.' }, { label: 'Deployment ready', ok: ['ready', 'promoted'].includes(current?.state), detail: current?.state ?? 'No deployment yet.' }],
         history: deployments.map((d, i) => ({ version: d.git_sha?.slice(0, 7) ?? d.deployment_id, at: new Date(d.created_at).toISOString(), note: d.state, current: i === 0 })),
       };
+    });
+  }
+
+  grants(storeId: string) {
+    return this.tx(storeId, async client => {
+      const rows = (await client.query(`select * from cp.access_grants where store_id=$1 and state in ('pending','active') order by (state='pending') desc, requested_at desc`, [storeId])).rows;
+      return rows.map((r): AccessGrant => ({ id: r.id, who: r.grantee_user_id, purpose: r.purpose, scopes: r.scopes, write: r.write_access, state: r.state, expires: new Date(r.expires_at).toISOString() }));
+    });
+  }
+
+  decideGrant(storeId: string, id: string, decision: 'approve' | 'decline' | 'revoke') {
+    return this.tx(storeId, async client => {
+      const row = (await client.query('select * from cp.access_grants where store_id=$1 and id=$2 for update', [storeId, id])).rows[0];
+      if (!row) return { ok: false, message: 'That access request no longer exists.' };
+      const next = grantTransition(row.state, decision, new Date(row.expires_at));
+      if (!next) return { ok: false, message: 'That access request has already changed. Refresh the page.' };
+      await client.query('update cp.access_grants set state=$3, decided_by=$4, decided_at=now() where store_id=$1 and id=$2', [storeId, id, next, 'merchant']);
+      await client.query(`insert into cp.audit_log(store_id,actor,action,before,after) values ($1,'merchant',$2,$3::jsonb,$4::jsonb)`, [storeId, `access.${next}`, JSON.stringify({ id, state: row.state }), JSON.stringify({ id, state: next })]);
+      if (next === 'expired') return { ok: false, message: 'That access request has expired. No access was granted.' };
+      return { ok: true, message: next === 'active' ? 'Access approved.' : next === 'declined' ? 'Access declined.' : 'Access revoked.' };
     });
   }
 }
