@@ -19,7 +19,7 @@ export const fetchUpstream: Upstream = {
   },
 };
 
-export function createServer(deps: Omit<GatewayDeps, 'upstream'> & { upstream?: Upstream; content?: ContentStore; preferences?: PreferencesStore }) {
+export function createServer(deps: Omit<GatewayDeps, 'upstream'> & { upstream?: Upstream; content?: ContentStore; preferences?: PreferencesStore; ready?: () => Promise<boolean> }) {
   const handle = createGateway({ ...deps, upstream: deps.upstream ?? fetchUpstream });
   const content = deps.content ? createContentGateway({ registry: deps.registry, content: deps.content, rateLimit: deps.storefrontLimit, audit: deps.audit }) : null;
   const preferences = deps.preferences ? createPreferencesGateway({ registry: deps.registry, preferences: deps.preferences, rateLimit: deps.storefrontLimit, audit: deps.audit }) : null;
@@ -27,6 +27,7 @@ export function createServer(deps: Omit<GatewayDeps, 'upstream'> & { upstream?: 
     const send = (status: number, body: string, headers: Record<string, string> = {}) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...headers }); res.end(body); };
     try {
       if (req.method === 'GET' && req.url === '/healthz') return send(200, '{"ok":true}');
+      if (req.method === 'GET' && req.url === '/readyz') { const ready = await deps.ready?.().catch(() => false) ?? true; return send(ready ? 200 : 503, JSON.stringify({ ready })); }
       if (req.method === 'GET' && req.url === '/v1/meta') return send(200, JSON.stringify(API_META), { 'cache-control': 'public, max-age=60' });
       if (req.method === 'GET' && req.url === '/v1/preferences') {
         if (!preferences) return send(503, '{"error":"preferences unavailable"}');

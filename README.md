@@ -25,6 +25,6 @@ npm run proof:isolation    # re-run the Vendure tenancy probe (needs services/en
 
 ## Launch gates still open
 
-The codebase now contains the engine cell, live portal gateway/auth, Stripe Connect payment handler and webhook processing, storefront SDK/gateway, provisioning state machine, automation/email worker, secure unsubscribe, and safe control-plane migrator. Real payments remain disabled until the hosted engine, migrated environment databases, R2, Stripe sandbox/live credentials, Resend sender domain and production DNS are configured and verified. The portal deliberately refuses to substitute demo data in production.
+The codebase now contains the engine cell, live portal gateway/auth, Stripe Connect payment handler and webhook processing, storefront SDK, a deployable storefront gateway runtime, provisioning state machine, automation/email worker, secure unsubscribe, and safe control-plane migrator. Real payments remain disabled until the hosted engine and gateway, migrated environment databases, R2, Stripe sandbox/live credentials, Resend sender domain and production DNS are configured and verified. The portal deliberately refuses to substitute demo data in production.
 
 See `docs/environments.md` for dev, staging and production.
