@@ -123,3 +123,20 @@ The guard default-denies every Admin operation not on its list, which is correct
 **Phase 3: grow**: segments and campaigns; reviews; subscriptions; trade pricing; visitor analytics and funnels; search; carrier labels; storefront pages and menus.
 
 Everything ships with a sensible default and one-switch setup, per the roadmap in `docs/design/smart-engine-roadmap.md`.
+
+
+## Progress log (Phase 1)
+Done and proven (browser checks for the screens; real Vendure for engine behaviour; guard isolation tests for anything new a merchant may call):
+- **Analytics v2**: real charts (axes, crosshair tooltip, previous-period overlay), six metrics with trends, date ranges, breakdowns, CSV export. Pure report module with tests.
+- **Product editor**: full create and edit (description, SEO, compare-at, barcode, weight, VAT), real photo upload (multipart) with reorder and remove, delete. Photos are channel-checked in the guard.
+- **Orders**: cancel (optional refund, stock released), private notes, partial fulfilment by line, printable packing slip.
+- **Discounts**: code or automatic; percentage, amount, free delivery, repeating buy X get Y (custom action, because Vendure's built-in applies once per order); chosen products; dates; per-customer limits; edit, pause, resume, delete.
+- **Collections**: by-name or hand-picked, edit and delete (membership is recalculated by the engine's background queue, so counts can lag a moment).
+- **Customers**: search, computed segments (new, returning, top spenders, not back in 60 days), detail page with order history, addresses, private notes, profile edit.
+
+Findings worth keeping:
+- Vendure's **customer groups are global** (no channel), so they are deliberately NOT offered to merchants; a regression test keeps them closed. Segments are computed in the portal instead.
+- Vendure's built-in **buy X get Y free applies once per order**; we ship a repeating custom action (`oss-buy-x-get-y`) with unit tests.
+- Provisioning now re-syncs an existing store's role permissions, so existing stores pick up new features.
+
+Not done in Phase 1: rich-text descriptions, product tags and duplicate, phone photo hand-off in the new editor, resend order confirmation, bulk fulfil, customer create/import/merge.

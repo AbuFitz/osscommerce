@@ -174,3 +174,20 @@ test('photos are channel-owned: B cannot attach, feature or delete A\'s photo, a
   assert.equal((await A.getProduct(m.A.x, ids.A.product))!.images.length, 1, 'A still has its photo');
   assert.equal((await A.getProduct(m.B.x, ids.B.product))!.images.length, 0, 'B never got it');
 });
+
+test('customer notes: each store notes and clears only its own customers\' notes; customer groups stay closed because they are global', async () => {
+  const cA = (await A.listCustomers(m.A.x))[0].id, cB = (await A.listCustomers(m.B.x))[0].id; assert.ok(cA && cB);
+  const noteA = await m.A.x(`mutation($i:AddNoteToCustomerInput!){ addNoteToCustomer(input:$i){ id } }`, { i: { id: cA, note: 'A private note', isPublic: false } }); assert.ok(noteA.addNoteToCustomer.id);
+  const noteIdA = (await m.A.x(`query($id:ID!){ customer(id:$id){ history(options:{ take: 20 }){ items{ id type data } } } }`, { id: cA })).customer.history.items.find((h: any) => h.type === 'CUSTOMER_NOTE').id;
+  const denied = (label: string, r: { denied?: string; data?: unknown }) => assert.equal(r.denied, 'FORBIDDEN', `${label}: ${JSON.stringify(r)}`);
+  denied('note on A\'s customer', await as('B', `mutation($i:AddNoteToCustomerInput!){ addNoteToCustomer(input:$i){ id } }`, { i: { id: cA, note: 'snoop', isPublic: false } }));
+  denied('delete A\'s note', await as('B', `mutation($id:ID!){ deleteCustomerNote(id:$id){ result } }`, { id: noteIdA }));
+  // Customer groups are global in this engine, so they are not offered to merchants at all.
+  denied('list groups', await as('B', `query{ customerGroups{ items{ id name } } }`));
+  denied('create a group', await as('B', `mutation($i:CreateCustomerGroupInput!){ createCustomerGroup(input:$i){ id } }`, { i: { name: 'x', customerIds: [cB] } }));
+  denied('add to a group', await as('B', `mutation($g:ID!,$c:[ID!]!){ addCustomersToGroup(customerGroupId:$g, customerIds:$c){ id } }`, { g: '1', c: [cB] }));
+  const a = (await m.A.x(`query($id:ID!){ customer(id:$id){ history(options:{ take: 20 }){ items{ type } } } }`, { id: cA })).customer; assert.ok(a.history.items.some((h: any) => h.type === 'CUSTOMER_NOTE'), 'A still has its note');
+  await m.B.x(`mutation($i:AddNoteToCustomerInput!){ addNoteToCustomer(input:$i){ id } }`, { i: { id: cB, note: 'B note', isPublic: false } });
+  const noteIdB = (await m.B.x(`query($id:ID!){ customer(id:$id){ history(options:{ take: 20 }){ items{ id type } } } }`, { id: cB })).customer.history.items.find((h: any) => h.type === 'CUSTOMER_NOTE').id;
+  assert.equal((await m.B.x(`mutation($id:ID!){ deleteCustomerNote(id:$id){ result } }`, { id: noteIdB })).deleteCustomerNote.result, 'DELETED');
+});

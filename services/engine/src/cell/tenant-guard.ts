@@ -1,6 +1,6 @@
 import { Inject, Injectable, type CallHandler, type ExecutionContext, type NestInterceptor } from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
-import { ForbiddenError, internal_getRequestContext, TransactionalConnection, Permission, Product, ProductVariant, Collection, Asset, Promotion, ShippingMethod, Customer, Order, OrderLine, Payment, Fulfillment, type RequestContext } from '@vendure/core';
+import { ForbiddenError, internal_getRequestContext, TransactionalConnection, Permission, Product, ProductVariant, Collection, Asset, Promotion, ShippingMethod, Customer, CustomerHistoryEntry, Order, OrderLine, Payment, Fulfillment, type RequestContext } from '@vendure/core';
 import type { EntityTarget } from 'typeorm';
 
 /**
@@ -13,13 +13,15 @@ import type { EntityTarget } from 'typeorm';
  */
 export const MERCHANT_QUERIES = new Set(['activeAdministrator', 'activeChannel', 'product', 'products', 'productVariant', 'productVariants', 'order', 'orders', 'customer', 'customers', 'collection', 'collections', 'previewCollectionVariants', 'taxCategories', 'asset', 'assets', 'facets', 'promotions', 'promotion', 'stockLocations', 'shippingMethod', 'shippingMethods', 'countries', 'search']);
 export const MERCHANT_MUTATIONS = new Set(['createProduct', 'updateProduct', 'deleteProduct', 'createProductOptionGroup', 'addOptionGroupToProduct', 'createProductVariants', 'updateProductVariants', 'deleteProductVariant', 'createCollection', 'updateCollection', 'deleteCollection',
-  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'createPromotion', 'updatePromotion', 'deletePromotion',
+  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'addNoteToCustomer', 'deleteCustomerNote', 'createPromotion', 'updatePromotion', 'deletePromotion',
   'createShippingMethod', 'updateShippingMethod', 'deleteShippingMethod']);
 
-type Via = 'direct' | 'order' | 'optionGroup';
+type Via = 'direct' | 'order' | 'optionGroup' | 'customerNote';
 type Check = { entity: EntityTarget<any>; ids: (a: any) => unknown[]; via?: Via };
 const arr = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const inp = (a: any) => a?.input;
+/** Customer groups are deliberately NOT offered to merchants: in this Vendure they are global to the engine (no channel), so one store could see or change another's.
+ *  Merchants get customer notes instead, which belong to a channel-owned customer. Segments are computed in the portal. */
 /** Photos a request attaches by id. Photos are channel-owned, so a store may only attach its own. */
 const photos = (i: any): unknown[] => [...arr(i?.assetIds), i?.featuredAssetId];
 /** Which ids each write names, and what they must belong to. Reads by id are already channel-scoped by Vendure (and covered by tests). */
@@ -33,6 +35,8 @@ export const OWNERSHIP: Record<string, Check[]> = {
   updateCollection: [{ entity: Collection, ids: a => arr(inp(a)?.id) }, { entity: Asset, ids: a => photos(inp(a)) }], deleteCollection: [{ entity: Collection, ids: a => arr(a?.id) }],
   updateAsset: [{ entity: Asset, ids: a => arr(inp(a)?.id) }], deleteAssets: [{ entity: Asset, ids: a => arr(inp(a)?.assetIds) }],
   updateCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
+  addNoteToCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
+  deleteCustomerNote: [{ entity: CustomerHistoryEntry, ids: a => arr(a?.id), via: 'customerNote' }],
   updatePromotion: [{ entity: Promotion, ids: a => arr(inp(a)?.id) }], deletePromotion: [{ entity: Promotion, ids: a => arr(a?.id) }],
   updateShippingMethod: [{ entity: ShippingMethod, ids: a => arr(inp(a)?.id) }], deleteShippingMethod: [{ entity: ShippingMethod, ids: a => arr(a?.id) }],
   addFulfillmentToOrder: [{ entity: OrderLine, ids: a => arr(inp(a)?.lines).map((l: any) => l?.orderLineId), via: 'order' }],
@@ -68,6 +72,11 @@ export class TenantGuard implements NestInterceptor {
       // Option groups are not channel-aware. One already attached to another store's product must not be re-used here.
       const products = await this.conn.getRepository(ctx, Product).createQueryBuilder('p').innerJoin('p.optionGroups', 'g').where('g.id IN (:...ids)', { ids }).select('p.id', 'id').getRawMany();
       const pids = uniq(products.map(p => p.id)); if (pids.length && (await this.inChannel(ctx, Product, pids)) !== pids.length) throw new ForbiddenError(); return;
+    }
+    if (c.via === 'customerNote') {
+      // A note is a history entry on a customer. It belongs to this store only if its customer does.
+      const rows = await this.conn.getRepository(ctx, CustomerHistoryEntry).find({ where: ids.map(id => ({ id })) as any, relations: ['customer'] }); const cids = uniq(rows.map((r: any) => r.customer?.id));
+      if (rows.length !== ids.length || !cids.length || (await this.inChannel(ctx, Customer, cids)) !== cids.length) throw new ForbiddenError(); return;
     }
     if (c.via === 'order') {
       const orderIds = await this.orderIdsFor(ctx, c.entity, ids);

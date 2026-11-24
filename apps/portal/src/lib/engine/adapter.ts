@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct } from '../gateway';
-import { createProductWithVariants, findTaxCategories, type Exec } from './catalogue';
+import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile } from '../gateway';
+import { createProductWithVariants, findTaxCategories, previewCollection, type Exec } from './catalogue';
 import { slugify } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from '../discounts';
 
@@ -357,5 +357,67 @@ export async function refundOrder(x: Exec, i: RefundInput): Promise<MutationResu
     const r = (await x(`mutation($i: RefundOrderInput!){ refundOrder(input:$i){ __typename ... on Refund { id state } ... on ErrorResult { message } } }`, { i: { lines: [], shipping: 0, adjustment: 0, amount: i.amountMinor, paymentId: pay.id, reason: i.reason || 'Refund' } })).refundOrder;
     if (r.__typename !== 'Refund') return { ok: false, message: r.message ?? 'The refund could not be made.' }; if (r.state === 'Failed') return { ok: false, message: 'The payment provider declined the refund. Nothing was refunded.' };
     return { ok: true, message: `Refunded ${(i.amountMinor / 100).toFixed(2)} to the customer's original payment method.` };
+  } catch (e) { return fail(e); }
+}
+
+// ---- Collections ----
+const COLLECTION = `id name filters{ code args{ name value } } productVariants(options:{ take: 200 }){ totalItems items{ product{ id name } } }`;
+type RawCollection = { id: string; name: string; filters: RawOperation[]; productVariants: { totalItems: number; items: { product: { id: string; name: string } }[] } };
+export function mapCollection(c: RawCollection): Collection {
+  const f = c.filters[0]; const products = new Map<string, string>(); for (const v of c.productVariants.items) products.set(v.product.id, v.product.name);
+  const base = { id: c.id, name: c.name, count: c.productVariants.totalItems, products: [...products.values()] };
+  if (c.filters.length === 1 && f.code === 'variant-name-filter') return { ...base, kind: 'rule', contains: String(arg(f, 'term') ?? '') };
+  if (c.filters.length === 1 && f.code === 'variant-id-filter') return { ...base, kind: 'manual', contains: '', productIds: [...products.keys()] };
+  return { ...base, kind: 'other', contains: '' };
+}
+export async function listCollections(x: Exec): Promise<Collection[]> { return ((await x(`query{ collections(options:{ take: 100 }){ items{ ${COLLECTION} } } }`)).collections.items as RawCollection[]).map(mapCollection); }
+export async function saveCollection(x: Exec, c: CollectionInput): Promise<MutationResult> {
+  try {
+    const name = c.name.trim(); if (!name) return { ok: false, message: 'Give the collection a name.' }; if (name.length > 80) return { ok: false, message: 'Keep the name under 80 characters.' };
+    let filter: { code: string; arguments: { name: string; value: string }[] }; let preview = 0;
+    if (c.kind === 'rule') { const term = (c.contains ?? '').trim(); if (!term) return { ok: false, message: 'Add a word to match.' }; filter = { code: 'variant-name-filter', arguments: [{ name: 'operator', value: 'contains' }, { name: 'term', value: term }] }; preview = (await previewCollection(x, { kind: 'name', contains: term })).totalItems; }
+    else {
+      if (!c.productIds?.length) return { ok: false, message: 'Choose at least one product.' };
+      const own = await listDiscountProducts(x); const picked = own.filter(p => c.productIds!.includes(p.id)); if (picked.length !== new Set(c.productIds).size) return { ok: false, message: 'One of the chosen products is not in your catalogue.' };
+      const variantIds = picked.flatMap(p => p.variantIds); filter = { code: 'variant-id-filter', arguments: [{ name: 'variantIds', value: JSON.stringify(variantIds) }, { name: 'combineWithAnd', value: 'false' }] }; preview = variantIds.length;
+    }
+    if (!preview) return { ok: false, message: 'Nothing matches that yet. A collection with no products would show an empty page on your website.' };
+    const dup = (await listCollections(x)).find(o => o.id !== c.id && o.name.toLowerCase() === name.toLowerCase()); if (dup) return { ok: false, message: `A collection called ${name} already exists.` };
+    const translations = [{ languageCode: 'en', name, slug: slugify(name), description: '' }];
+    const r = c.id ? (await x(`mutation($i: UpdateCollectionInput!){ updateCollection(input:$i){ id } }`, { i: { id: c.id, filters: [filter], translations } })).updateCollection : (await x(`mutation($i: CreateCollectionInput!){ createCollection(input:$i){ id } }`, { i: { filters: [filter], translations } })).createCollection;
+    return r?.id ? { ok: true, id: r.id, message: c.id ? `${name} saved.` : `${name} created with ${preview} variant${preview > 1 ? 's' : ''}.` } : { ok: false, message: 'The collection could not be saved.' };
+  } catch (e) { return fail(e); }
+}
+export async function deleteCollection(x: Exec, id: string): Promise<MutationResult> {
+  try { const r = (await x(`mutation($id:ID!){ deleteCollection(id:$id){ result message } }`, { id })).deleteCollection; return r?.result === 'DELETED' ? { ok: true, message: 'Collection deleted. The products themselves are untouched.' } : { ok: false, message: r?.message ?? 'The collection could not be deleted.' }; } catch (e) { return fail(e); }
+}
+
+// ---- Customer detail ----
+export async function getCustomer(x: Exec, id: string): Promise<CustomerDetail | null> {
+  const c = (await x(`query($id:ID!){ customer(id:$id){ id title firstName lastName emailAddress phoneNumber createdAt
+    addresses{ fullName streetLine1 streetLine2 city postalCode country{ name } }
+    orders(options:{ take: 100, sort:{ orderPlacedAt: DESC }, filter:{ active:{ eq:false } } }){ items{ ${ORDER} } }
+    history(options:{ take: 100, sort:{ createdAt: DESC } }){ items{ id type createdAt data administrator{ firstName lastName } } } } }`, { id })).customer;
+  if (!c) return null;
+  const orders = (c.orders.items as RawOrder[]).filter(o => o.orderPlacedAt).map(mapOrder); const sales = orders.filter(o => o.payment === 'paid' || o.payment === 'partially_refunded' || o.payment === 'refunded');
+  const spent = sales.reduce((s, o) => s + o.totalMinor - o.refundedMinor, 0);
+  return { id: c.id, firstName: c.firstName ?? '', lastName: c.lastName ?? '', name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || c.emailAddress, email: c.emailAddress, phone: c.phoneNumber ?? '', since: c.createdAt, marketing: false,
+    orders: orders.length, spentMinor: spent, aovMinor: sales.length ? Math.round(sales.reduce((s, o) => s + o.totalMinor, 0) / sales.length) : 0, lastOrder: orders[0]?.placedAt ?? '',
+    addresses: (c.addresses as { fullName?: string; streetLine1?: string; streetLine2?: string; city?: string; postalCode?: string; country?: { name: string } }[]).map(a => [a.fullName, a.streetLine1, a.streetLine2, a.city, a.postalCode, a.country?.name].filter(Boolean).join(', ')),
+    recentOrders: orders.slice(0, 20).map(o => ({ id: o.id, number: o.number, placedAt: o.placedAt, totalMinor: o.totalMinor, payment: o.payment, fulfilment: o.fulfilment, items: o.lines.map(l => `${l.qty} × ${l.title}`).join(', ') })),
+    notes: (c.history.items as { id: string; type: string; createdAt: string; data: { note?: string }; administrator: { firstName: string; lastName: string } | null }[]).filter(h => h.type === 'CUSTOMER_NOTE' && typeof h.data.note === 'string').map(h => ({ id: h.id, text: h.data.note!, at: h.createdAt, by: h.administrator ? `${h.administrator.firstName} ${h.administrator.lastName}`.trim() : undefined })) };
+}
+export async function addCustomerNote(x: Exec, customerId: string, text: string): Promise<MutationResult> {
+  try { const n = text.trim(); if (!n) return { ok: false, message: 'Write a note first.' }; if (n.length > 2000) return { ok: false, message: 'Notes are limited to 2,000 characters.' };
+    const r = (await x(`mutation($i: AddNoteToCustomerInput!){ addNoteToCustomer(input:$i){ id } }`, { i: { id: customerId, note: n, isPublic: false } })).addNoteToCustomer; return r?.id ? { ok: true, message: 'Note added. Only your team can see it.' } : { ok: false, message: 'The note could not be saved.' };
+  } catch (e) { return fail(e); }
+}
+export async function deleteCustomerNote(x: Exec, noteId: string): Promise<MutationResult> {
+  try { const r = (await x(`mutation($id:ID!){ deleteCustomerNote(id:$id){ result message } }`, { id: noteId })).deleteCustomerNote; return r?.result === 'DELETED' ? { ok: true, message: 'Note deleted.' } : { ok: false, message: r?.message ?? 'The note could not be deleted.' }; } catch (e) { return fail(e); }
+}
+export async function updateCustomerProfile(x: Exec, id: string, p: CustomerProfile): Promise<MutationResult> {
+  try { if (!p.firstName.trim() && !p.lastName.trim()) return { ok: false, message: 'Enter a name.' }; if (p.phone && !/^[+()\d\s-]{6,24}$/.test(p.phone)) return { ok: false, message: 'Enter a phone number with digits, spaces, + or dashes.' };
+    const r = (await x(`mutation($i: UpdateCustomerInput!){ updateCustomer(input:$i){ __typename ... on Customer{ id } ... on ErrorResult{ message } } }`, { i: { id, firstName: p.firstName.trim(), lastName: p.lastName.trim(), phoneNumber: p.phone.trim() } })).updateCustomer;
+    return r.__typename === 'Customer' ? { ok: true, message: 'Customer details saved.' } : { ok: false, message: r.message ?? 'The details could not be saved.' };
   } catch (e) { return fail(e); }
 }

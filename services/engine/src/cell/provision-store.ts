@@ -31,6 +31,8 @@ export async function provisionStore(x: OperatorExec, s: NewStore): Promise<Prov
   await x(`mutation($i:AssignShippingMethodsToChannelInput!){ assignShippingMethodsToChannel(input:$i){ id } }`, { i: { shippingMethodIds: [sm.id], channelId: channel.id } });
   let role = (await x(`query($c:String!){ roles(options:{ filter:{ code:{ eq:$c } } }){ items{ id } } }`, { c: `owner-${s.key}` })).roles.items[0];
   if (!role) role = (await x(`mutation($i:CreateRoleInput!){ createRole(input:$i){ id } }`, { i: { code: `owner-${s.key}`, description: `Owner of ${s.name}`, permissions: MERCHANT_PERMISSIONS, channelIds: [channel.id] } })).createRole;
+  // Re-running keeps an existing store's role in step with the current permission set, so a store made last month gets this month's features.
+  else await x(`mutation($i:UpdateRoleInput!){ updateRole(input:$i){ id } }`, { i: { id: role.id, permissions: MERCHANT_PERMISSIONS } });
   let adm = (await x(`query($e:String!){ administrators(options:{ filter:{ emailAddress:{ eq:$e } } }){ items{ id } } }`, { e: s.owner.email })).administrators.items[0];
   if (!adm) adm = (await x(`mutation($i:CreateAdministratorInput!){ createAdministrator(input:$i){ id } }`, { i: { emailAddress: s.owner.email, firstName: s.owner.firstName ?? 'Store', lastName: s.owner.lastName ?? 'Owner', password: s.owner.password, roleIds: [role.id] } })).createAdministrator;
   return { channelId: channel.id, stockLocationId: loc.id, roleId: role.id, administratorId: adm.id };

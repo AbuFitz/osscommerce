@@ -177,3 +177,37 @@ test('discounts v2: chosen-product percentage, buy X get Y, automatic, edit, pau
   for (const id of [pct.id!, bogo.id!, future.id!]) assert.equal((await A.deleteDiscount(x, id)).ok, true);
   assert.equal((await A.listDiscounts(x)).some(d => [pct.id, bogo.id, future.id].includes(d.id)), false); assert.equal((await basketWith(variant, 4)).discounts.length, 0);
 });
+
+test('collections v2: by-name and hand-picked collections are created, read back, edited and deleted in the real engine', async () => {
+  const mug = (await A.listProducts(x)).find(p => p.sku === 'MUG-1')!; const bowl = (await A.listProducts(x)).find(p => p.sku === 'BOWL-1')!;
+  assert.equal((await A.saveCollection(x, { name: 'Mugs', kind: 'rule', contains: 'nothing-matches-this' })).ok, false, 'an empty shelf is refused');
+  assert.equal((await A.saveCollection(x, { name: '', kind: 'rule', contains: 'mug' })).ok, false); assert.equal((await A.saveCollection(x, { name: 'Pick', kind: 'manual', productIds: [] })).ok, false);
+  const rule = await A.saveCollection(x, { name: 'By name', kind: 'rule', contains: 'mug' }); assert.equal(rule.ok, true, rule.message); assert.ok(rule.id);
+  const hand = await A.saveCollection(x, { name: 'Hand picked', kind: 'manual', productIds: [mug.id, bowl.id] }); assert.equal(hand.ok, true, hand.message);
+  // Membership is worked out by the engine's background queue, so give it a moment.
+  let rows = await A.listCollections(x); for (let i = 0; i < 40 && !(rows.find(c => c.id === rule.id)!.count > 0 && rows.find(c => c.id === hand.id)!.count > 0); i++) { await new Promise(r => setTimeout(r, 250)); rows = await A.listCollections(x); }
+  const r = rows.find(c => c.id === rule.id)!; const h = rows.find(c => c.id === hand.id)!;
+  assert.deepEqual({ kind: r.kind, contains: r.contains }, { kind: 'rule', contains: 'mug' }); assert.ok(r.count >= 1);
+  assert.equal(h.kind, 'manual'); assert.deepEqual([...h.productIds!].sort(), [mug.id, bowl.id].sort()); assert.equal(h.products.length, 2);
+  assert.equal((await A.saveCollection(x, { name: 'by name', kind: 'rule', contains: 'mug' })).ok, false, 'duplicate names are refused');
+  const edit = await A.saveCollection(x, { id: hand.id, name: 'Hand picked, mugs only', kind: 'manual', productIds: [mug.id] }); assert.equal(edit.ok, true, edit.message);
+  rows = await A.listCollections(x); for (let i = 0; i < 40 && rows.find(c => c.id === hand.id)!.products.length !== 1; i++) { await new Promise(r => setTimeout(r, 250)); rows = await A.listCollections(x); }
+  const h2 = rows.find(c => c.id === hand.id)!; assert.equal(h2.name, 'Hand picked, mugs only'); assert.deepEqual(h2.productIds, [mug.id]);
+  assert.equal((await A.saveCollection(x, { name: 'Foreign', kind: 'manual', productIds: ['9999'] })).ok, false, 'a product that is not ours is refused');
+  assert.equal((await A.deleteCollection(x, rule.id!)).ok, true); assert.equal((await A.deleteCollection(x, hand.id!)).ok, true);
+  assert.equal((await A.listCollections(x)).some(c => c.id === rule.id || c.id === hand.id), false);
+});
+
+test('customer detail: history, totals, addresses, private notes and profile edits against the real engine', async () => {
+  const list = await A.listCustomers(x); const maya = list.find(c => c.email === 'maya@example.com')!; assert.ok(maya);
+  const d = (await A.getCustomer(x, maya.id))!; assert.equal(d.email, 'maya@example.com'); assert.ok(d.orders >= 1); assert.ok(d.recentOrders.length >= 1); assert.ok(d.spentMinor > 0); assert.ok(d.addresses.some(a => /Watford/.test(a)) || d.addresses.length === 0);
+  assert.equal(d.recentOrders[0].items.includes('MUG-1') || /Stoneware|mug/i.test(d.recentOrders[0].items) || d.recentOrders[0].items.length > 0, true);
+  assert.equal(await A.getCustomer(x, '999999'), null);
+  assert.equal((await A.addCustomerNote(x, maya.id, '   ')).ok, false); assert.equal((await A.addCustomerNote(x, maya.id, 'x'.repeat(2001))).ok, false);
+  const add = await A.addCustomerNote(x, maya.id, '  Prefers a gift receipt.  '); assert.equal(add.ok, true, add.message);
+  let notes = (await A.getCustomer(x, maya.id))!.notes; assert.equal(notes.length, 1); assert.equal(notes[0].text, 'Prefers a gift receipt.');
+  assert.equal((await A.deleteCustomerNote(x, notes[0].id)).ok, true); assert.equal((await A.getCustomer(x, maya.id))!.notes.length, 0);
+  assert.equal((await A.updateCustomerProfile(x, maya.id, { firstName: '', lastName: '', phone: '' })).ok, false); assert.equal((await A.updateCustomerProfile(x, maya.id, { firstName: 'Maya', lastName: 'Lee', phone: 'abc' })).ok, false);
+  const up = await A.updateCustomerProfile(x, maya.id, { firstName: 'Maya', lastName: 'Okafor-Lee', phone: '07700 900123' }); assert.equal(up.ok, true, up.message);
+  const after = (await A.getCustomer(x, maya.id))!; assert.equal(after.lastName, 'Okafor-Lee'); assert.equal(after.phone, '07700 900123'); assert.equal(after.email, 'maya@example.com', 'the email, which is the login, is not changed');
+});

@@ -17,6 +17,12 @@ export interface Order {
 }
 export interface Product { id: string; imageUrl?: string; title: string; status: 'draft' | 'published' | 'archived'; sku: string; priceMinor: number; onHand: number; allocated: number; threshold: number; variants: number }
 export interface Customer { id: string; name: string; email: string; orders: number; spentMinor: number; lastOrder: string; marketing: boolean }
+export interface CustomerNote { id: string; text: string; at: string; by?: string }
+export interface CustomerDetail extends Customer {
+  firstName: string; lastName: string; phone: string; since: string; addresses: string[]; aovMinor: number;
+  recentOrders: { id: string; number: number; placedAt: string; totalMinor: number; payment: PaymentStatus; fulfilment: FulfilmentStatus; items: string }[]; notes: CustomerNote[];
+}
+export interface CustomerProfile { firstName: string; lastName: string; phone: string }
 export interface SalesPoint { day: string; netMinor: number; grossMinor: number }
 export interface Summary { netMinor: number; grossMinor: number; orders: number; aovMinor: number; refundedMinor: number; toFulfil: number; lowStock: number; fulfilled: number; paidOrders: number; series: SalesPoint[]; topProducts: { title: string; netMinor: number }[]; statusMix: { label: string; count: number }[]; asOf: string }
 export type DiscountKind = 'percent' | 'fixed' | 'shipping' | 'bogo' | 'custom';
@@ -81,7 +87,9 @@ export interface ProductDetail extends Product { optionGroups: OptionGroup[]; va
 export interface ProductEdit { title: string; description: string; handle: string; seoTitle: string; seoDescription: string; status: 'draft' | 'published' }
 export interface ImageUpload { name: string; type: string; bytes: Uint8Array }
 export interface VariantInput { options: string[]; sku: string; priceMinor: number; stock: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number; compareAtMinor?: number; barcode?: string }
-export interface Collection { id: string; name: string; contains: string; count: number; products: string[] }
+/** A shelf of products. `rule`: products join by themselves when their name contains a word. `manual`: you pick them. `other`: set up another way (we can still delete it). */
+export interface Collection { id: string; name: string; kind?: 'rule' | 'manual' | 'other'; contains: string; productIds?: string[]; count: number; products: string[] }
+export interface CollectionInput { id?: string; name: string; kind: 'rule' | 'manual'; contains?: string; productIds?: string[] }
 export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string }
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
@@ -101,6 +109,10 @@ export interface CommerceGateway {
   order(id: string): Promise<Order | null>;
   products(): Promise<Product[]>;
   customers(): Promise<Customer[]>;
+  customer(id: string): Promise<CustomerDetail | null>;
+  addCustomerNote(customerId: string, text: string): Promise<MutationResult>;
+  deleteCustomerNote(customerId: string, noteId: string): Promise<MutationResult>;
+  updateCustomerProfile(customerId: string, p: CustomerProfile): Promise<MutationResult>;
   discounts(): Promise<Discount[]>;
   storefront(): Promise<StorefrontView>;
   team(): Promise<{ members: Member[]; grants: AccessGrant[] }>;
@@ -136,6 +148,8 @@ export interface CommerceGateway {
   collections(): Promise<Collection[]>;
   previewCollection(contains: string): Promise<{ count: number; products: string[] }>;
   createCollection(name: string, contains: string): Promise<MutationResult>;
+  saveCollection(c: CollectionInput): Promise<MutationResult>;
+  deleteCollection(id: string): Promise<MutationResult>;
   notices(): Promise<Notice[]>;
   markNoticesRead(ids: string[] | 'all'): Promise<MutationResult>;
   addProduct(p: NewProduct): Promise<MutationResult>;

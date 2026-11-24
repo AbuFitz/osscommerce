@@ -113,12 +113,12 @@ async function state(): Promise<DemoState> {
   try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
 }
 /** Per-browser scratch copy of the demo data (keyed by the oss_sid cookie). Actions really change it, so every page reflects what you did. */
-interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; meta: Record<string, { description: string; handle: string; seoTitle: string; seoDescription: string; images: { id: string; url: string; name?: string }[] }>; collections: { id: string; name: string; contains: string }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
+interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; custNotes: Record<string, { id: string; text: string; at: string; by?: string }[]>; custProfile: Record<string, { firstName: string; lastName: string; phone: string }>; meta: Record<string, { description: string; handle: string; seoTitle: string; seoDescription: string; images: { id: string; url: string; name?: string }[] }>; collections: { id: string; name: string; contains: string; productIds?: string[] }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
 const G = globalThis as unknown as { __oss_demo?: Map<string, Scratch> };
 async function S(): Promise<Scratch> {
   const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
   const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
-  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, custNotes: { c0: [{ id: 'n1', text: 'Prefers weekday delivery. Asked about a custom glaze.', at: '2026-11-02T10:30:00Z', by: 'Mo' }] }, custProfile: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
   return x;
 }
 /** Every product has at least one variant. The mug is seeded with two option groups so the editor has something real to show. */
@@ -193,7 +193,21 @@ export const demoGateway: CommerceGateway = {
   },
   async order(id) { return (await ordersFor(await state())).find(o => o.id === id) ?? null; },
   async products() { const x = await S(); const ps = await productsFor(await state()); return ps.map(p => ({ ...p, imageUrl: x.meta[p.id]?.images[0]?.url ?? p.imageUrl })); },
-  async customers() { return (await state()) === 'new' ? [] : CUSTOMERS; },
+  async customers() {
+    if ((await state()) === 'new') return []; const x = await S();
+    return CUSTOMERS.map(c => { const p = x.custProfile[c.id]; const os = x.orders.filter(o => o.email.toLowerCase() === c.email.toLowerCase() && o.payment !== 'failed'); // the same orders the detail page lists
+      const stats = os.length ? { orders: os.length, spentMinor: os.reduce((n, o) => n + o.totalMinor - o.refundedMinor, 0), lastOrder: os.map(o => o.placedAt).sort().at(-1)! } : {};
+      return { ...c, ...stats, ...(p ? { name: `${p.firstName} ${p.lastName}`.trim() || c.name } : {}) }; });
+  },
+  async customer(id) {
+    if ((await state()) === 'new') return null; const x = await S(); const base = (await demoGateway.customers()).find(c => c.id === id); if (!base) return null;
+    const prof = x.custProfile[id]; const [f, ...r] = base.name.split(' '); const os = x.orders.filter(o => o.email.toLowerCase() === base.email.toLowerCase()); const sales = os.filter(o => o.payment !== 'failed');
+    return { ...base, firstName: prof?.firstName ?? f, lastName: prof?.lastName ?? r.join(' '), phone: prof?.phone ?? '', since: '2026-03-12T10:00:00Z', aovMinor: sales.length ? Math.round(sales.reduce((s, o) => s + o.totalMinor, 0) / sales.length) : 0,
+      addresses: os.slice(0, 1).map(o => `${o.customer}, ${o.shipTo}`), recentOrders: os.map(o => ({ id: o.id, number: o.number, placedAt: o.placedAt, totalMinor: o.totalMinor, payment: o.payment, fulfilment: o.fulfilment, items: o.lines.map(l => `${l.qty} × ${l.title}`).join(', ') })), notes: [...(x.custNotes[id] ?? [])].reverse() };
+  },
+  async addCustomerNote(id, text) { const x = await S(); const n = text.trim(); if (!n) return { ok: false, message: 'Write a note first.' }; if (n.length > 2000) return { ok: false, message: 'Notes are limited to 2,000 characters.' }; if (!CUSTOMERS.some(c => c.id === id)) return { ok: false, message: 'Customer not found.' }; (x.custNotes[id] ??= []).push({ id: `n${Date.now().toString(36)}`, text: n, at: new Date().toISOString(), by: 'Mo' }); return { ok: true, message: 'Note added. Only your team can see it.' }; },
+  async deleteCustomerNote(id, noteId) { const x = await S(); const l = x.custNotes[id] ?? []; const i = l.findIndex(n => n.id === noteId); if (i < 0) return { ok: false, message: 'That note no longer exists.' }; l.splice(i, 1); return { ok: true, message: 'Note deleted.' }; },
+  async updateCustomerProfile(id, p) { const x = await S(); if (!CUSTOMERS.some(c => c.id === id)) return { ok: false, message: 'Customer not found.' }; if (!p.firstName.trim() && !p.lastName.trim()) return { ok: false, message: 'Enter a name.' }; if (p.phone && !/^[+()\d\s-]{6,24}$/.test(p.phone)) return { ok: false, message: 'Enter a phone number with digits, spaces, + or dashes.' }; x.custProfile[id] = { firstName: p.firstName.trim(), lastName: p.lastName.trim(), phone: p.phone.trim() }; return { ok: true, message: 'Customer details saved.' }; },
   async discounts() { return (await S()).discounts; },
   async storefront() {
     const x = await S();
@@ -350,7 +364,24 @@ export const demoGateway: CommerceGateway = {
     return { ok: true, message: `${next.length} variant${next.length > 1 ? 's' : ''} saved. Total in stock: ${p.onHand}.` };
   },
   async previewCollection(contains) { const x = await S(); const t = contains.trim().toLowerCase(); if (!t) return { count: 0, products: [] }; const hit = x.products.filter(p => p.status === 'published').flatMap(p => detail(x, p).list.filter(v => `${p.title} ${v.options.join(' ')}`.toLowerCase().includes(t)).map(() => p.title)); return { count: hit.length, products: [...new Set(hit)] }; },
-  async collections() { const x = await S(); return Promise.all(x.collections.map(async c => { const r = await demoGateway.previewCollection(c.contains); return { ...c, count: r.count, products: r.products } as Collection; })); },
+  async collections() {
+    const x = await S();
+    return Promise.all(x.collections.map(async c => {
+      if (c.productIds?.length) { const ps = x.products.filter(p => c.productIds!.includes(p.id)); return { id: c.id, name: c.name, kind: 'manual', contains: '', productIds: c.productIds, count: ps.reduce((n, p) => n + detail(x, p).list.length, 0), products: ps.map(p => p.title) } as Collection; }
+      const r = await demoGateway.previewCollection(c.contains); return { id: c.id, name: c.name, kind: 'rule', contains: c.contains, count: r.count, products: r.products } as Collection;
+    }));
+  },
+  async saveCollection(c) {
+    const x = await S(); const name = c.name.trim(); if (!name) return { ok: false, message: 'Give the collection a name.' }; if (name.length > 80) return { ok: false, message: 'Keep the name under 80 characters.' };
+    if (x.collections.some(o => o.id !== c.id && o.name.toLowerCase() === name.toLowerCase())) return { ok: false, message: `A collection called ${name} already exists.` };
+    let rec: { id: string; name: string; contains: string; productIds?: string[] }; let count = 0;
+    if (c.kind === 'rule') { const term = (c.contains ?? '').trim(); if (!term) return { ok: false, message: 'Add a word to match.' }; const r = await demoGateway.previewCollection(term); count = r.count; rec = { id: c.id ?? `c${Date.now().toString(36)}`, name, contains: term }; }
+    else { if (!c.productIds?.length) return { ok: false, message: 'Choose at least one product.' }; const ps = x.products.filter(p => c.productIds!.includes(p.id)); if (ps.length !== new Set(c.productIds).size) return { ok: false, message: 'One of the chosen products is not in your catalogue.' }; count = ps.reduce((n, p) => n + detail(x, p).list.length, 0); rec = { id: c.id ?? `c${Date.now().toString(36)}`, name, contains: '', productIds: c.productIds }; }
+    if (!count) return { ok: false, message: 'Nothing matches that yet. A collection with no products would show an empty page on your website.' };
+    const i = c.id ? x.collections.findIndex(o => o.id === c.id) : -1; if (c.id && i < 0) return { ok: false, message: 'That collection no longer exists.' }; if (i >= 0) x.collections[i] = rec; else x.collections.push(rec);
+    return { ok: true, id: rec.id, message: c.id ? `${name} saved.` : `${name} created with ${count} variant${count > 1 ? 's' : ''}.` };
+  },
+  async deleteCollection(id) { const x = await S(); const i = x.collections.findIndex(o => o.id === id); if (i < 0) return { ok: false, message: 'That collection no longer exists.' }; x.collections.splice(i, 1); return { ok: true, message: 'Collection deleted. The products themselves are untouched.' }; },
   async createCollection(name, contains) {
     const x = await S(); if (x.collections.some(c => c.name.toLowerCase() === name.trim().toLowerCase())) return { ok: false, message: `A collection called ${name.trim()} already exists.` }; const r = await demoGateway.previewCollection(contains);
     if (!r.count) return { ok: false, message: 'Nothing matches that rule yet. A collection with no products would show an empty page on your website.' };
