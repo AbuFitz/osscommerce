@@ -17,6 +17,7 @@ import { CellPlugin, vendureWebhookDeps, type CheckoutGate } from './cell/plugin
 import { liveStripe } from './cell/stripe-live.ts';
 import { MERCHANT_PERMISSIONS } from './cell/merchant-role.ts';
 import { PackRefillPlugin } from './cell/pack-refill.ts';
+import { CatalogueFieldsPlugin } from './cell/catalogue-fields.ts';
 import { assetPlugin, readAssetEnv, ASSET_LIMITS } from './cell/assets.ts';
 import { allLaunchChecksPass, launchChecks } from './cell/launch-readiness.ts';
 
@@ -63,7 +64,7 @@ function config(): VendureConfig {
           const checks = { database, checkout, ...providerChecks }; const ready = Object.values(checks).every(Boolean) && allLaunchChecksPass(providerChecks);
           r.status(ready ? 200 : 503).json({ ready, checks });
         } }] } as VendureConfig['apiOptions'],
-    plugins: [...(assets ? [assetPlugin(assets)] : []), DefaultSchedulerPlugin.init(), PackRefillPlugin, CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
+    plugins: [...(assets ? [assetPlugin(assets)] : []), DefaultSchedulerPlugin.init(), PackRefillPlugin, CatalogueFieldsPlugin, CellPlugin.init({ stripe: liveStripe(env.STRIPE_SECRET_KEY, sdk), sdk, account: env.STRIPE_CONNECTED_ACCOUNT_ID, webhookSecret: env.STRIPE_WEBHOOK_SECRET, feeBp: env.FEE_BP, refundsReturnFee: env.REFUNDS_RETURN_FEE === 'true', storeId: env.STORE_ID, publishableKey: extra.PUBLISHABLE_KEY, checkoutGate: gate, controlSecret: extra.CONTROL_SECRET }, deps)],
   });
 }
 /** Internal work (webhooks, first-time setup) runs as the platform's superadmin. Merchants never get this identity. */

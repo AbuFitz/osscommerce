@@ -110,15 +110,16 @@ async function state(): Promise<DemoState> {
   try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
 }
 /** Per-browser scratch copy of the demo data (keyed by the oss_sid cookie). Actions really change it, so every page reflects what you did. */
-interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; collections: { id: string; name: string; contains: string }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
+interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; meta: Record<string, { description: string; handle: string; seoTitle: string; seoDescription: string; images: { id: string; url: string; name?: string }[] }>; collections: { id: string; name: string; contains: string }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
 const G = globalThis as unknown as { __oss_demo?: Map<string, Scratch> };
 async function S(): Promise<Scratch> {
   const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
   const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
-  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
   return x;
 }
 /** Every product has at least one variant. The mug is seeded with two option groups so the editor has something real to show. */
+function metaOf(x: Scratch, p: Product) { return (x.meta[p.id] ??= { description: `${p.title}. Made in small batches and finished by hand.`, handle: p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), seoTitle: '', seoDescription: '', images: [] }); }
 function detail(x: Scratch, p: Product): { groups: OptionGroup[]; list: Variant[] } {
   if (!x.variants[p.id]) {
     if (p.id === 'p1') { const groups = [{ name: 'Size', options: ['Small', 'Large'] }, { name: 'Glaze', options: ['Speckled', 'Ocean'] }]; const stock = [12, 10, 11, 9], alloc = [1, 1, 1, 0];
@@ -188,7 +189,7 @@ export const demoGateway: CommerceGateway = {
     return r;
   },
   async order(id) { return (await ordersFor(await state())).find(o => o.id === id) ?? null; },
-  async products() { return productsFor(await state()); },
+  async products() { const x = await S(); const ps = await productsFor(await state()); return ps.map(p => ({ ...p, imageUrl: x.meta[p.id]?.images[0]?.url ?? p.imageUrl })); },
   async customers() { return (await state()) === 'new' ? [] : CUSTOMERS; },
   async discounts() { return (await S()).discounts; },
   async storefront() {
@@ -318,7 +319,7 @@ export const demoGateway: CommerceGateway = {
     g.state = dec === 'approve' ? 'active' : 'revoked'; return { ok: true, message: dec === 'approve' ? `Access approved until ${new Date(g.expires).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}. Everything they do is logged.` : dec === 'decline' ? 'Request declined.' : 'Access revoked immediately.' };
   },
   async savePreferences() { return okDemo('Preferences saved.'); },
-  async product(id) { const x = await S(); const p = x.products.find(q => q.id === id); if (!p) return null; const d = detail(x, p); return { ...p, optionGroups: d.groups, variantList: d.list } as ProductDetail; },
+  async product(id) { const x = await S(); const p = x.products.find(q => q.id === id); if (!p) return null; const d = detail(x, p); const m = metaOf(x, p); return { ...p, imageUrl: m.images[0]?.url ?? p.imageUrl, optionGroups: d.groups, variantList: d.list, description: m.description, handle: m.handle, seoTitle: m.seoTitle, seoDescription: m.seoDescription, images: m.images } as ProductDetail; },
   async saveVariants(productId, d) {
     const x = await S(); const p = x.products.find(q => q.id === productId); if (!p) return { ok: false, message: 'Product not found.' };
     const problems = validateDraft({ title: p.title, optionGroups: d.optionGroups, variants: d.variants }); if (problems.length) return { ok: false, message: problems[0] };
@@ -350,8 +351,35 @@ export const demoGateway: CommerceGateway = {
   async addProduct(p) {
     const x = await S(); const sku = (p.sku || p.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 8).toUpperCase()).toUpperCase();
     if (x.products.some(q => q.sku === sku)) return { ok: false, message: `SKU ${sku} is already used by another product.` };
-    x.products.unshift({ id: `p${Date.now().toString(36)}`, title: p.title.trim(), status: p.status, sku, priceMinor: p.priceMinor, onHand: p.onHand, allocated: 0, threshold: 5, variants: 1 });
-    return { ok: true, message: p.status === 'published' ? `${p.title} is published. Add photos next.` : `${p.title} saved as a draft.` };
+    if (p.compareAtMinor && p.compareAtMinor <= p.priceMinor) return { ok: false, message: 'The compare-at price must be higher than the price.' };
+    const id = `p${Date.now().toString(36)}`; x.products.unshift({ id, title: p.title.trim(), status: p.status, sku, priceMinor: p.priceMinor, onHand: p.onHand, allocated: 0, threshold: 5, variants: 1 });
+    x.variants[id] = { groups: [], list: [{ id: `${id}v0`, options: [], sku, priceMinor: p.priceMinor, onHand: p.onHand, allocated: 0, taxClass: p.taxClass ?? 'standard', enabled: true, weightGrams: p.weightGrams, compareAtMinor: p.compareAtMinor, barcode: p.barcode }] };
+    x.meta[id] = { description: p.description ?? '', handle: (p.handle || p.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), seoTitle: p.seoTitle ?? '', seoDescription: p.seoDescription ?? '', images: [] };
+    return { ok: true, id, message: p.status === 'published' ? `${p.title} is published.` : `${p.title} saved as a draft.` };
+  },
+  async updateProduct(id, e) {
+    const x = await S(); const p = x.products.find(q => q.id === id); if (!p) return { ok: false, message: 'Product not found.' }; if (!e.title.trim()) return { ok: false, message: 'A product needs a name.' };
+    const handle = (e.handle || e.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); if (x.products.some(q => q.id !== id && x.meta[q.id]?.handle === handle)) return { ok: false, message: `The web address "${handle}" is already used by another product.` };
+    p.title = e.title.trim(); p.status = e.status; Object.assign(metaOf(x, p), { description: e.description, handle, seoTitle: e.seoTitle.trim(), seoDescription: e.seoDescription.trim() });
+    return { ok: true, message: e.status === 'published' ? 'Saved. This product is on your store.' : 'Saved as a draft. It is hidden from your store.' };
+  },
+  async deleteProduct(id) {
+    const x = await S(); const i = x.products.findIndex(q => q.id === id); if (i < 0) return { ok: false, message: 'Product not found.' };
+    if (x.orders.some(o => o.lines.some(l => l.sku === x.products[i].sku && o.state === 'open'))) return { ok: false, message: 'This product is on an open order. Fulfil or cancel those orders first, or set it to draft to hide it.' };
+    x.products.splice(i, 1); delete x.variants[id]; delete x.meta[id]; return { ok: true, message: 'Product deleted.' };
+  },
+  async uploadProductImages(id, files) {
+    const x = await S(); const p = x.products.find(q => q.id === id); if (!p) return { ok: false, message: 'Product not found.' }; const m = metaOf(x, p); const problems: string[] = []; let added = 0;
+    for (const f of files) {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(f.type)) { problems.push(`${f.name} is not a JPEG, PNG or WebP photo`); continue; }
+      if (f.bytes.length === 0 || f.bytes.length > 3_000_000) { problems.push(`${f.name} is over 3 MB (the demo keeps photos in memory)`); continue; }
+      m.images.push({ id: `i${Date.now().toString(36)}${m.images.length}${added}`, name: f.name, url: `data:${f.type};base64,${Buffer.from(f.bytes).toString('base64')}` }); added++;
+    }
+    return added ? { ok: true, message: `${added} photo${added > 1 ? 's' : ''} added${problems.length ? `. ${problems.join('. ')}.` : ''}` } : { ok: false, message: problems.join('. ') || 'No photos were added.' };
+  },
+  async setProductImages(id, ordered) {
+    const x = await S(); const p = x.products.find(q => q.id === id); if (!p) return { ok: false, message: 'Product not found.' }; const m = metaOf(x, p); const by = new Map(m.images.map(i => [i.id, i]));
+    const next = ordered.map(i => by.get(i)).filter((i): i is NonNullable<typeof i> => !!i); const gone = m.images.length - next.length; m.images = next; return { ok: true, message: gone ? `Photos updated. ${gone} removed.` : 'Photo order saved.' };
   },
   async importProducts(rows) {
     const x = await S(); let added = 0, skipped = 0; for (const r of rows) { const sku = (r.sku || r.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 8)).toUpperCase(); if (!r.title || x.products.some(q => q.sku === sku)) { skipped++; continue; } x.products.push({ id: `p${Date.now().toString(36)}${added}`, title: r.title, status: r.status, sku, priceMinor: r.priceMinor, onHand: r.onHand, allocated: 0, threshold: 5, variants: 1 }); added++; }

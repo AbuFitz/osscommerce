@@ -1,5 +1,7 @@
 /** Maps the portal's product model onto the engine's Admin API. The executor is a port, so the same code runs against the test harness and, later, the real HTTP gateway. */
-export type Exec = (query: string, variables?: Record<string, unknown>) => Promise<any>;
+export type UploadFile = { name: string; type: string; bytes: Uint8Array };
+/** GraphQL call. `upload` sends the same kind of call with files attached (GraphQL multipart request); each file is placed at the variable path given in `paths`. */
+export type Exec = ((query: string, variables?: Record<string, unknown>) => Promise<any>) & { upload?: (query: string, variables: Record<string, unknown>, files: { path: string; file: UploadFile }[]) => Promise<any> };
 import { slugify, code, TAX_CATEGORY_NAME, validateDraft, combinations, type TaxClass, type OptionGroup, type VariantDraft, type ProductDraft } from '@oss-commerce/contracts';
 export { validateDraft, combinations };
 export type { TaxClass, OptionGroup, VariantDraft, ProductDraft };
@@ -19,7 +21,7 @@ export async function findTaxCategories(x: Exec): Promise<Record<TaxClass, strin
 export async function createProductWithVariants(x: Exec, d: ProductDraft) {
   const problems = validateDraft(d); if (problems.length) throw new Error(problems.join(' '));
   const tax = await findTaxCategories(x);
-  const product = (await x(`mutation($i: CreateProductInput!){ createProduct(input:$i){ id } }`, { i: { enabled: d.enabled ?? false, translations: [{ languageCode: 'en', name: d.title.trim(), slug: d.slug ?? slugify(d.title), description: d.description ?? '' }] } })).createProduct.id as string;
+  const product = (await x(`mutation($i: CreateProductInput!){ createProduct(input:$i){ id } }`, { i: { enabled: d.enabled ?? false, translations: [{ languageCode: 'en', name: d.title.trim(), slug: d.slug ?? slugify(d.title), description: d.description ?? '' }], customFields: { seoTitle: d.seoTitle || null, seoDescription: d.seoDescription || null } } })).createProduct.id as string;
   const groupIds: string[] = [];
   for (const g of d.optionGroups) {
     const gid = (await x(`mutation($i: CreateProductOptionGroupInput!){ createProductOptionGroup(input:$i){ id } }`, { i: { code: `${code(d.title)}-${code(g.name)}`, translations: [{ languageCode: 'en', name: g.name }], options: g.options.map(o => ({ code: code(o), translations: [{ languageCode: 'en', name: o }] })) } })).createProductOptionGroup.id as string;
@@ -28,7 +30,7 @@ export async function createProductWithVariants(x: Exec, d: ProductDraft) {
   const groups = (await x(`query($id:ID!){ product(id:$id){ optionGroups{ id name options{ id code name } } } }`, { id: product })).product.optionGroups as { id: string; name: string; options: { id: string; name: string }[] }[];
   const input = d.variants.map(v => ({
     productId: product, sku: v.sku, price: v.priceMinor, taxCategoryId: tax[v.taxClass ?? 'standard'], trackInventory: 'TRUE', stockOnHand: v.stock, enabled: v.enabled ?? true,
-    optionIds: d.optionGroups.map((g, i) => groups.find(q => q.name === g.name)!.options.find(o => o.name === v.options[i])!.id), customFields: { weightGrams: v.weightGrams ?? 0 }, translations: [{ languageCode: 'en', name: [d.title.trim(), ...v.options].join(' ') }],
+    optionIds: d.optionGroups.map((g, i) => groups.find(q => q.name === g.name)!.options.find(o => o.name === v.options[i])!.id), customFields: { weightGrams: v.weightGrams ?? 0, compareAtPrice: v.compareAtMinor || null, barcode: v.barcode || null }, translations: [{ languageCode: 'en', name: [d.title.trim(), ...v.options].join(' ') }],
   }));
   await x(`mutation($i:[CreateProductVariantInput!]!){ createProductVariants(input:$i){ id } }`, { i: input });
   return product;

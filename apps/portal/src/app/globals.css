@@ -557,3 +557,34 @@ dialog.cmdk::backdrop{background:rgba(20,26,10,.45);backdrop-filter:blur(4px)}
 @media(prefers-reduced-motion:reduce){.meter i{transition:none}}
 
 .an-plot.sm{height:clamp(190px,24vw,250px)}
+
+/* product editor */
+.pf{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.pf-main{display:grid;gap:16px;min-width:0}.pf-side{min-width:0}.pf-sticky{position:sticky;top:16px}
+.pf h2{font-size:18px;margin:0}.pf .fd{gap:14px}.pf-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.pf-note{margin:0;font-size:13px}.pf-warn{display:flex;gap:6px;align-items:center;margin:0;font-size:13px;color:var(--warn);background:var(--warn-bg);padding:8px 10px;border-radius:12px}.pf-dirty{margin:0;font-size:12.5px;color:var(--muted);text-align:center}
+.pf-sale{display:flex;gap:6px;align-items:center;margin:0;font-size:13.5px;color:var(--ok)}.pf-sale s{color:var(--muted)}
+.pf-lab{display:flex;justify-content:space-between;align-items:baseline}.pf-count{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}.pf-count.warn{color:var(--warn)}.pf-count.bad{color:var(--bad);font-weight:650}
+.pf-serp{display:grid;gap:3px;padding:14px 16px;border-radius:16px;background:#fff;box-shadow:inset 0 0 0 1px var(--line)}.pf-serp .u{font-size:12.5px;color:#4d5a3a}.pf-serp .t{font-size:18px;color:#1a4fa0;font-weight:500;line-height:1.25}.pf-serp .d{font-size:13.5px;color:#4a5043}
+.pf-danger{display:grid;gap:10px;justify-items:start}.pf-danger p{margin:0}
+.btn.danger{background:var(--bad);color:#fff;border-color:transparent}.btn.danger:hover{filter:brightness(1.08)}
+.pf-side .btn{width:100%}
+.im{display:grid;gap:14px}
+.im-drop{display:grid;justify-items:center;gap:6px;text-align:center;padding:26px 18px;border-radius:20px;border:2px dashed rgba(40,50,20,.22);background:rgba(255,255,255,.55);transition:border-color var(--dur-1),background var(--dur-1)}.im-drop.over{border-color:var(--olive-700);background:var(--lime-2)}
+.im-drop span{color:var(--muted);font-size:13.5px;max-width:46ch}.im-drop .link{background:none;border:0;padding:0;font:inherit;font-weight:650;color:var(--olive-700);text-decoration:underline;cursor:pointer}
+.im-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.im-grid li{position:relative;aspect-ratio:1;border-radius:16px;overflow:hidden;background:#eef0e4;box-shadow:inset 0 0 0 1px var(--line);cursor:grab}.im-grid li.drag{opacity:.4}.im-grid li[data-main]{box-shadow:0 0 0 2.5px var(--olive-700)}
+.im-grid img{width:100%;height:100%;object-fit:cover;display:block}
+.im-main{position:absolute;left:8px;top:8px;display:inline-flex;gap:4px;align-items:center;font-size:11.5px;font-weight:650;padding:3px 8px;border-radius:99px;background:var(--ink);color:#fff}
+.im-tools{position:absolute;left:6px;right:6px;bottom:6px;display:flex;justify-content:center;gap:4px;opacity:0;transform:translateY(4px);transition:opacity var(--dur-1),transform var(--dur-1)}.im-grid li:hover .im-tools,.im-grid li:focus-within .im-tools{opacity:1;transform:none}
+.im-tools button{width:30px;height:30px;border-radius:99px;border:0;background:rgba(20,23,15,.82);color:#fff;display:grid;place-items:center;cursor:pointer}.im-tools button:hover:not(:disabled){background:var(--ink)}.im-tools button:disabled{opacity:.35;cursor:default}.im-tools .del:hover:not(:disabled){background:var(--bad)}
+@media(hover:none){.im-tools{opacity:1;transform:none}}
+.im-wait{display:grid;place-content:center;justify-items:center;gap:6px;font-size:12.5px;color:var(--muted);animation:pulse 1.2s ease-in-out infinite;cursor:default!important}@keyframes pulse{50%{opacity:.5}}
+.im-hint{margin:0;font-size:12.5px}.im-confirm{width:100%;max-height:260px;object-fit:contain;border-radius:14px;background:#eef0e4}
+@media(max-width:980px){.pf{grid-template-columns:1fr}.pf-sticky{position:static}.pf-side{order:-1}}
+@media(max-width:560px){.pf-row{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.im-wait{animation:none}.im-tools{transition:none}}
+.pf-row{align-items:start}
+.im-grid{padding:0;margin:0;list-style:none;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));grid-auto-flow:dense}
+.im-grid li[data-main]{grid-column:span 2;grid-row:span 2}
+@media(max-width:560px){.im-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.im-grid li[data-main]{grid-column:span 3;grid-row:span 1;aspect-ratio:4/3}}

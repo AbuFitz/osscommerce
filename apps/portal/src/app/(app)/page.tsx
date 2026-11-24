@@ -26,7 +26,7 @@ export default async function Overview() {
   const kval: Record<string, string> = { orders: String(s.orders), aov: money(s.aovMinor), refunded: money(s.refundedMinor), lowStock: String(s.lowStock), products: String(products.length), toFulfil: String(s.toFulfil) };
 
   const heroCopy: Record<Plan['hero'], { chip: string; h: string; p: string; a?: { href: string; label: string }; b?: { href: string; label: string } }> = {
-    first_product: { chip: 'Step 1', h: 'Add your first product', p: 'Your store has nothing to sell yet. Add a product, or import a CSV.', a: { href: '/products', label: 'Add product' }, b: { href: '/products', label: 'Import CSV' } },
+    first_product: { chip: 'Step 1', h: 'Add your first product', p: 'Your store has nothing to sell yet. Add a product, or import a CSV.', a: { href: '/products/new', label: 'Add product' }, b: { href: '/products', label: 'Import CSV' } },
     connect_payments: { chip: 'Payments off', h: 'Connect Stripe to accept payments', p: 'Customers cannot check out until your Stripe account is connected. It takes about five minutes.', a: { href: '/settings/payments', label: 'Connect payments' } },
     fulfil: { chip: `${todo.length} waiting to ship`, h: next ? `Order #${next.number} is next` : '', p: next ? `${next.customer} · ${next.lines[0].qty} × ${next.lines[0].title} · ${money(next.totalMinor)}` : '', a: next ? { href: `/orders/${next.id}`, label: 'Open order' } : undefined, b: { href: '/orders?filter=unfulfilled', label: 'All to fulfil' } },
     finish_setup: { chip: `${done} of ${store.readiness.length} done`, h: 'Finish setting up to launch', p: store.readiness.find(r => !r.done)?.hint ?? '', a: { href: '/storefront', label: 'Continue setup' } },
@@ -39,7 +39,7 @@ export default async function Overview() {
     <>
       <Header eyebrow={P.showCharts ? `${store.name} · last 14 days to ${day(s.asOf)}` : store.name} title="Overview">
         <a className="btn" href={host.verified ? `https://${host.host}` : '/storefront'}>{host.verified ? 'View store' : 'Preview store'} <ArrowUpRight size={16} aria-hidden /></a>
-        {P.hero !== 'first_product' && <Link className="btn primary" href="/products">Add product</Link>}
+        {P.hero !== 'first_product' && <Link className="btn primary" href="/products/new">Add product</Link>}
       </Header>
 
 

@@ -1,4 +1,4 @@
-import { AddProduct, ImportProducts } from '@/components/Dialogs';
+import { ImportProducts } from '@/components/Dialogs';
 import { gateway } from '@/lib/gateway-instance';
 import { money } from '@/lib/format';
 import Link from 'next/link';
@@ -12,7 +12,7 @@ export default async function Products() {
   const ps = await gateway().products();
   return (<>
     <Header title="Products" eyebrow={`${ps.filter(p => p.status === 'published').length} published · ${ps.filter(p => p.status === 'draft').length} draft`}>
-      <Link className="btn" href="/collections">Collections</Link><ImportProducts /><AddProduct /></Header>
+      <Link className="btn" href="/collections">Collections</Link><ImportProducts /><Link className="btn primary" href="/products/new">Add product</Link></Header>
     {ps.length === 0 ? <div className="w empty"><b style={{ color: 'var(--ink)' }}>No products yet</b><p style={{ margin: '6px 0 0' }}>Add your first product, or import a CSV. You can preview every row before anything is saved.</p></div> : <div className="pgrid">{ps.map(p => { const avail = p.onHand - p.allocated; return (
       <Link key={p.id} href={`/products/${p.id}`} className="w kcard" style={{ padding: 12, display: 'block' }} aria-label={p.title}><article>
         <Media src={p.imageUrl} alt={p.title} />

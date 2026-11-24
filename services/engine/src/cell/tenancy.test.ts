@@ -6,6 +6,8 @@ import path from 'node:path'; import fs from 'node:fs';
 import { mergeConfig } from '@vendure/core';
 import { createTestEnvironment, testConfig, SqljsInitializer, registerInitializer } from '@vendure/testing';
 import { parse } from 'graphql';
+import { CatalogueFieldsPlugin } from './catalogue-fields.ts';
+import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import Stripe from 'stripe';
 import { CellPlugin, MemGate } from './plugin.ts';
 import { engineLogin, httpExec, EngineError } from '../../../../apps/portal/src/lib/engine/exec.ts';
@@ -23,7 +25,7 @@ const stripe: any = {
 const deps: any = { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } };
 const { server, adminClient, shopClient } = createTestEnvironment(mergeConfig(testConfig, {
   authOptions: { requireVerification: false, tokenMethod: 'bearer', superadminCredentials: { identifier: 'ops', password: 'long-random-pass' } },
-  plugins: [CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43) }, deps)],
+  plugins: [CatalogueFieldsPlugin, AssetServerPlugin.init({ route: 'assets', assetUploadDir: path.join(dir, 'assets') }), CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43) }, deps)],
 }));
 const URL = `http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOptions.adminApiPath}`; const g = (s: string) => parse(s);
 type M = { x: ReturnType<typeof httpExec>; token: string; channelId: string; channelToken: string; adminId: string };
@@ -160,4 +162,15 @@ test('orders: B cannot fulfil, refund, cancel or annotate A\'s order; nothing ch
 test('transactions and customers: B\'s reporting never includes A\'s orders or money', async () => {
   const sumA = (await A.listOrders(m.A.x)).reduce((s, o) => s + o.totalMinor, 0), sumB = (await A.listOrders(m.B.x)).reduce((s, o) => s + o.totalMinor, 0); assert.equal(sumA, orders.A.total); assert.equal(sumB, orders.B.total);
   assert.equal((await A.listOrders(m.B.x))[0].refundedMinor, 0, 'A\'s refund does not show on B');
+});
+
+test('photos are channel-owned: B cannot attach, feature or delete A\'s photo, and A\'s product keeps it', async () => {
+  const png = Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+  const up = await A.uploadProductImages(m.A.x, ids.A.product, [{ name: 'a.png', type: 'image/png', bytes: png }]); assert.equal(up.ok, true, up.message);
+  const assetId = (await A.getProduct(m.A.x, ids.A.product))!.images[0].id;
+  const attach = await as('B', `mutation($i:UpdateProductInput!){ updateProduct(input:$i){ id } }`, { i: { id: ids.B.product, assetIds: [assetId], featuredAssetId: assetId } }); assert.equal(attach.denied, 'FORBIDDEN', JSON.stringify(attach));
+  const make = await as('B', `mutation($i:CreateProductInput!){ createProduct(input:$i){ id } }`, { i: { featuredAssetId: assetId, translations: [{ languageCode: 'en', name: 'Stolen photo', slug: 'stolen-photo', description: '' }] } }); assert.equal(make.denied, 'FORBIDDEN', JSON.stringify(make));
+  const del = await as('B', `mutation($i:DeleteAssetsInput!){ deleteAssets(input:$i){ result } }`, { i: { assetIds: [assetId], force: true } }); assert.equal(del.denied, 'FORBIDDEN', JSON.stringify(del));
+  assert.equal((await A.getProduct(m.A.x, ids.A.product))!.images.length, 1, 'A still has its photo');
+  assert.equal((await A.getProduct(m.B.x, ids.B.product))!.images.length, 0, 'B never got it');
 });

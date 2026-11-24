@@ -45,7 +45,10 @@ export interface AutomationRun { id: string; at: string; automation: string; eve
 export interface ServiceRequest { id: string; kind: 'product_upload' | 'design_change' | 'content' | 'integration' | 'other'; title: string; status: 'submitted' | 'quoted' | 'in_progress' | 'done' | 'declined'; quoteMinor?: number; createdAt: string; detail: string }
 export interface EmailSettings { brand: { shopName: string; accent: string; supportEmail: string; footer: string }; notifications: Record<string, boolean>; sendingDomain: { host: string; verified: boolean } }
 export interface Preferences { lowStock: boolean; newOrder: boolean; guest: boolean; consent: boolean; showSoldOut: boolean; pause: boolean }
-export interface NewProduct { title: string; priceMinor: number; sku?: string; status: 'draft' | 'published'; onHand: number }
+export interface NewProduct {
+  title: string; priceMinor: number; sku?: string; status: 'draft' | 'published'; onHand: number;
+  description?: string; compareAtMinor?: number; barcode?: string; weightGrams?: number; taxClass?: TaxClass; seoTitle?: string; seoDescription?: string; handle?: string;
+}
 export interface NewDiscount { code: string; kind: 'percent' | 'fixed' | 'shipping'; value: number; minSpendMinor?: number; limit?: number; endDate?: string }
 export interface ZoneInput { originalName?: string; name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
 export interface StockAdjust { productId: string; mode: 'set' | 'add'; qty: number; reason: 'recount' | 'received' | 'damaged' | 'returned' | 'other' }
@@ -56,11 +59,15 @@ export interface LiveView { demo: boolean; asOf: string; visitorsNow: number; se
 export interface Billing { demo: boolean; planName: string; monthlyMinor: number; buildMinor: number; status: 'not_started' | 'active' | 'past_due'; nextInvoiceAt?: string; invoices: { number: string; description: string; issuedAt: string; amountMinor: number; status: 'paid' | 'due' | 'overdue'; url?: string }[] }
 export type TaxClass = 'standard' | 'reduced' | 'zero';
 export interface OptionGroup { name: string; options: string[] }
-export interface Variant { id: string; options: string[]; sku: string; priceMinor: number; onHand: number; allocated: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number }
-export interface ProductDetail extends Product { optionGroups: OptionGroup[]; variantList: Variant[] }
-export interface VariantInput { options: string[]; sku: string; priceMinor: number; stock: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number }
+export interface Variant { id: string; options: string[]; sku: string; priceMinor: number; onHand: number; allocated: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number; compareAtMinor?: number; barcode?: string }
+export interface ProductImage { id: string; url: string; name?: string }
+export interface ProductDetail extends Product { optionGroups: OptionGroup[]; variantList: Variant[]; description: string; handle: string; seoTitle: string; seoDescription: string; images: ProductImage[] }
+/** What the merchant can change about a product itself, as opposed to its variants (price, stock) which have their own editor. */
+export interface ProductEdit { title: string; description: string; handle: string; seoTitle: string; seoDescription: string; status: 'draft' | 'published' }
+export interface ImageUpload { name: string; type: string; bytes: Uint8Array }
+export interface VariantInput { options: string[]; sku: string; priceMinor: number; stock: number; taxClass: TaxClass; enabled: boolean; weightGrams?: number; compareAtMinor?: number; barcode?: string }
 export interface Collection { id: string; name: string; contains: string; count: number; products: string[] }
-export interface MutationResult { ok: boolean; message: string }
+export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string }
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
 export interface Viewer { name: string; initials: string; role: string }
@@ -112,6 +119,12 @@ export interface CommerceGateway {
   notices(): Promise<Notice[]>;
   markNoticesRead(ids: string[] | 'all'): Promise<MutationResult>;
   addProduct(p: NewProduct): Promise<MutationResult>;
+  updateProduct(id: string, e: ProductEdit): Promise<MutationResult>;
+  deleteProduct(id: string): Promise<MutationResult>;
+  /** Adds photos to a product. The first photo becomes the main one when there is none. Photos are checked (type, size) before anything is stored. */
+  uploadProductImages(id: string, files: ImageUpload[]): Promise<MutationResult>;
+  /** Sets which photos a product has and their order. The first is the main photo. Photos left out are removed from the product. */
+  setProductImages(id: string, orderedIds: string[]): Promise<MutationResult>;
   importProducts(rows: NewProduct[]): Promise<MutationResult>;
   adjustStock(a: StockAdjust): Promise<MutationResult>;
   createDiscount(d: NewDiscount): Promise<MutationResult>;

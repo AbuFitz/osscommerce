@@ -5,6 +5,7 @@ import path from 'node:path'; import fs from 'node:fs';
 import { mergeConfig } from '@vendure/core';
 import { createTestEnvironment, testConfig, SqljsInitializer, registerInitializer } from '@vendure/testing';
 import { parse } from 'graphql';
+import { CatalogueFieldsPlugin } from './catalogue-fields.ts';
 import Stripe from 'stripe';
 import { CellPlugin, MemGate } from './plugin.ts';
 import type { StripePort, PaymentIntentLite } from './stripe-port.ts';
@@ -22,7 +23,7 @@ const stripe: StripePort = {
 const deps: any = { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } };
 const config = mergeConfig(testConfig, {
   authOptions: { requireVerification: false, tokenMethod: 'bearer', superadminCredentials: { identifier: 'owner@example.com', password: 'long-random-pass' } },
-  plugins: [CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk_test_x', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43) }, deps)],
+  plugins: [CatalogueFieldsPlugin, CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk_test_x', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43) }, deps)],
 });
 const { server, adminClient, shopClient } = createTestEnvironment(config);
 const URL = `http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOptions.adminApiPath}`; const g = (s: string) => parse(s);

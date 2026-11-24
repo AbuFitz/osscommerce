@@ -4,6 +4,7 @@ import path from 'node:path'; import fs from 'node:fs';
 import { mergeConfig } from '@vendure/core';
 import { createTestEnvironment, testConfig, SqljsInitializer, registerInitializer } from '@vendure/testing';
 import { parse } from 'graphql';
+import { CatalogueFieldsPlugin } from './catalogue-fields.ts';
 import Stripe from 'stripe';
 import { CellPlugin } from './plugin.ts';
 import { createProductWithVariants, createCollection, previewCollection, combinations, validateDraft, ensureTaxCategories, type Exec } from './catalogue.ts';
@@ -12,7 +13,7 @@ import { parseBands, flatRateFreeOver } from './shipping.ts';
 const dir = path.join(__dirname, '.tmp-cat'); fs.mkdirSync(dir, { recursive: true }); registerInitializer('sqljs', new SqljsInitializer(dir));
 const stub: any = { async createPaymentIntent() { throw new Error('x'); }, async retrievePaymentIntent() { throw new Error('x'); }, async createRefund() { throw new Error('x'); } };
 const { server, adminClient, shopClient } = createTestEnvironment(mergeConfig(testConfig, { authOptions: { requireVerification: false, tokenMethod: 'bearer', superadminCredentials: { identifier: 'ops', password: 'long-random-pass' } },
-  plugins: [CellPlugin.init({ stripe: stub, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk_test_x' }, { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } } as any)] }));
+  plugins: [CatalogueFieldsPlugin, CellPlugin.init({ stripe: stub, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk_test_x' }, { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } } as any)] }));
 const x: Exec = (q, v) => adminClient.query(parse(q), v as any);
 before(async () => { await server.init({ initialData: { defaultLanguage: 'en', defaultZone: 'UK', countries: [{ name: 'United Kingdom', code: 'GB', zone: 'UK' }], taxRates: [{ name: 'Standard', percentage: 20 }], shippingMethods: [], paymentMethods: [], collections: [] } as any, productsCsvPath: path.join(__dirname, '../../proofs/products.csv'), customerCount: 0 }); await adminClient.asSuperAdmin();  await ensureTaxCategories(x); });
 after(async () => { await server.destroy(); fs.rmSync(dir, { recursive: true, force: true }); });

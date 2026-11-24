@@ -20,13 +20,17 @@ type Via = 'direct' | 'order' | 'optionGroup';
 type Check = { entity: EntityTarget<any>; ids: (a: any) => unknown[]; via?: Via };
 const arr = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const inp = (a: any) => a?.input;
+/** Photos a request attaches by id. Photos are channel-owned, so a store may only attach its own. */
+const photos = (i: any): unknown[] => [...arr(i?.assetIds), i?.featuredAssetId];
 /** Which ids each write names, and what they must belong to. Reads by id are already channel-scoped by Vendure (and covered by tests). */
 export const OWNERSHIP: Record<string, Check[]> = {
-  updateProduct: [{ entity: Product, ids: a => arr(inp(a)?.id) }], deleteProduct: [{ entity: Product, ids: a => arr(a?.id) }],
+  createProduct: [{ entity: Asset, ids: a => photos(inp(a)) }],
+  updateProduct: [{ entity: Product, ids: a => arr(inp(a)?.id) }, { entity: Asset, ids: a => photos(inp(a)) }], deleteProduct: [{ entity: Product, ids: a => arr(a?.id) }],
   addOptionGroupToProduct: [{ entity: Product, ids: a => arr(a?.productId) }, { entity: Product, ids: a => arr(a?.optionGroupId), via: 'optionGroup' }],
-  createProductVariants: [{ entity: Product, ids: a => arr(inp(a)).map((v: any) => v?.productId) }],
-  updateProductVariants: [{ entity: ProductVariant, ids: a => arr(inp(a)).map((v: any) => v?.id) }], deleteProductVariant: [{ entity: ProductVariant, ids: a => arr(a?.id) }],
-  updateCollection: [{ entity: Collection, ids: a => arr(inp(a)?.id) }], deleteCollection: [{ entity: Collection, ids: a => arr(a?.id) }],
+  createProductVariants: [{ entity: Product, ids: a => arr(inp(a)).map((v: any) => v?.productId) }, { entity: Asset, ids: a => arr(inp(a)).flatMap((v: any) => photos(v)) }],
+  updateProductVariants: [{ entity: ProductVariant, ids: a => arr(inp(a)).map((v: any) => v?.id) }, { entity: Asset, ids: a => arr(inp(a)).flatMap((v: any) => photos(v)) }], deleteProductVariant: [{ entity: ProductVariant, ids: a => arr(a?.id) }],
+  createCollection: [{ entity: Asset, ids: a => photos(inp(a)) }],
+  updateCollection: [{ entity: Collection, ids: a => arr(inp(a)?.id) }, { entity: Asset, ids: a => photos(inp(a)) }], deleteCollection: [{ entity: Collection, ids: a => arr(a?.id) }],
   updateAsset: [{ entity: Asset, ids: a => arr(inp(a)?.id) }], deleteAssets: [{ entity: Asset, ids: a => arr(inp(a)?.assetIds) }],
   updateCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
   updatePromotion: [{ entity: Promotion, ids: a => arr(inp(a)?.id) }], deletePromotion: [{ entity: Promotion, ids: a => arr(a?.id) }],

@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
+import type { ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -102,3 +102,53 @@ export async function searchAll(q: string): Promise<SearchHit[]> {
     ];
   } catch { return []; }
 }
+
+
+// ---- Product editor ----
+const MAX_PHOTOS_PER_SAVE = 12;
+/** Photos are judged by their content, not the name or type the browser claims, and stripped of metadata (location, camera) before they are stored. */
+async function readImages(form: FormData): Promise<{ files: ImageUpload[]; problems: string[] }> {
+  const files: ImageUpload[] = []; const problems: string[] = [];
+  for (const f of form.getAll('file')) {
+    if (!(f instanceof File) || f.size === 0) continue; if (files.length >= MAX_PHOTOS_PER_SAVE) { problems.push(`Only ${MAX_PHOTOS_PER_SAVE} photos can be added at once`); break; }
+    const bytes = new Uint8Array(await f.arrayBuffer()); if (bytes.length > 10 * 1024 * 1024) { problems.push(`${f.name} is over 10 MB`); continue; }
+    const t = sniff(bytes); if (!t) { problems.push(`${f.name} is not a JPEG, PNG or WebP photo`); continue; }
+    files.push({ name: f.name.slice(0, 120), type: mime(t), bytes: stripMetadata(bytes, t) });
+  }
+  return { files, problems };
+}
+const text = (form: FormData, k: string) => String(form.get(k) ?? '').trim();
+const money = (s: string): number | null => (/^\d{1,7}(\.\d{1,2})?$/.test(s) ? Math.round(Number(s) * 100) : null);
+const whole = (s: string): number | null => (/^\d{1,9}$/.test(s) ? Number(s) : null);
+const HANDLE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** Creates a product with all its details and photos in one go. Everything is checked here again; the form's checks are for the merchant's convenience only. */
+export async function createProductWithImages(form: FormData): Promise<MutationResult> {
+  const title = text(form, 'title'); if (!title) return { ok: false, message: 'Give the product a name.' }; if (title.length > 120) return { ok: false, message: 'The name is over 120 characters.' };
+  const price = money(text(form, 'price')); if (price === null) return { ok: false, message: 'Enter a price such as 18 or 18.50.' };
+  const cmpRaw = text(form, 'compareAt'); const compareAt = cmpRaw ? money(cmpRaw) : undefined; if (cmpRaw && compareAt === null) return { ok: false, message: 'Enter the compare-at price such as 24 or 24.50.' };
+  if (compareAt && compareAt <= price) return { ok: false, message: 'The compare-at price must be higher than the price.' };
+  const stock = whole(text(form, 'stock') || '0'); if (stock === null) return { ok: false, message: 'Stock must be a whole number.' };
+  const wRaw = text(form, 'weight'); const weight = wRaw ? whole(wRaw) : undefined; if (wRaw && weight === null) return { ok: false, message: 'Weight is a whole number of grams.' };
+  const handle = text(form, 'handle'); if (handle && !HANDLE.test(handle)) return { ok: false, message: 'The web address can only use lowercase letters, numbers and dashes.' };
+  const description = text(form, 'description'); if (description.length > 20000) return { ok: false, message: 'The description is too long.' };
+  const taxClass = text(form, 'taxClass') as 'standard' | 'reduced' | 'zero'; if (!['standard', 'reduced', 'zero'].includes(taxClass)) return { ok: false, message: 'Choose a VAT rate.' };
+  const status = text(form, 'status') === 'published' ? 'published' : 'draft';
+  const { files, problems } = await readImages(form);
+  const made = await run(() => gateway().addProduct({ title, priceMinor: price, sku: text(form, 'sku') || undefined, status, onHand: stock, description, compareAtMinor: compareAt ?? undefined, barcode: text(form, 'barcode') || undefined, weightGrams: weight ?? undefined, taxClass, seoTitle: text(form, 'seoTitle').slice(0, 120), seoDescription: text(form, 'seoDescription').slice(0, 320), handle: handle || undefined }), ['/products', '/inventory', '/']);
+  if (!made.ok || !made.id || !files.length) return { ...made, message: problems.length ? `${made.message} ${problems.join('. ')}.` : made.message };
+  const up = await run(() => gateway().uploadProductImages(made.id!, files), ['/products', `/products/${made.id}`]);
+  return { ok: true, id: made.id, message: up.ok ? `${made.message} ${up.message}` : `${made.message} The product was saved, but the photos were not: ${up.message}` };
+}
+export async function saveProduct(id: string, e: ProductEdit) {
+  if (e.title.trim().length > 120) return { ok: false, message: 'The name is over 120 characters.' };
+  if (e.handle && !HANDLE.test(e.handle)) return { ok: false, message: 'The web address can only use lowercase letters, numbers and dashes.' };
+  if (e.description.length > 20000 || e.seoTitle.length > 120 || e.seoDescription.length > 320) return { ok: false, message: 'One of the fields is too long.' };
+  return run(() => gateway().updateProduct(id, e), ['/products', `/products/${id}`, '/']);
+}
+export async function removeProduct(id: string) { return run(() => gateway().deleteProduct(id), ['/products', '/inventory', '/']); }
+export async function addProductImages(id: string, form: FormData) {
+  const { files, problems } = await readImages(form); if (!files.length) return { ok: false, message: problems.join('. ') || 'No photos were added.' };
+  const r = await run(() => gateway().uploadProductImages(id, files), ['/products', `/products/${id}`]); return problems.length && r.ok ? { ...r, message: `${r.message}. ${problems.join('. ')}.` } : r;
+}
+export async function saveProductImages(id: string, ordered: string[]) { return run(() => gateway().setProductImages(id, ordered), ['/products', `/products/${id}`]); }

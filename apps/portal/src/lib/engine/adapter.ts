@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup } from '../gateway';
+import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload } from '../gateway';
 import { createProductWithVariants, findTaxCategories, type Exec } from './catalogue';
+import { slugify } from '@oss-commerce/contracts';
 
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
@@ -53,10 +54,10 @@ export async function listOrders(x: Exec, q?: { filter?: string; q?: string }): 
 }
 export async function getOrder(x: Exec, id: string): Promise<Order | null> { const r = await x(`query($id:ID!){ order(id:$id){ ${ORDER} } }`, { id }); return r.order?.orderPlacedAt ? mapOrder(r.order) : null; }
 
-const PRODUCT = `id name enabled featuredAsset{ preview } optionGroups{ name options{ name } }
-  variants{ id sku enabled priceWithTax stockOnHand stockAllocated outOfStockThreshold options{ name group{ name } } taxCategory{ name } customFields{ weightGrams } }`;
-type RawVariant = { id: string; sku: string; enabled: boolean; priceWithTax: number; stockOnHand: number; stockAllocated: number; outOfStockThreshold: number; options: { name: string; group: { name: string } }[]; taxCategory: { name: string } | null; customFields: { weightGrams?: number } | null };
-type RawProduct = { id: string; name: string; enabled: boolean; featuredAsset: { preview: string } | null; optionGroups: { name: string; options: { name: string }[] }[]; variants: RawVariant[] };
+const PRODUCT = `id name slug description enabled featuredAsset{ id preview } assets{ id name preview } optionGroups{ name options{ name } } customFields{ seoTitle seoDescription }
+  variants{ id sku enabled priceWithTax stockOnHand stockAllocated outOfStockThreshold options{ name group{ name } } taxCategory{ name } customFields{ weightGrams compareAtPrice barcode } }`;
+type RawVariant = { id: string; sku: string; enabled: boolean; priceWithTax: number; stockOnHand: number; stockAllocated: number; outOfStockThreshold: number; options: { name: string; group: { name: string } }[]; taxCategory: { name: string } | null; customFields: { weightGrams?: number; compareAtPrice?: number | null; barcode?: string | null } | null };
+type RawProduct = { id: string; name: string; slug?: string; description?: string; enabled: boolean; featuredAsset: { id?: string; preview: string } | null; assets?: { id: string; name?: string; preview: string }[]; customFields?: { seoTitle?: string | null; seoDescription?: string | null } | null; optionGroups: { name: string; options: { name: string }[] }[]; variants: RawVariant[] };
 const taxOf = (n?: string): TaxClass => (/zero/i.test(n ?? '') ? 'zero' : /reduced/i.test(n ?? '') ? 'reduced' : 'standard');
 export function mapProduct(p: RawProduct, lowStockAt = 5): Product {
   const vs = p.variants; const first = vs[0];
@@ -67,8 +68,8 @@ export async function listProducts(x: Exec): Promise<Product[]> { const r = awai
 export async function getProduct(x: Exec, id: string): Promise<ProductDetail | null> {
   const p = (await x(`query($id:ID!){ product(id:$id){ ${PRODUCT} } }`, { id })).product as RawProduct | null; if (!p) return null;
   const order = p.optionGroups.map(g => g.name);
-  const variantList: Variant[] = p.variants.map(v => ({ id: v.id, options: order.map(g => v.options.find(o => o.group.name === g)?.name ?? '').filter(Boolean), sku: v.sku, priceMinor: v.priceWithTax, onHand: v.stockOnHand, allocated: v.stockAllocated, taxClass: taxOf(v.taxCategory?.name), enabled: v.enabled, weightGrams: v.customFields?.weightGrams || undefined }));
-  return { ...mapProduct(p), optionGroups: p.optionGroups.map(g => ({ name: g.name, options: g.options.map(o => o.name) })), variantList };
+  const variantList: Variant[] = p.variants.map(v => ({ id: v.id, options: order.map(g => v.options.find(o => o.group.name === g)?.name ?? '').filter(Boolean), sku: v.sku, priceMinor: v.priceWithTax, onHand: v.stockOnHand, allocated: v.stockAllocated, taxClass: taxOf(v.taxCategory?.name), enabled: v.enabled, compareAtMinor: v.customFields?.compareAtPrice ?? undefined, barcode: v.customFields?.barcode ?? undefined, weightGrams: v.customFields?.weightGrams || undefined }));
+  return { ...mapProduct(p), optionGroups: p.optionGroups.map(g => ({ name: g.name, options: g.options.map(o => o.name) })), variantList, description: p.description ?? '', handle: p.slug ?? '', seoTitle: p.customFields?.seoTitle ?? '', seoDescription: p.customFields?.seoDescription ?? '', images: (p.assets ?? []).map(a => ({ id: a.id, url: a.preview, name: a.name })) };
 }
 export async function listCustomers(x: Exec): Promise<Customer[]> {
   const r = await x(`query{ customers(options:{ take: 200 }){ items{ id firstName lastName emailAddress orders(options:{ take: 100, filter:{ active:{ eq:false } } }){ totalItems items{ totalWithTax orderPlacedAt } } } } }`);
@@ -203,9 +204,44 @@ const errorResult = (r: { __typename?: string; message?: string } | null | undef
 export async function addProduct(x: Exec, p: NewProduct): Promise<MutationResult> {
   try { const sku = (p.sku || p.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 12)).toUpperCase();
     const taken = (await x(`query($s:String!){ productVariants(options:{ filter:{ sku:{ eq:$s } }, take:1 }){ totalItems } }`, { s: sku })).productVariants.totalItems; if (taken) return { ok: false, message: `SKU ${sku} is already used by another product.` };
-    await createProductWithVariants(x, { title: p.title, enabled: p.status === 'published', optionGroups: [], variants: [{ options: [], sku, priceMinor: p.priceMinor, stock: p.onHand }] });
-    return { ok: true, message: p.status === 'published' ? `${p.title} is published. Add photos next.` : `${p.title} saved as a draft.` };
+    const id = await createProductWithVariants(x, { title: p.title, slug: p.handle || undefined, description: p.description, seoTitle: p.seoTitle, seoDescription: p.seoDescription, enabled: p.status === 'published', optionGroups: [], variants: [{ options: [], sku, priceMinor: p.priceMinor, stock: p.onHand, taxClass: p.taxClass, weightGrams: p.weightGrams, compareAtMinor: p.compareAtMinor, barcode: p.barcode }] });
+    return { ok: true, id, message: p.status === 'published' ? `${p.title} is published.` : `${p.title} saved as a draft.` };
   } catch (e) { return fail(e); }
+}
+const PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']); const PHOTO_MAX = 10 * 1024 * 1024;
+export async function updateProduct(x: Exec, id: string, e: ProductEdit): Promise<MutationResult> {
+  try {
+    if (!e.title.trim()) return { ok: false, message: 'A product needs a name.' };
+    const handle = e.handle.trim() ? slugify(e.handle) : slugify(e.title);
+    const r = (await x(`mutation($i: UpdateProductInput!){ updateProduct(input:$i){ id } }`, { i: { id, enabled: e.status === 'published', translations: [{ languageCode: 'en', name: e.title.trim(), slug: handle, description: e.description }], customFields: { seoTitle: e.seoTitle.trim() || null, seoDescription: e.seoDescription.trim() || null } } })).updateProduct;
+    return r?.id ? { ok: true, message: e.status === 'published' ? 'Saved. This product is on your store.' : 'Saved as a draft. It is hidden from your store.' } : { ok: false, message: 'The product could not be saved.' };
+  } catch (err) { return fail(err); }
+}
+export async function deleteProduct(x: Exec, id: string): Promise<MutationResult> {
+  try { const r = (await x(`mutation($id:ID!){ deleteProduct(id:$id){ result message } }`, { id })).deleteProduct; return r?.result === 'DELETED' ? { ok: true, message: 'Product deleted.' } : { ok: false, message: r?.message || 'The product could not be deleted.' }; } catch (err) { return fail(err); }
+}
+export async function uploadProductImages(x: Exec, id: string, files: ImageUpload[]): Promise<MutationResult> {
+  try {
+    if (!x.upload) return { ok: false, message: 'Photo upload is not available for this store yet.' };
+    const problems: string[] = []; const ok = files.filter(f => { if (!PHOTO_TYPES.has(f.type)) { problems.push(`${f.name} is not a JPEG, PNG or WebP photo`); return false; } if (f.bytes.length === 0 || f.bytes.length > PHOTO_MAX) { problems.push(`${f.name} is over 10 MB`); return false; } return true; });
+    if (!ok.length) return { ok: false, message: problems.join('. ') || 'No photos were added.' };
+    const up = (await x.upload(`mutation($input:[CreateAssetInput!]!){ createAssets(input:$input){ __typename ... on Asset { id } ... on ErrorResult { message } } }`, { input: ok.map(() => ({ file: null })) }, ok.map((f, i) => ({ path: `variables.input.${i}.file`, file: f })))).createAssets as { __typename: string; id?: string; message?: string }[];
+    const made = up.filter(a => a.__typename === 'Asset' && a.id).map(a => a.id!); for (const a of up) if (a.message) problems.push(a.message);
+    if (!made.length) return { ok: false, message: problems.join('. ') || 'The photos could not be stored.' };
+    const cur = (await x(`query($id:ID!){ product(id:$id){ featuredAsset{ id } assets{ id } } }`, { id })).product as { featuredAsset: { id: string } | null; assets: { id: string }[] } | null; if (!cur) return { ok: false, message: 'Product not found.' };
+    await x(`mutation($i: UpdateProductInput!){ updateProduct(input:$i){ id } }`, { i: { id, assetIds: [...cur.assets.map(a => a.id), ...made], featuredAssetId: cur.featuredAsset?.id ?? made[0] } });
+    return { ok: true, message: `${made.length} photo${made.length > 1 ? 's' : ''} added${problems.length ? `. ${problems.join('. ')}.` : ''}` };
+  } catch (err) { return fail(err); }
+}
+export async function setProductImages(x: Exec, id: string, orderedIds: string[]): Promise<MutationResult> {
+  try {
+    const cur = (await x(`query($id:ID!){ product(id:$id){ assets{ id } } }`, { id })).product as { assets: { id: string }[] } | null; if (!cur) return { ok: false, message: 'Product not found.' };
+    const have = new Set(cur.assets.map(a => a.id)); const ids = orderedIds.filter(i => have.has(i)); if (new Set(ids).size !== ids.length) return { ok: false, message: 'A photo was listed twice.' };
+    await x(`mutation($i: UpdateProductInput!){ updateProduct(input:$i){ id } }`, { i: { id, assetIds: ids, featuredAssetId: ids[0] ?? null } });
+    const gone = cur.assets.map(a => a.id).filter(a => !ids.includes(a));
+    if (gone.length) { try { await x(`mutation($i: DeleteAssetsInput!){ deleteAssets(input:$i){ result } }`, { i: { assetIds: gone, force: false } }); } catch { /* still used elsewhere or already gone: the product no longer shows it either way */ } }
+    return { ok: true, message: gone.length ? `Photos updated. ${gone.length} removed.` : 'Photo order saved.' };
+  } catch (err) { return fail(err); }
 }
 export async function adjustStock(x: Exec, a: StockAdjust): Promise<MutationResult> {
   try { const p = await getProduct(x, a.productId); if (!p) return { ok: false, message: 'Product not found.' };
@@ -221,7 +257,7 @@ export async function saveVariants(x: Exec, productId: string, d: { optionGroups
     const same = JSON.stringify(p.optionGroups) === JSON.stringify(d.optionGroups) && d.variants.length === p.variantList.length && d.variants.every(v => p.variantList.some(e => e.options.join('|') === v.options.join('|')));
     if (!same) return { ok: false, message: 'Adding or removing options on an existing product is not available yet. Prices, stock and other details can be changed.' };
     const tax = await findTaxCategories(x);
-    const input = d.variants.map(v => { const e = p.variantList.find(q => q.options.join('|') === v.options.join('|'))!; return { id: e.id, sku: v.sku, price: undefined as number | undefined, priceWithTaxWanted: v.priceMinor, taxCategoryId: tax[v.taxClass], stockOnHand: v.stock, enabled: v.enabled, customFields: { weightGrams: v.weightGrams ?? 0 } }; });
+    const input = d.variants.map(v => { const e = p.variantList.find(q => q.options.join('|') === v.options.join('|'))!; return { id: e.id, sku: v.sku, price: undefined as number | undefined, priceWithTaxWanted: v.priceMinor, taxCategoryId: tax[v.taxClass], stockOnHand: v.stock, enabled: v.enabled, customFields: { weightGrams: v.weightGrams ?? 0, compareAtPrice: v.compareAtMinor || null, barcode: v.barcode || null } }; });
     // Prices are entered as the customer pays them. The channel stores them that way when its prices include tax, which is how every cell is configured.
     await x(`mutation($i:[UpdateProductVariantInput!]!){ updateProductVariants(input:$i){ id } }`, { i: input.map(({ priceWithTaxWanted, price: _p, ...rest }) => ({ ...rest, price: priceWithTaxWanted })) });
     return { ok: true, message: `${d.variants.length} variant${d.variants.length > 1 ? 's' : ''} saved.` };
