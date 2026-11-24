@@ -3,7 +3,8 @@ import { ArrowRight, ArrowUpRight, Boxes, Check, CreditCard, Inbox, Package, Par
 import { gateway } from '@/lib/gateway-instance';
 import { plan, type Plan } from '@/lib/smart';
 import { money, when, day } from '@/lib/format';
-import { SalesBars, Dial, Donut } from '@/components/charts';
+import { Dial, Donut } from '@/components/charts';
+import { SalesPulse } from '@/components/analytics/SalesPulse';
 import { Header, Avatar } from '@/components/ui';
 
 const KPI = {
@@ -66,9 +67,9 @@ export default async function Overview() {
           {P.showCharts ? (
             <div className="duo">
               <section className="w tint-yellow" aria-labelledby="sales">
-                <div className="wh"><div><h2 id="sales">Net sales</h2><div className="muted" style={{ fontSize: 12.5 }}>After refunds{s.refundedMinor > 0 ? ' · pale bars show sales before refunds' : ''}</div></div></div>
+                <div className="wh"><div><h2 id="sales">Net sales</h2><div className="muted" style={{ fontSize: 12.5 }}>After refunds{s.refundedMinor > 0 ? ' · dashed line shows sales before refunds' : ''}</div></div></div>
                 <div className="big" style={{ marginBottom: 16 }}>{money(s.netMinor)}</div>
-                <SalesBars series={s.series} hatch />
+                <SalesPulse series={s.series} />
               </section>
               <section className="w tint-blue" aria-labelledby="mix">
                 <div className="wh"><h2 id="mix">Top products</h2></div>

@@ -33,6 +33,15 @@ export function mapOrder(o: RawOrder): Order {
     payment, fulfilment, state, refundedMinor: refunded, timeline, shipTo: a ? [a.fullName, a.streetLine1, a.city, a.postalCode].filter(Boolean).join(', ') : '' };
 }
 /** Orders that were actually placed (the engine also holds baskets that never checked out). Newest first. */
+/** Orders placed on or after a calendar day, for reports. Fetched in pages so a busy store is not cut off at the screen limit. */
+export async function reportOrders(x: Exec, fromYmd: string): Promise<Order[]> {
+  const out: Order[] = [];
+  for (let skip = 0; skip < 20000; skip += 500) {
+    const r = await x(`query($o: OrderListOptions){ orders(options:$o){ totalItems items{ ${ORDER} } } }`, { o: { take: 500, skip, sort: { orderPlacedAt: 'DESC' }, filter: { active: { eq: false }, orderPlacedAt: { after: `${fromYmd}T00:00:00.000Z` } } } });
+    const items = r.orders.items as RawOrder[]; out.push(...items.filter(o => o.orderPlacedAt).map(mapOrder)); if (skip + 500 >= r.orders.totalItems) break;
+  }
+  return out;
+}
 export async function listOrders(x: Exec, q?: { filter?: string; q?: string }): Promise<Order[]> {
   const r = await x(`query($o: OrderListOptions){ orders(options:$o){ items{ ${ORDER} } } }`, { o: { take: 200, sort: { orderPlacedAt: 'DESC' }, filter: { active: { eq: false } } } });
   let out = (r.orders.items as RawOrder[]).filter(o => o.orderPlacedAt).map(mapOrder);

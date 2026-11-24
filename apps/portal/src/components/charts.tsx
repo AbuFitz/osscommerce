@@ -1,7 +1,6 @@
 import type { SalesPoint } from '@/lib/gateway';
 import { day, money, moneyShort } from '@/lib/format';
 import { ChartSwitch } from './ChartSwitch';
-import { BarTip } from './BarTip';
 
 /** Gross (pale) behind net (mid): the gap is refunds. Peak day is emphasised with a label. Data table is the accessible equivalent. */
 export function SalesBars({ series, hatch = false }: { series: SalesPoint[]; hatch?: boolean }) {
@@ -10,7 +9,7 @@ export function SalesBars({ series, hatch = false }: { series: SalesPoint[]; hat
   const peak = series.reduce((a, b) => (b.netMinor > a.netMinor ? b : a));
   const total = series.reduce((s, p) => s + p.netMinor, 0);
   return (
-    <ChartSwitch label="Net sales per day" chart={<div className="chart-wrap">
+    <ChartSwitch label="Net sales per day" chart={<>
       <svg className={`chart ${hatch ? 'hatch' : ''}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Net sales per day, ${day(series[0].day)} to ${day(series.at(-1)!.day)}. Total ${money(total)}. Best day ${day(peak.day)}, ${money(peak.netMinor)}.`}>
         {hatch && <defs>
           {[['l', 'rgba(60,45,0,.18)'], ['m', 'rgba(60,45,0,.42)'], ['d', 'rgba(35,25,0,.8)']].map(([k, c]) => (
@@ -29,8 +28,7 @@ export function SalesBars({ series, hatch = false }: { series: SalesPoint[]; hat
           );
         })}
       </svg>
-      <BarTip series={series} W={W} bw={bw} gap={gap} />
-      </div>} table={<table><thead><tr><th scope="col">Day</th><th scope="col">Sales</th><th scope="col">Net</th></tr></thead><tbody>{series.map(p => <tr key={p.day}><td>{day(p.day)}</td><td className="num">{money(p.grossMinor)}</td><td className="num">{money(p.netMinor)}</td></tr>)}</tbody></table>} />
+      </>} table={<table><thead><tr><th scope="col">Day</th><th scope="col">Sales</th><th scope="col">Net</th></tr></thead><tbody>{series.map(p => <tr key={p.day}><td>{day(p.day)}</td><td className="num">{money(p.grossMinor)}</td><td className="num">{money(p.netMinor)}</td></tr>)}</tbody></table>} />
   );
 }
 

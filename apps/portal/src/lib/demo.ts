@@ -50,6 +50,24 @@ const mk = (i: number): Order => {
   };
 };
 const ORDERS = Array.from({ length: 24 }, (_, i) => mk(i));
+/** Older, deterministic history so longer report ranges have something real to draw. Same shape as the recent orders; nothing here is random. */
+const HISTORY: Order[] = (() => {
+  const out: Order[] = []; let n = 1000;
+  for (let back = 15; back <= 120; back++) {
+    const d = new Date(Date.parse(AS_OF) - back * 86400_000); const wd = d.getUTCDay();
+    const base = (wd === 0 || wd === 6) ? 2 : 1; const growth = 1 + (120 - back) / 120;       // busier at weekends, and growing
+    const count = Math.round(((back * 7 + wd * 3) % 5 === 0 ? 0 : base) * growth * (1 + ((back * 13) % 3) / 2));
+    for (let k = 0; k < count; k++) {
+      const i = back * 5 + k; const prod = P[i % 4]; const qty = 1 + (i % 3); const sub = prod.priceMinor * qty; const ship = sub >= 5000 ? 0 : 495; const disc = i % 7 === 0 ? Math.round(sub * 0.1) : 0; const total = sub + ship - disc;
+      const iso = new Date(d.getTime() + (8 + ((i * 3) % 12)) * 3600_000).toISOString(); const who = names[(i * 7) % names.length]; const refunded = i % 23 === 0 ? Math.round(total / 2) : 0;
+      out.push({ id: `h${n}`, number: n--, placedAt: iso, customer: who, email: `${who.split(' ')[0].toLowerCase()}@example.com`, lines: [{ sku: prod.sku, title: prod.title, qty, unitMinor: prod.priceMinor }], shippingMinor: ship, discountMinor: disc, taxMinor: Math.round(total / 6), totalMinor: total,
+        payment: refunded ? 'partially_refunded' : 'paid', fulfilment: 'fulfilled', state: 'completed', refundedMinor: refunded, shipTo: '', timeline: [{ at: iso, text: 'Order placed.' }],
+        method: ([{ brand: 'visa', last4: '4242' }, { brand: 'mastercard', last4: '4444', wallet: 'applepay' }, { brand: 'visa', last4: '0005', wallet: 'googlepay' }, { brand: 'amex', last4: '1005' }] as const)[i % 4] });
+    }
+  }
+  return out;
+})();
+
 const CUSTOMERS: Customer[] = names.map((n, i) => ({ id: `c${i}`, name: n, email: `${n.split(' ')[0].toLowerCase()}@example.com`, orders: 1 + (i % 5), spentMinor: 2400 + i * 1850, lastOrder: ORDERS[i].placedAt, marketing: i % 3 !== 0 }));
 
 
@@ -160,6 +178,7 @@ export const demoGateway: CommerceGateway = {
       asOf: AS_OF,
     };
   },
+  async reportOrders(fromYmd) { const all = [...await ordersFor(await state()), ...(await state() === 'new' ? [] : HISTORY)]; return all.filter(o => o.placedAt.slice(0, 10) >= fromYmd); },
   async orders(q) {
     let r = await ordersFor(await state());
     if (q?.filter === 'unfulfilled') r = r.filter(o => o.state === 'open');

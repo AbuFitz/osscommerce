@@ -74,6 +74,8 @@ export interface CommerceGateway {
   billing(): Promise<Billing>;
   startBillingPortal(): Promise<StartPaymentSetup>;
   orders(q?: { filter?: string; q?: string }): Promise<Order[]>;
+  /** Every order placed since `fromYmd` (a calendar day), for reports. Not paged for the screen. */
+  reportOrders(fromYmd: string): Promise<Order[]>;
   order(id: string): Promise<Order | null>;
   products(): Promise<Product[]>;
   customers(): Promise<Customer[]>;
