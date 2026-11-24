@@ -23,7 +23,10 @@ export async function publishContent() { return run(() => gateway().publishConte
 export async function saveLegal(slug: LegalPage['slug'], body: string, publish: boolean) { return run(() => gateway().saveLegal(slug, body, publish), ['/settings/legal']); }
 export async function setAutomation(id: string, on: boolean) { return run(() => gateway().setAutomation(id, on), ['/automations']); }
 export async function createServiceRequest(kind: ServiceRequest['kind'], title: string, detail: string) { return run(() => gateway().createServiceRequest(kind, title, detail), ['/support']); }
-export async function decideQuote(id: string, approve: boolean) { return run(() => gateway().decideQuote(id, approve), ['/support']); }
+export async function decideQuote(id: string, approve: boolean) {
+  if (approve) { const { LIVE, recentlyAuthenticated } = await import('@/lib/session'); if (LIVE && !await recentlyAuthenticated()) return { ok: false, message: 'Sign out and sign in again before approving a paid quote.' }; }
+  return run(() => gateway().decideQuote(id, approve), ['/support']);
+}
 export async function saveEmailSettings(brand: Partial<EmailSettings['brand']>, n: Record<string, boolean>) { return run(() => gateway().saveEmailSettings(brand, n), ['/settings/emails']); }
 
 export async function startPaymentSetup() {

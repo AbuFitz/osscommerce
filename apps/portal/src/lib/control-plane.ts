@@ -1,10 +1,11 @@
 import 'server-only';
 import { Pool, type PoolClient } from 'pg';
-import type { AccessGrant, Automation, AutomationRun, EmailSettings, PaymentSetup, Readiness, StorefrontView } from './gateway';
+import type { AccessGrant, Automation, AutomationRun, EmailSettings, PaymentSetup, Readiness, ServiceRequest, StorefrontView } from './gateway';
 import { GATE_COPY, LAUNCH_GATES } from './gateway';
 import type { StoreRecord } from '@oss-commerce/contracts';
 import { automationOutcome, grantTransition, paymentView, stripeOnboardingConfig } from './control-plane-mapping';
 import { liveConnect, type ConnectPort } from '@oss-commerce/payments';
+import { isUuid, serviceRequestView, validateServiceRequest } from './service-requests';
 
 type Row = Record<string, any>;
 
@@ -19,6 +20,9 @@ export interface ControlPlanePort {
   storefront(storeId: string): Promise<StorefrontView | null>;
   grants(storeId: string): Promise<AccessGrant[]>;
   decideGrant(storeId: string, id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<{ ok: boolean; message: string }>;
+  serviceRequests(storeId: string): Promise<ServiceRequest[]>;
+  createServiceRequest(storeId: string, kind: ServiceRequest['kind'], title: string, detail: string): Promise<{ ok: boolean; message: string }>;
+  decideQuote(storeId: string, id: string, approve: boolean): Promise<{ ok: boolean; message: string }>;
 }
 
 export class PgControlPlane implements ControlPlanePort {
@@ -160,6 +164,28 @@ export class PgControlPlane implements ControlPlanePort {
       await client.query(`insert into cp.audit_log(store_id,actor,action,before,after) values ($1,'merchant',$2,$3::jsonb,$4::jsonb)`, [storeId, `access.${next}`, JSON.stringify({ id, state: row.state }), JSON.stringify({ id, state: next })]);
       if (next === 'expired') return { ok: false, message: 'That access request has expired. No access was granted.' };
       return { ok: true, message: next === 'active' ? 'Access approved.' : next === 'declined' ? 'Access declined.' : 'Access revoked.' };
+    });
+  }
+
+  serviceRequests(storeId: string) {
+    return this.tx(storeId, async client => {
+      const rows = (await client.query('select * from cp.service_requests where store_id=$1 order by created_at desc limit 100', [storeId])).rows;
+      return rows.map(serviceRequestView);
+    });
+  }
+
+  createServiceRequest(storeId: string, kind: ServiceRequest['kind'], title: string, detail: string) {
+    const clean = validateServiceRequest(title, detail);
+    if (clean.error) return Promise.resolve({ ok: false, message: clean.error });
+    return this.tx(storeId, async client => { await client.query('select cp.create_service_request($1,$2,$3,$4)', [storeId, kind, clean.title, clean.detail]); return { ok: true, message: 'Request sent. We will reply with a quote before any paid work starts.' }; });
+  }
+
+  decideQuote(storeId: string, id: string, approve: boolean) {
+    if (!isUuid(id)) return Promise.resolve({ ok: false, message: 'That quote no longer exists.' });
+    return this.tx(storeId, async client => {
+      const row = (await client.query('select * from cp.decide_service_quote($1,$2::uuid,$3)', [storeId, id, approve])).rows[0];
+      if (!row?.changed) return { ok: false, message: 'That quote is no longer open. Refresh the page.' };
+      return { ok: true, message: approve ? 'Quote approved. Work can now begin.' : 'Quote declined. Nothing will be charged.' };
     });
   }
 }

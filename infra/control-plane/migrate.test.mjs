@@ -5,7 +5,7 @@ import { checksum, discoverMigrations, validateApplied } from './migrate.mjs';
 test('migration catalogue is contiguous, named consistently and checksummed', async () => {
   const migrations = await discoverMigrations();
   assert.equal(migrations[0].version, '0001_control_plane');
-  assert.equal(migrations.at(-1).version, '0012_automation_policy');
+  assert.equal(migrations.at(-1).version, '0013_service_requests');
   assert.deepEqual(migrations.map(m => m.number), Array.from({ length: migrations.length }, (_, i) => i + 1));
   assert.ok(migrations.every(m => /^[0-9a-f]{64}$/.test(m.checksum)));
 });

@@ -33,10 +33,10 @@ The engine must use bearer tokens (`authOptions.tokenMethod: 'bearer'`), as the 
 orders list and detail, order filters and search, fulfilment with tracking, full and partial refunds through the Connect payment handler, products list, product detail and variants, add product, CSV import, stock adjustment for single-variant products, saving variant price, SKU, stock, VAT class, weight and on-sale, collections (list, preview, create), percentage/fixed/free-delivery coupon creation and listing with actual use counts, country delivery zones with multiple rates and free-delivery thresholds, customers, overview and analytics figures computed from real orders, notifications derived from real orders and stock, the signed-in user's name.
 
 **Backed by the control plane when `CONTROL_PLANE_DATABASE_URL` is set:**
-store lifecycle and verified hostnames, persisted Stripe account readiness, single-use hosted Stripe onboarding for a pre-provisioned account, storefront deployment/domain state, automation rules and recent runs, automation enable/disable, monthly automation limit, sender identity/domain verification, email brand/notification settings, and time-boxed support-access requests. Every query runs in a transaction with tenant RLS set first. Payment onboarding and support-access decisions require a sign-in from the last ten minutes; access approvals, declines and revocations are audited atomically.
+store lifecycle and verified hostnames, persisted Stripe account readiness, single-use hosted Stripe onboarding for a pre-provisioned account, storefront deployment/domain state, automation rules and recent runs, automation enable/disable, monthly automation limit, sender identity/domain verification, email brand/notification settings, tenant-scoped service requests and audited quote decisions, and time-boxed support-access requests. Every query runs in a transaction with tenant RLS set first. Payment onboarding, paid quote approval and support-access decisions require a sign-in from the last ten minutes; quote and access decisions are audited atomically.
 
 **Not connected yet. These show an empty, honest state and refuse changes with a message; they never show fixtures:**
-content editing, legal pages, team invitations and roles (support-access grants are connected), service requests, preferences, billing invoices, and live visitor analytics.
+content editing, legal pages, team invitations and roles (support-access grants are connected), preferences, billing invoices, and live visitor analytics.
 
 **Known limits**
 - Adding or removing options on an existing product is refused (existing variants can be edited).
@@ -52,7 +52,7 @@ content editing, legal pages, team invitations and roles (support-access grants 
 1. **A hosted engine cell.** Vendure needs a long-running Node server and worker, PostgreSQL and Redis. It cannot run on Vercel. Until one exists at a public HTTPS address there is nothing for `ENGINE_ADMIN_URL` to point to.
 2. **An administrator account per merchant** on that cell, with a role limited to their channel (never SuperAdmin).
 3. **Stripe**: live keys on the cell, the merchant's connected account onboarded, and Stripe's written confirmation of the fee arrangement.
-4. **Control plane**: apply migrations through `0012_automation_policy` before adding the runtime database URL. The portal credential must inherit `oss_runtime`, never own the tables.
+4. **Control plane**: apply migrations through `0013_service_requests` before adding the runtime database URL. The portal credential must inherit `oss_runtime`, never own the tables.
 5. **Vercel**: set the variables above on the portal project and remove `NEXT_PUBLIC_OSS_DEMO`.
 
 ## Trying it locally
