@@ -13,7 +13,7 @@ OSS is responsible for **technology**: initial configuration, storefront develop
 | Customers | List built; account history and communications not built |
 | Discounts | List built; **create/edit rules not built** |
 | Shipping and tax | View built; **editing not built** |
-| Payments | View built; Connect onboarding not built |
+| Payments | Merchant status view, registry-bound hosted Connect onboarding, engine payment/refund path and webhook handling built; real sandbox completion still needs human Stripe onboarding and credentials |
 | Team, roles, support access | View, invite and approve/revoke built (demo) |
 | Storefront content | **Content manager built (structured sections, preview, publish) with demo data** |
 | Legal pages | **Editor built with guided templates** |

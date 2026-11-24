@@ -16,6 +16,8 @@ With neither set the portal refuses to start a request rather than show fixtures
 | `ENGINE_CHANNEL_TOKEN` | The store's channel token, when the cell hosts more than the default channel |
 | `STORE_NAME`, `STORE_ID`, `STORE_HOST` | Select the tenant cell and provide the display-name fallback. `STORE_ID` must match the signed-in merchant's control-plane store |
 | `CONTROL_PLANE_DATABASE_URL` | Non-owner `oss_runtime` connection. Store registry, domain/deployment state, Stripe readiness, automations and email settings are all read under `SET LOCAL app.store_id` |
+| `STRIPE_SECRET_KEY` | Platform key used only server-side to create a single-use hosted onboarding link for the Stripe account already bound to this store. Test outside production; live in production |
+| `PORTAL_PUBLIC_URL` | Canonical HTTPS portal origin used for Stripe return/refresh URLs. Vercel's production URL is used only when this is absent |
 | `APP_ENV=production` | Blocks demo data |
 
 The engine must use bearer tokens (`authOptions.tokenMethod: 'bearer'`), as the cell configuration does.
@@ -31,7 +33,7 @@ The engine must use bearer tokens (`authOptions.tokenMethod: 'bearer'`), as the 
 orders list and detail, order filters and search, fulfilment with tracking, full and partial refunds through the Connect payment handler, products list, product detail and variants, add product, CSV import, stock adjustment for single-variant products, saving variant price, SKU, stock, VAT class, weight and on-sale, collections (list, preview, create), customers, overview and analytics figures computed from real orders, notifications derived from real orders and stock, the signed-in user's name.
 
 **Backed by the control plane when `CONTROL_PLANE_DATABASE_URL` is set:**
-store lifecycle and verified hostnames, persisted Stripe account readiness, storefront deployment/domain state, automation rules and recent runs, automation enable/disable, monthly automation limit, sender identity/domain verification, and email brand/notification settings. Every query runs in a transaction with tenant RLS set first. Stripe onboarding still needs the hosted onboarding endpoint; the portal never fabricates a URL.
+store lifecycle and verified hostnames, persisted Stripe account readiness, single-use hosted Stripe onboarding for a pre-provisioned account, storefront deployment/domain state, automation rules and recent runs, automation enable/disable, monthly automation limit, sender identity/domain verification, and email brand/notification settings. Every query runs in a transaction with tenant RLS set first. Payment onboarding requires a sign-in from the last ten minutes, uses the registry account rather than browser input, and is audited.
 
 **Not connected yet. These show an empty, honest state and refuse changes with a message; they never show fixtures:**
 discounts, delivery zones, content editing, legal pages, team invitations and roles, service requests, preferences, billing invoices, and live visitor analytics.

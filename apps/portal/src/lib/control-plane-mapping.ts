@@ -2,6 +2,20 @@ import type { AutomationRun, PaymentSetup } from './gateway';
 
 export type ControlPlaneRow = Record<string, any>;
 
+export function isRecentAuthentication(epochSeconds: number, now = Date.now()): boolean {
+  return Number.isFinite(epochSeconds) && now / 1000 - epochSeconds >= 0 && now / 1000 - epochSeconds <= 600;
+}
+
+export function stripeOnboardingConfig(input: { secret?: string; appEnv?: string; publicUrl?: string; vercelProductionUrl?: string }): { secret: string; publicBaseUrl: string } | null {
+  const secret = input.secret ?? '';
+  const env = input.appEnv ?? 'development';
+  const placeholder = /placeholder|change[-_]?me|replace|example|dummy|fake|todo/i.test(secret);
+  const keyOk = !placeholder && (env === 'production' ? /^sk_live_[A-Za-z0-9]{16,}$/.test(secret) : /^sk_test_[A-Za-z0-9]{16,}$/.test(secret));
+  const candidate = input.publicUrl ?? (input.vercelProductionUrl ? `https://${input.vercelProductionUrl}` : '');
+  const publicBaseUrl = candidate.replace(/\/$/, '');
+  return keyOk && /^https:\/\/[^/]+$/.test(publicBaseUrl) ? { secret, publicBaseUrl } : null;
+}
+
 export function paymentView(row: ControlPlaneRow | undefined, applicationFeeBp: number): PaymentSetup {
   const empty = { chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [] as string[], pending: [] as string[] };
   if (!row) return { ...empty, status: 'not_started', headline: 'Set up payments', detail: 'Connect your bank account so customers can pay and you get paid directly.', applicationFeeBp };

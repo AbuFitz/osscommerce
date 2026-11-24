@@ -22,7 +22,12 @@ export async function createServiceRequest(kind: ServiceRequest['kind'], title: 
 export async function decideQuote(id: string, approve: boolean) { return run(() => gateway().decideQuote(id, approve), ['/support']); }
 export async function saveEmailSettings(brand: Partial<EmailSettings['brand']>, n: Record<string, boolean>) { return run(() => gateway().saveEmailSettings(brand, n), ['/settings/emails']); }
 
-export async function startPaymentSetup() { return gateway().startPaymentSetup(); }
+export async function startPaymentSetup() {
+  const { recentlyAuthenticated } = await import('@/lib/session');
+  if (!await recentlyAuthenticated()) return { ok: false as const, message: 'Sign out and sign in again before changing payment details.' };
+  try { return await gateway().startPaymentSetup(); }
+  catch { return { ok: false as const, message: 'Stripe could not be opened just now. Nothing was changed. Try again in a moment.' }; }
+}
 
 // ---- Phone handoff (add photos from your phone) ----
 import { handoff, callerNow, origin, qrSvg, AVAILABLE, photoStore } from '@/lib/handoff';

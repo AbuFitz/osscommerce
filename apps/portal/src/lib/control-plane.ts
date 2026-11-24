@@ -3,13 +3,15 @@ import { Pool, type PoolClient } from 'pg';
 import type { Automation, AutomationRun, EmailSettings, PaymentSetup, Readiness, StorefrontView } from './gateway';
 import { GATE_COPY, LAUNCH_GATES } from './gateway';
 import type { StoreRecord } from '@oss-commerce/contracts';
-import { automationOutcome, paymentView } from './control-plane-mapping';
+import { automationOutcome, paymentView, stripeOnboardingConfig } from './control-plane-mapping';
+import { liveConnect, type ConnectPort } from '@oss-commerce/payments';
 
 type Row = Record<string, any>;
 
 export interface ControlPlanePort {
   store(storeId: string, fallbackName: string): Promise<{ store: StoreRecord; readiness: Readiness[] }>;
   payment(storeId: string, applicationFeeBp: number): Promise<PaymentSetup>;
+  startPaymentSetup(storeId: string): Promise<{ ok: true; mode: 'hosted'; url: string } | { ok: false; message: string }>;
   automations(storeId: string): Promise<{ rules: Automation[]; runs: AutomationRun[]; runsLimit: number }>;
   setAutomation(storeId: string, id: string, enabled: boolean): Promise<{ ok: boolean; message: string }>;
   emailSettings(storeId: string, fallbackName: string): Promise<EmailSettings>;
@@ -18,7 +20,7 @@ export interface ControlPlanePort {
 }
 
 export class PgControlPlane implements ControlPlanePort {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool, private readonly payments?: { connect: ConnectPort; publicBaseUrl: string }) {}
 
   private async tx<T>(storeId: string, fn: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
@@ -72,6 +74,16 @@ export class PgControlPlane implements ControlPlanePort {
   }
 
   payment(storeId: string, fee: number) { return this.tx(storeId, client => this.paymentIn(client, storeId, fee)); }
+
+  async startPaymentSetup(storeId: string) {
+    if (!this.payments) return { ok: false as const, message: 'Stripe onboarding is not configured on this deployment.' };
+    const account = await this.tx(storeId, async client => (await client.query(`select a.stripe_account_id from cp.store_payment_accounts b join cp.payment_accounts a using (payment_account_id) where b.store_id=$1`, [storeId])).rows[0]?.stripe_account_id as string | undefined);
+    if (!account) return { ok: false as const, message: 'Your payment account is still being provisioned. Nothing was changed.' };
+    const root = this.payments.publicBaseUrl;
+    const link = await this.payments.connect.createAccountLink({ account, returnUrl: `${root}/settings/payments?stripe=returned`, refreshUrl: `${root}/settings/payments?stripe=refresh` });
+    await this.tx(storeId, async client => { await client.query(`insert into cp.audit_log(store_id,actor,action,after) values ($1,'merchant','payments.hosted_onboarding_opened',$2::jsonb)`, [storeId, JSON.stringify({ account: `${account.slice(0, 8)}…` })]); });
+    return { ok: true as const, mode: 'hosted' as const, url: link.url };
+  }
 
   async automations(storeId: string) {
     return this.tx(storeId, async client => {
@@ -135,5 +147,7 @@ export function controlPlaneFromEnv(): ControlPlanePort | null {
   const connectionString = process.env.CONTROL_PLANE_DATABASE_URL;
   if (!connectionString) return null;
   const pool = globalPool.__ossPortalControlPlanePool ??= new Pool({ connectionString, max: 3, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 });
-  return new PgControlPlane(pool);
+  const config = stripeOnboardingConfig({ secret: process.env.STRIPE_SECRET_KEY, appEnv: process.env.APP_ENV, publicUrl: process.env.PORTAL_PUBLIC_URL, vercelProductionUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL });
+  const payments = config ? { connect: liveConnect(config.secret), publicBaseUrl: config.publicBaseUrl } : undefined;
+  return new PgControlPlane(pool, payments);
 }
