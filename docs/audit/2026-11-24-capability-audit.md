@@ -162,3 +162,9 @@ Next in Phase 2: delivery rules by weight, value and postcode, abandoned checkou
 
 Next in Phase 2: abandoned checkouts, staff roles and an activity log.
 
+
+- **Staff roles**: owners add Manager, Fulfilment and View-only staff with a one-time password shown once (no email needed until Resend is set up). Roles are fixed templates per store: a manager cannot change delivery, payments or staff; fulfilment sees orders and customers and fulfils; view-only changes nothing. Change a role, remove someone, change your own password. Proven on a real Vendure with two stores: no one can see, reach or manage another store's staff, and a removed or wrong-store login gets nothing.
+- **Activity log** (`/settings/activity`): who changed what and when, from the engine's own events (orders, products, discounts, shipping, collections, customers, stock, staff), newest first, paged, filterable by person; platform-team actions are labelled "OneSimpleSite team". Owners and managers can read it.
+- Deploy note: this adds the `oss_activity` table (migration `1795300000000-activity`), applied by the engine's pre-deploy step.
+
+Next in Phase 2 (Stripe, Resend and Sentry are deferred): GDPR export and erase, rate limits, bulk fulfil, customer create and import, rich-text descriptions.

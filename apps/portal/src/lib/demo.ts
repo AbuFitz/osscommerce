@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { LAUNCH_PLAN } from '@oss-commerce/contracts';
 import { orderPoints, recentOrders } from './geo/points';
 import { splitRegions, validateRate } from './delivery';
-import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
+import { GATE_COPY, LAUNCH_GATES, ROLE_INFO, type ActivityEntry, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from './discounts';
 import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus, type LogEntry } from './stock';
@@ -91,9 +91,9 @@ const ZONES: ShippingZone[] = [
         { name: 'Highlands and Islands', regions: 'IV, KW, HS, ZE, PA20–80', rates: [{ label: 'Standard, 3–6 days', priceMinor: 895 }] },
       ];
 const MEMBERS: Member[] = [
-        { name: 'Maya Okafor', email: 'maya@example.com', role: 'owner' as const, status: 'active' as const },
-        { name: 'Tom Hendry', email: 'tom@example.com', role: 'fulfilment' as const, status: 'active' as const },
-        { name: 'Priya Nair', email: 'priya@example.com', role: 'analyst' as const, status: 'invited' as const },
+        { id: 'm1', self: true, name: 'Maya Okafor', email: 'maya@example.com', role: 'owner' as const, status: 'active' as const },
+        { id: 'm2', name: 'Tom Hendry', email: 'tom@example.com', role: 'fulfilment' as const, status: 'active' as const },
+        { id: 'm3', name: 'Priya Nair', email: 'priya@example.com', role: 'analyst' as const, status: 'active' as const },
       ];
 const GRANTS: AccessGrant[] = [
         { id: 'g1', who: 'OSS Support', purpose: 'Ticket 2041: checkout page error', scopes: ['Read orders'], write: false, state: 'pending' as const, expires: '2026-11-14T12:00:00Z' },
@@ -119,12 +119,13 @@ async function state(): Promise<DemoState> {
   try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
 }
 /** Per-browser scratch copy of the demo data (keyed by the oss_sid cookie). Actions really change it, so every page reflects what you did. */
-interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; vstock: Record<string, { tracked: boolean; backorder: boolean; lowAt: number; log: string }>; custNotes: Record<string, { id: string; text: string; at: string; by?: string }[]>; custProfile: Record<string, { firstName: string; lastName: string; phone: string }>; meta: Record<string, { description: string; handle: string; seoTitle: string; seoDescription: string; images: { id: string; url: string; name?: string }[] }>; collections: { id: string; name: string; contains: string; productIds?: string[] }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
+const log = (x: { activity: ActivityEntry[] }, actor: string, action: string, summary: string) => { x.activity.unshift({ id: (x.activity[0]?.id ?? 0) + 1, at: new Date().toISOString(), actor, action, summary }); };
+interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; vstock: Record<string, { tracked: boolean; backorder: boolean; lowAt: number; log: string }>; custNotes: Record<string, { id: string; text: string; at: string; by?: string }[]>; custProfile: Record<string, { firstName: string; lastName: string; phone: string }>; meta: Record<string, { description: string; handle: string; seoTitle: string; seoDescription: string; images: { id: string; url: string; name?: string }[] }>; collections: { id: string; name: string; contains: string; productIds?: string[] }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number; activity: ActivityEntry[] }
 const G = globalThis as unknown as { __oss_demo?: Map<string, Scratch> };
 async function S(): Promise<Scratch> {
   const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
   const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
-  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, vstock: {}, custNotes: { c0: [{ id: 'n1', text: 'Prefers weekday delivery. Asked about a custom glaze.', at: '2026-11-02T10:30:00Z', by: 'Mo' }] }, custProfile: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, vstock: {}, custNotes: { c0: [{ id: 'n1', text: 'Prefers weekday delivery. Asked about a custom glaze.', at: '2026-11-02T10:30:00Z', by: 'Mo' }] }, custProfile: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0, activity: [{ id: 3, at: '2026-11-24T09:12:00Z', actor: 'Tom Hendry', action: 'order.fulfilled', summary: 'Fulfilled order #1043' }, { id: 2, at: '2026-11-23T16:40:00Z', actor: 'Maya Okafor', action: 'product.updated', summary: 'Changed the price of Linen tea towel' }, { id: 1, at: '2026-11-22T11:05:00Z', actor: 'Maya Okafor', action: 'discount.created', summary: 'Created the discount WELCOME10' }] }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
   tagLines(x);
   return x;
 }
@@ -186,7 +187,7 @@ const productsFor = async (st: DemoState) => (st === 'new' ? [] : (await S()).pr
 const NOTE = ' Demo data: nothing was changed.';
 const okDemo = (m: string) => ({ ok: true, message: m + NOTE });
 export const demoGateway: CommerceGateway = {
-  async viewer() { return { name: 'Maya Okafor', initials: 'MO', role: 'Owner' }; },
+  async viewer() { return { name: 'Maya Okafor', initials: 'MO', role: 'Owner', kind: 'owner' as const }; },
   async store() {
     const st = await state();
     const done: Record<string, boolean> = st === 'live' ? { contract_signed: true, payments_enabled: true, domain_verified: true, test_order_passed: true, launch_approved: true }
@@ -451,10 +452,15 @@ export const demoGateway: CommerceGateway = {
     const x = await S(); const p = await editOrder(x, i, true); if (!p.ok) return { ok: false, message: p.message };
     return { ok: true, message: p.changeMinor > 0 ? `Order updated. The extra £${(p.changeMinor / 100).toFixed(2)} is recorded as paid.` : p.changeMinor < 0 ? `Order updated. £${(-p.changeMinor / 100).toFixed(2)} refunded to the customer's original payment method.` : 'Order updated. The total is unchanged.' };
   },
-  async inviteMember(email, role) {
-    const x = await S(); if (x.members.some(m => m.email.toLowerCase() === email.toLowerCase())) return { ok: false, message: `${email} is already on your team.` };
-    x.members.push({ name: email.split('@')[0], email, role, status: 'invited' }); return { ok: true, message: `Invitation sent to ${email}. It expires in 7 days.` };
+  async inviteMember(i) {
+    const x = await S(); const email = i.email.trim().toLowerCase(); if (x.members.some(m => m.email.toLowerCase() === email)) return { ok: false, message: 'That email already has an account. Use a different email address for this person.' };
+    const id = `m${Date.now().toString(36)}`; x.members.push({ id, name: `${i.firstName} ${i.lastName}`.trim(), email, role: i.role, status: 'active' });
+    log(x, 'You', 'staff.invited', `Added ${i.firstName} ${i.lastName} as ${ROLE_INFO[i.role].label}`); return { ok: true, message: `${i.firstName} has been added.`, id, secret: 'demo-Passw0rd-1' };
   },
+  async setMemberRole(id, role) { const x = await S(); const m = x.members.find(q => q.id === id && q.role !== 'owner'); if (!m) return { ok: false, message: 'That team member was not found.' }; m.role = role; log(x, 'You', 'staff.role', `Changed ${m.name} to ${ROLE_INFO[role].label}`); return { ok: true, message: 'Role changed. It applies the next time they open a page.' }; },
+  async removeMember(id) { const x = await S(); const m = x.members.find(q => q.id === id && q.role !== 'owner'); if (!m) return { ok: false, message: 'That team member was not found.' }; x.members = x.members.filter(q => q !== m); log(x, 'You', 'staff.removed', `Removed ${m.name}`); return { ok: true, message: 'Removed. They can no longer sign in.' }; },
+  async activity(q) { const x = await S(); const all = x.activity.filter(e => (!q?.actor || e.actor === q.actor) && (!q?.before || e.id < q.before)); return { items: all.slice(0, 30), hasMore: all.length > 30 }; },
+  async changePassword(current, next) { if (next.length < 10) return { ok: false, message: 'Use at least 10 characters.' }; if (next === current) return { ok: false, message: 'Choose a password you have not used before.' }; return { ok: true, message: 'Password changed. (Demo: nothing is stored.)' }; },
   async rollbackTheme(v) { return okDemo(`Rollback to v${v} requested.`); },
   async decideGrant(id, dec) {
     const x = await S(); const g = x.grants.find(q => q.id === id); if (!g) return { ok: false, message: 'That request no longer exists.' };

@@ -10,12 +10,13 @@ const items = [
   { href: '/settings/legal', t: 'Legal pages', d: 'Privacy, terms, shipping and returns', i: Scale, c: 'peach' },
   { href: '/settings/integrations', t: 'Integrations', d: 'Shipping, search, maps and more', i: Plug, c: 'blue' },
   { href: '/settings/team', t: 'Team and access', d: 'Members, roles and support access', i: Users, c: 'lilac' },
+  { href: '/settings/activity', t: 'Activity', d: 'What your team has changed, and when', i: Users, c: 'blue' },
   { href: '/storefront', t: 'Storefront', d: 'Theme, domain and versions', i: Store, c: 'peach' },
   { href: '/account/billing', t: 'Plan and billing', d: 'Your subscription and invoices', i: Receipt, c: 'lime' },
 ];
 const groups = [
   { h: 'Store', rows: ['/settings/payments', '/settings/shipping', '/settings/integrations', '/settings/preferences', '/settings/emails', '/settings/legal'] },
-  { h: 'People and plan', rows: ['/settings/team', '/storefront', '/account/billing'] },
+  { h: 'People and plan', rows: ['/settings/team', '/settings/activity', '/storefront', '/account/billing'] },
 ];
 export default function Settings() {
   const by = (h: string) => items.find(x => x.href === h)!;

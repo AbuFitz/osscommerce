@@ -3,8 +3,8 @@ import { useEffect, useState, useTransition } from 'react';
 import { Dialog, useToast } from '@oss-commerce/ui';
 import { FormDialog } from './FormDialog';
 import { money } from '@/lib/format';
-import type { MutationResult, Member, OrderLine } from '@/lib/gateway';
-import { addOrderNote, cancelOrder, decideGrant, fulfilOrder, inviteMember, rollbackTheme } from '@/app/actions';
+import type { MutationResult, OrderLine } from '@/lib/gateway';
+import { addOrderNote, cancelOrder, decideGrant, fulfilOrder, rollbackTheme } from '@/app/actions';
 
 /** Runs a server action, then tells the person the real outcome. Failures say nothing changed. */
 export function useRun() {
@@ -62,13 +62,6 @@ export function NoteForm({ orderId }: { orderId: string }) {
     <textarea id="on" rows={2} maxLength={2000} value={note} onChange={e => setNote(e.target.value)} placeholder="Add a private note for your team" />
     <div className="notef-row"><small className="muted">Only your team can see notes.</small><button className="btn" type="submit" disabled={pending || !note.trim()} aria-busy={pending}>{pending ? 'Adding…' : 'Add note'}</button></div>
   </form>);
-}
-
-export function InviteAction() {
-  return <FormDialog trigger="Invite member" triggerClass="btn primary" title="Invite a team member" description="They get an email invitation. You choose exactly what they can do."
-    fields={[{ name: 'email', label: 'Email', type: 'email', required: true, placeholder: 'name@example.com' },
-      { name: 'role', label: 'Role', type: 'select', required: true, value: 'fulfilment', hint: 'You can change this later. Owners cannot be invited here.', options: [{ value: 'manager', label: 'Manager: products, orders, discounts' }, { value: 'fulfilment', label: 'Fulfilment: orders and stock' }, { value: 'analyst', label: 'Analyst: read-only reports' }] }]}
-    submit="Send invitation" onSubmit={v => inviteMember(v.email.trim(), v.role as Member['role'])} />;
 }
 
 export function RollbackAction({ version }: { version: string }) {

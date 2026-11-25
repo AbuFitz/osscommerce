@@ -70,7 +70,7 @@ export interface StorefrontView {
   checks: { label: string; ok: boolean; detail: string }[];
   history: { version: string; at: string; note: string; current: boolean }[];
 }
-export interface Member { name: string; email: string; role: 'owner' | 'manager' | 'fulfilment' | 'analyst'; status: 'active' | 'invited' }
+export interface Member { id?: string; self?: boolean; name: string; email: string; role: 'owner' | 'manager' | 'fulfilment' | 'analyst'; status: 'active' | 'invited' }
 export interface AccessGrant { id: string; who: string; purpose: string; scopes: string[]; write: boolean; state: 'pending' | 'active' | 'expired' | 'revoked'; expires: string }
 /** When a delivery option is offered. Every limit is optional; none set means always offered. */
 export interface RateWhen { minOrderMinor?: number; maxOrderMinor?: number; maxWeightGrams?: number }
@@ -118,7 +118,7 @@ export interface VariantInput { options: string[]; sku: string; priceMinor: numb
 /** A shelf of products. `rule`: products join by themselves when their name contains a word. `manual`: you pick them. `other`: set up another way (we can still delete it). */
 export interface Collection { id: string; name: string; kind?: 'rule' | 'manual' | 'other'; contains: string; productIds?: string[]; count: number; products: string[] }
 export interface CollectionInput { id?: string; name: string; kind: 'rule' | 'manual'; contains?: string; productIds?: string[] }
-export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string; /** The step cannot finish until the person says how an extra amount was paid. */ needsPayment?: boolean }
+export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string; /** The step cannot finish until the person says how an extra amount was paid. */ needsPayment?: boolean; /** Shown once and never stored, for example a new team member's first password. */ secret?: string }
 /** A refund, optionally for specific returned lines. Returned lines can be put back in stock. Our fee on the refunded part is returned by platform policy, not chosen per refund. */
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; lines?: { lineId: string; qty: number }[] }
 /** Changes to an order after it was placed. Quantities are the new totals (0 removes a line). */
@@ -126,7 +126,15 @@ export interface OrderEditInput { orderId: string; lines: { lineId: string; qty:
 export interface OrderEditPreview { ok: boolean; message: string; newTotalMinor: number; changeMinor: number; shippingMinor: number; lines: { title: string; variant?: string; qty: number; unitMinor: number; lineMinor: number }[] }
 export interface OrderEditApply extends OrderEditInput { /** How an extra amount was paid, when the new total is higher. */ payment?: ManualOrderInput['payment']; reason?: string }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
-export interface Viewer { name: string; initials: string; role: string }
+export interface Viewer { name: string; initials: string; role: string; /** What this person can do. Owners manage staff; everyone else is limited by their role. */ kind: Member['role'] }
+export interface ActivityEntry { id: number; at: string; actor: string; action: string; summary: string }
+export interface ActivityPage { items: ActivityEntry[]; hasMore: boolean }
+export const ROLE_INFO: Record<Member['role'], { label: string; blurb: string }> = {
+  owner: { label: 'Owner', blurb: 'Everything, including delivery, payments and staff.' },
+  manager: { label: 'Manager', blurb: 'Products, orders, customers, discounts and stock. Not delivery, payments or staff.' },
+  fulfilment: { label: 'Fulfilment', blurb: 'Sees orders and customers, marks orders fulfilled and adds notes.' },
+  analyst: { label: 'View only', blurb: 'Can look at everything on the list, but change nothing.' },
+};
 export interface CommerceGateway {
   /** Who is signed in. */
   viewer(): Promise<Viewer>;
@@ -189,7 +197,13 @@ export interface CommerceGateway {
   /** Finish an edit that was left part-way, so the order can be fulfilled or refunded normally again. */
   abandonedCheckouts(): Promise<AbandonedSummary>;
   resolveOrderEdit(orderId: string, payment?: ManualOrderInput['payment']): Promise<MutationResult>;
-  inviteMember(email: string, role: Member['role']): Promise<MutationResult>;
+  /** Adds a team member with a one-time password to hand over. */
+  inviteMember(i: { email: string; firstName: string; lastName: string; role: Exclude<Member['role'], 'owner'> }): Promise<MutationResult>;
+  setMemberRole(id: string, role: Exclude<Member['role'], 'owner'>): Promise<MutationResult>;
+  removeMember(id: string): Promise<MutationResult>;
+  /** What your team has done, newest first. Pass the last id you have to get the next page. */
+  activity(q?: { before?: number; actor?: string }): Promise<ActivityPage>;
+  changePassword(current: string, next: string): Promise<MutationResult>;
   rollbackTheme(version: string): Promise<MutationResult>;
   decideGrant(id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<MutationResult>;
   savePreferences(prefs: Preferences): Promise<MutationResult>;

@@ -7,6 +7,8 @@ import { statusOf, validateDiscount } from '../discounts';
 import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus } from '../stock';
 
 import { orderPoints, recentOrders } from '../geo/points';
+import { EngineError } from './exec';
+import type { ActivityPage, Member } from '../gateway';
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
  * proven against a real Vendure in services/engine and used over HTTP in production. Money is always minor units, prices are what the customer pays (with tax).
@@ -664,4 +666,23 @@ export async function listAbandoned(x: Exec, o: { olderThanMinutes?: number; max
       lines: q.lines.map(l => { const base = l.productVariant.product.name; return { title: base, variant: l.productVariant.name.startsWith(base) ? l.productVariant.name.slice(base.length).trim() || undefined : l.productVariant.name, qty: l.quantity, unitMinor: l.unitPriceWithTax }; }) });
   }
   return { asOf: new Date(now).toISOString(), items, valueMinor: items.reduce((n, i) => n + i.totalMinor, 0), anonymous };
+}
+
+// ── Staff and activity ──────────────────────────────────────────────────────
+const ROLE_KINDS = ['owner', 'manager', 'fulfilment', 'analyst'] as const;
+/** The engine words its refusals for people ("That email already has an account"), so those are shown as they are. */
+const said = (e: unknown): MutationResult => ({ ok: false, message: e instanceof EngineError && e.code !== 'UNREACHABLE' && e.status < 500 ? e.message : 'That did not go through. Nothing was changed.' });
+export async function listStaff(x: Exec, selfEmail: string): Promise<Member[]> {
+  const r = await x('query{ staffMembers{ id name email role } }');
+  return (r.staffMembers as { id: string; name: string; email: string; role: string }[]).map(m => ({ id: m.id, name: m.name, email: m.email, role: (ROLE_KINDS as readonly string[]).includes(m.role) ? m.role as Member['role'] : 'analyst', status: 'active' as const, self: m.email.toLowerCase() === selfEmail.toLowerCase() }));
+}
+export async function inviteStaff(x: Exec, i: { email: string; firstName: string; lastName: string; role: string }): Promise<MutationResult> {
+  try { const r = await x('mutation($e:String!,$f:String!,$l:String!,$r:String!){ inviteStaff(email:$e,firstName:$f,lastName:$l,role:$r){ id temporaryPassword } }', { e: i.email, f: i.firstName, l: i.lastName, r: i.role }); return { ok: true, message: `${i.firstName} has been added.`, id: r.inviteStaff.id, secret: r.inviteStaff.temporaryPassword }; } catch (e) { return said(e); }
+}
+export async function setStaffRole(x: Exec, id: string, role: string): Promise<MutationResult> { try { await x('mutation($i:ID!,$r:String!){ setStaffRole(id:$i,role:$r) }', { i: id, r: role }); return { ok: true, message: 'Role changed. It applies the next time they open a page.' }; } catch (e) { return said(e); } }
+export async function removeStaff(x: Exec, id: string): Promise<MutationResult> { try { await x('mutation($i:ID!){ removeStaff(id:$i) }', { i: id }); return { ok: true, message: 'Removed. They can no longer sign in.' }; } catch (e) { return said(e); } }
+export async function changePassword(x: Exec, current: string, next: string): Promise<MutationResult> { try { await x('mutation($c:String!,$n:String!){ changeMyPassword(current:$c,next:$n) }', { c: current, n: next }); return { ok: true, message: 'Password changed.' }; } catch (e) { return said(e); } }
+export async function listActivity(x: Exec, q: { before?: number; actor?: string } = {}): Promise<ActivityPage> {
+  const r = await x('query($b:Int,$a:String){ activity(take:30,before:$b,actor:$a){ hasMore items{ id at actor action summary } } }', { b: q.before, a: q.actor });
+  return r.activity as ActivityPage;
 }

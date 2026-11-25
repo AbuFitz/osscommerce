@@ -17,7 +17,11 @@ export async function orderableItemsAction() { return gateway().orderableItems()
 export async function resolveOrderEdit(orderId: string, payment?: ManualOrderInput['payment']) { return run(() => gateway().resolveOrderEdit(orderId, payment), ['/orders', '/']); }
 export async function previewOrderEdit(i: OrderEditInput) { return gateway().previewOrderEdit(i); }
 export async function applyOrderEdit(i: OrderEditApply) { return run(() => gateway().applyOrderEdit(i), ['/orders', '/', '/inventory', '/analytics']); }
-export async function inviteMember(email: string, role: Member['role']) { return run(() => gateway().inviteMember(email, role), ['/settings/team']); }
+export async function inviteMember(i: { email: string; firstName: string; lastName: string; role: Exclude<Member['role'], 'owner'> }) { return run(() => gateway().inviteMember({ email: i.email.trim().slice(0, 200), firstName: i.firstName.trim().slice(0, 80), lastName: i.lastName.trim().slice(0, 80), role: i.role }), ['/settings/team', '/settings/activity']); }
+export async function setMemberRole(id: string, role: Exclude<Member['role'], 'owner'>) { return run(() => gateway().setMemberRole(id, role), ['/settings/team', '/settings/activity']); }
+export async function removeMember(id: string) { return run(() => gateway().removeMember(id), ['/settings/team', '/settings/activity']); }
+export async function changePassword(current: string, next: string) { return run(() => gateway().changePassword(current, next), []); }
+export async function moreActivity(before: number, actor?: string) { return gateway().activity({ before, actor }); }
 export async function rollbackTheme(v: string) { return run(() => gateway().rollbackTheme(v), ['/storefront']); }
 export async function decideGrant(id: string, d: 'approve' | 'decline' | 'revoke') {
   const { LIVE, recentlyAuthenticated } = await import('@/lib/session');

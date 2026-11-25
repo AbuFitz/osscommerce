@@ -1,6 +1,6 @@
 import 'server-only';
 import { LAUNCH_PLAN } from '@oss-commerce/contracts';
-import { GATE_COPY, LAUNCH_GATES, type CommerceGateway, type MutationResult, type Notice, type Order, type Preferences, type Summary } from '../gateway';
+import { GATE_COPY, LAUNCH_GATES, ROLE_INFO, type Member, type Viewer, type CommerceGateway, type MutationResult, type Notice, type Order, type Preferences, type Summary } from '../gateway';
 import { createCollection as engineCreateCollection, previewCollection as enginePreview, type Exec } from './catalogue';
 import * as A from './adapter';
 import type { ControlPlanePort } from '../control-plane';
@@ -37,7 +37,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     return result;
   };
   return {
-    async viewer() { const a = (await x('query{ activeAdministrator{ firstName lastName emailAddress } }')).activeAdministrator; const name = `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim() || a?.emailAddress || 'Signed in'; return { name, initials: name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase(), role: 'Store administrator' }; },
+    async viewer() { const a = (await x('query{ activeAdministrator{ firstName lastName emailAddress user{ roles{ code } } } }')).activeAdministrator; const name = `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim() || a?.emailAddress || 'Signed in'; const code: string = a?.user?.roles?.map((r: { code: string }) => r.code).find((c: string) => /^(owner|manager|fulfilment|analyst)-|^merchant-owner$/.test(c)) ?? 'owner-'; const kind = (code.startsWith('merchant-owner') ? 'owner' : code.split('-')[0]) as Viewer['kind']; return { name, initials: name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase(), role: ROLE_INFO[kind]?.label ?? 'Team member', kind: ROLE_INFO[kind] ? kind : 'owner' }; },
     store: storeView,
     async summary() { return summarise(await A.listOrders(x), await lowStockOf()); },
     async live() { return A.liveView(x); },
@@ -58,7 +58,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     },
     async markNoticesRead() { return { ok: true, message: 'Notifications clear on their own once the order or stock is dealt with.' }; },
     // ---- not connected yet: empty, honest states ----
-    async discounts() { return A.listDiscounts(x); }, async team() { const v = await this.viewer(); return { members: [{ name: v.name, email: '', role: 'owner', status: 'active' }], grants: control ? await control.grants(meta.storeId) : [] }; },
+    async discounts() { return A.listDiscounts(x); }, async team() { const me = (await x('query{ activeAdministrator{ emailAddress } }')).activeAdministrator?.emailAddress ?? ''; const v = await this.viewer(); let members: Member[]; try { members = await A.listStaff(x, me); } catch { members = [{ name: v.name, email: me, role: v.kind, status: 'active', self: true }]; } return { members, grants: control ? await control.grants(meta.storeId) : [] }; },
     async storefront() { return (control && await control.storefront(meta.storeId)) ?? { theme: { name: 'Your storefront', version: '0', deployedAt: new Date().toISOString(), state: 'building' }, previewUrl: '#', liveUrl: null, checks: [], history: [] }; },
     async shippingTax() { const s = await A.listShippingTax(x); return { ...s, vatRegistered: null, payments: { account: '', capabilities: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp, payouts: '' } }; },
     async paymentSetup() { return control ? control.payment(meta.storeId, LAUNCH_PLAN.fee.baseBp) : { status: 'unknown', headline: 'Payment status is not available yet', detail: 'We are connecting payments for your store. Contact us if you expected this to be ready.', chargesEnabled: false, payoutsEnabled: false, checkoutAllowed: false, actionRequired: false, due: [], pending: [], applicationFeeBp: LAUNCH_PLAN.fee.baseBp }; },
@@ -71,7 +71,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     setAutomation: (id, enabled) => control ? control.setAutomation(meta.storeId, id, enabled) : no(),
     createServiceRequest: (kind, title, detail) => control ? control.createServiceRequest(meta.storeId, kind, title, detail) : no(), decideQuote: (id, approve) => control ? control.decideQuote(meta.storeId, id, approve) : no(),
     saveEmailSettings: (brand, notifications) => control ? control.saveEmailSettings(meta.storeId, brand, notifications) : no(),
-    inviteMember: no, rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(),
+    inviteMember: i => A.inviteStaff(x, i), setMemberRole: (id, r) => A.setStaffRole(x, id, r), removeMember: id => A.removeStaff(x, id), activity: q => A.listActivity(x, q), changePassword: (c, n) => A.changePassword(x, c, n), rollbackTheme: no, decideGrant: (id, decision) => control ? control.decideGrant(meta.storeId, id, decision) : no(),
     async savePreferences(p: Preferences) {
       if (!control || !setCheckoutPaused) return no();
       if (Object.keys(p).length !== 6 || !Object.values(p).every(value => typeof value === 'boolean')) return { ok: false, message: 'Preferences were invalid. Nothing was changed.' };
