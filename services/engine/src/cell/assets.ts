@@ -2,6 +2,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { DefaultAssetNamingStrategy, type RequestContext, type VendureConfig } from '@vendure/core';
 import { AssetServerPlugin, configureS3AssetStorage } from '@vendure/asset-server-plugin';
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 /**
  * Media lives in S3-compatible object storage (Cloudflare R2 in production). The database only holds the asset record.
@@ -38,4 +39,20 @@ export function assetPlugin(a: AssetEnv) {
     ...(a.publicUrl ? { assetUrlPrefix: a.publicUrl.replace(/\/?$/, '/') } : {}),
     storageStrategyFactory: configureS3AssetStorage({ bucket: a.bucket, credentials: { accessKeyId: a.accessKeyId, secretAccessKey: a.secretAccessKey }, nativeS3Configuration: { endpoint: a.endpoint, region: a.region ?? 'auto', forcePathStyle: true } }),
   });
+}
+
+/**
+ * Proves the storage settings work: writes a tiny object, then removes it. Run once at start so a wrong key or bucket shows up in the logs straight away
+ * instead of as a failed photo upload weeks later. Reports what failed, never the keys.
+ */
+export async function checkAssetStorage(a: AssetEnv, client: { send: (c: never) => Promise<unknown> } = new S3Client({ region: a.region || 'auto', endpoint: a.endpoint, credentials: { accessKeyId: a.accessKeyId, secretAccessKey: a.secretAccessKey }, forcePathStyle: true })): Promise<{ ok: boolean; detail: string }> {
+  const Key = `_selftest/${randomBytes(6).toString('hex')}.txt`;
+  try {
+    await client.send(new PutObjectCommand({ Bucket: a.bucket, Key, Body: 'ok', ContentType: 'text/plain' }) as never);
+    await client.send(new DeleteObjectCommand({ Bucket: a.bucket, Key }) as never);
+    return { ok: true, detail: `wrote and removed a test object in bucket ${a.bucket}` };
+  } catch (e) {
+    const err = e as { name?: string; message?: string; $metadata?: { httpStatusCode?: number } };
+    return { ok: false, detail: `${err.name ?? 'Error'}${err.$metadata?.httpStatusCode ? ` (HTTP ${err.$metadata.httpStatusCode})` : ''}: ${(err.message ?? '').replace(/[A-Za-z0-9/+=]{24,}/g, '…').slice(0, 160)}` };
+  }
 }

@@ -35,3 +35,10 @@ test('limits: a non-image is refused and nothing is stored', T, async () => {
   const r: any = await adminClient.fileUploadMutation({ mutation: parse(`mutation Up($f:[CreateAssetInput!]!){ createAssets(input:$f){ __typename ... on MimeTypeError { message } } }`), filePaths: [p], mapVariables: (fps: unknown[]) => ({ f: fps.map(() => ({ file: null })) }) } as any);
   assert.equal(r.createAssets[0].__typename, 'MimeTypeError'); assert.equal((await keys()).length, before);
 });
+
+test('storage self-check: passes when a test object can be written and removed, and reports the failure without leaking keys', async () => {
+  const { checkAssetStorage } = await import('./assets.ts'); const cfg = { endpoint: 'https://x.r2.cloudflarestorage.com', bucket: 'b', accessKeyId: 'AKIAEXAMPLEEXAMPLE', secretAccessKey: 'SECRETSECRETSECRETSECRETSECRETSECRET1234' };
+  const sent: string[] = []; const ok = await checkAssetStorage(cfg, { send: async (c: never) => { sent.push((c as { constructor: { name: string } }).constructor.name); return {}; } }); assert.equal(ok.ok, true); assert.deepEqual(sent, ['PutObjectCommand', 'DeleteObjectCommand']);
+  const bad = await checkAssetStorage(cfg, { send: async () => { const e = Object.assign(new Error('The Access Key Id you provided does not exist: AKIAEXAMPLEEXAMPLEEXAMPLE1234'), { name: 'InvalidAccessKeyId', $metadata: { httpStatusCode: 403 } }); throw e; } });
+  assert.equal(bad.ok, false); assert.match(bad.detail, /InvalidAccessKeyId \(HTTP 403\)/); assert.ok(!bad.detail.includes('AKIAEXAMPLEEXAMPLEEXAMPLE1234'), 'long key-like strings are masked'); assert.ok(!bad.detail.includes('SECRETSECRET'));
+});

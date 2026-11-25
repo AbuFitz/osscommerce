@@ -8,7 +8,7 @@
  */
 import path from 'node:path';
 import Stripe from 'stripe';
-import { bootstrap, bootstrapWorker, generateMigration, runMigrations, mergeConfig, JobQueueService, TransactionalConnection, RequestContextService, RequestContext, ChannelService, RoleService, AdministratorService, PaymentMethodService, Permission, LanguageCode, isGraphQlErrorResult, User, DefaultSchedulerPlugin, TaxCategoryService, type VendureConfig } from '@vendure/core';
+import { bootstrap, bootstrapWorker, generateMigration, runMigrations, mergeConfig, JobQueueService, TransactionalConnection, PasswordCipher, RequestContextService, RequestContext, ChannelService, RoleService, AdministratorService, PaymentMethodService, Permission, LanguageCode, isGraphQlErrorResult, User, DefaultSchedulerPlugin, TaxCategoryService, type VendureConfig } from '@vendure/core';
 import { TAX_CATEGORY_NAME } from '@oss-commerce/contracts';
 import { populate } from '@vendure/core/cli';
 import { parseEnv } from './cell/env.ts';
@@ -16,9 +16,10 @@ import { buildCellConfig } from './cell/config.ts';
 import { CellPlugin, vendureWebhookDeps, type CheckoutGate } from './cell/plugin.ts';
 import { liveStripe } from './cell/stripe-live.ts';
 import { MERCHANT_PERMISSIONS } from './cell/merchant-role.ts';
+import { syncSuperadmin } from './cell/superadmin-sync.ts';
 import { PackRefillPlugin } from './cell/pack-refill.ts';
 import { CatalogueFieldsPlugin } from './cell/catalogue-fields.ts';
-import { assetPlugin, readAssetEnv, ASSET_LIMITS } from './cell/assets.ts';
+import { assetPlugin, readAssetEnv, checkAssetStorage, ASSET_LIMITS } from './cell/assets.ts';
 import { allLaunchChecksPass, launchChecks } from './cell/launch-readiness.ts';
 
 const env = parseEnv(process.env);
@@ -97,7 +98,10 @@ async function setup() {
   if (cmd === 'migrate:run') { const c = config(); if (env.DATABASE_URL_DIRECT) (c.dbConnectionOptions as { url?: string }).url = env.DATABASE_URL_DIRECT; const ran = await runMigrations(c); console.log(`migrations applied: ${ran.length ? ran.join(', ') : 'none pending'}`); process.exit(0); }
   if (cmd === 'setup') { await setup(); process.exit(0); }
   if (extra.MODE === 'worker') { const w = await bootstrapWorker(config()); await wire(w.app); await w.startJobQueue(); console.log('cell worker running'); return; }
-  const app = await bootstrap(config()); await wire(app);
+  const app = await bootstrap(config());
+  { const c = await syncSuperadmin(app.get(TransactionalConnection), app.get(PasswordCipher), env.SUPERADMIN_USER, env.SUPERADMIN_PASSWORD); if (c.password || c.identifier) console.log(`platform operator sign-in updated from the environment (${[c.identifier && 'username', c.password && 'password'].filter(Boolean).join(' and ')})`); }
+  await wire(app);
+  if (assets) void checkAssetStorage(assets).then(r => console.log(`asset storage check: ${r.ok ? 'OK' : 'FAILED'}, ${r.detail}`));
   if (extra.MODE === 'both') await app.get(JobQueueService).start();
   console.log(`cell ${env.CELL_ID} for store ${env.STORE_ID} listening on ${extra.PORT} (${extra.MODE}, ${env.APP_ENV})`);
   for (const s of ['SIGTERM', 'SIGINT'] as const) process.on(s, async () => { await app.close(); process.exit(0); });
