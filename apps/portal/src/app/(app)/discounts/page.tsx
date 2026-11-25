@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { gateway } from '@/lib/gateway-instance';
 import { ymd } from '@/lib/analytics';
 import { Header } from '@/components/ui';
@@ -6,6 +7,7 @@ import { NewDiscountButton } from '@/components/discounts/NewDiscountButton';
 export const metadata = { title: 'Discounts' };
 
 export default async function Discounts() {
+  await gate('/discounts');
   const [ds, products, s] = await Promise.all([gateway().discounts(), gateway().discountProducts(), gateway().summary()]); const today = ymd(s.asOf); const title = new Map(products.map(p => [p.id, p.title]));
   const order = { active: 0, scheduled: 1, paused: 2, expired: 3 } as const; const sorted = [...ds].sort((a, b) => order[a.status] - order[b.status]);
   return (<>

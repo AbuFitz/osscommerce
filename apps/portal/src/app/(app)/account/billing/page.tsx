@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { gateway } from '@/lib/gateway-instance';
 import { money } from '@/lib/format';
 import { Header } from '@/components/ui';
@@ -8,6 +9,7 @@ const ST = { paid: ['Paid', 'ok'], due: ['Due', 'warn'], overdue: ['Overdue', 'b
 
 /** The merchant's own subscription to OneSimpleCommerce. Separate from customer payments, which go to the merchant's Stripe account (Settings, Payments). */
 export default async function Billing() {
+  await gate('/account/billing');
   const b = await gateway().billing();
   return (<>
     <Header title="Plan and billing" back={{ href: '/settings', label: 'Settings' }}>{!b.demo && b.status !== 'not_started' && <BillingPortalAction />}</Header>

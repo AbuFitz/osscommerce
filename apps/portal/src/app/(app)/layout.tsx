@@ -9,6 +9,7 @@ import { Switcher } from '@/components/Switcher';
 import { NotificationBell, StatusBanner, type BannerData } from '@/components/Notices';
 import { gateway } from '@/lib/gateway-instance';
 import { LIVE } from '@/lib/session';
+import { hiddenFor } from '@/lib/access';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   };
   const banner: BannerData | null = copy[pay.status] ? { ...copy[pay.status], title: pay.headline + '.', href: '/settings/payments', id: pay.status } : null;
   // Progressive navigation: sections with nothing to show yet stay out of the way until the first order.
-  const hidden = all.length === 0 ? PROGRESSIVE : [];
+  const hidden = [...(all.length === 0 ? PROGRESSIVE : []), ...hiddenFor(me.kind)];
   const expanded = (await cookies()).get('oss_rail')?.value === 'open';
   return (<>
         <Shell initials={me.initials} name={me.name} role={me.role} live={LIVE} hidden={hidden} defaultExpanded={expanded}>

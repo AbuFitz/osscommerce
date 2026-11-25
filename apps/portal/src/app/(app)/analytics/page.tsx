@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { Radio, Tag } from 'lucide-react';
@@ -14,6 +15,7 @@ export const metadata = { title: 'Analytics' };
 const dmy = (k: string) => new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${k}T12:00:00Z`));
 
 export default async function Analytics({ searchParams }: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  await gate('/analytics');
   const q = await searchParams; const today = ymd((await gateway().summary()).asOf);
   const range = resolveRange(q, today); const days = Math.round((Date.parse(`${range.to}T12:00:00Z`) - Date.parse(`${range.from}T12:00:00Z`)) / 86400_000) + 1;
   const prevFrom = ymd(new Date(Date.parse(`${range.from}T12:00:00Z`) - days * 86400_000));

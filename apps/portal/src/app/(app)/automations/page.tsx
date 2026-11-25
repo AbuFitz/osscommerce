@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { gateway } from '@/lib/gateway-instance';
 import { when } from '@/lib/format';
 import { Header } from '@/components/ui';
@@ -5,6 +6,7 @@ import { AutomationList } from '@/components/AutomationList';
 export const metadata = { title: 'Automations' };
 const out = { sent: ['Sent', 'ok'], skipped_no_consent: ['Skipped: no consent', ''], failed_retrying: ['Retrying', 'warn'], failed: ['Failed', 'bad'] } as const;
 export default async function Automations() {
+  await gate('/automations');
   const { rules, runs, runsLimit } = await gateway().automations();
   const used = rules.reduce((s, r) => s + r.runsMonth, 0);
   return (<>

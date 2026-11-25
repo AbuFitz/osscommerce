@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
@@ -6,6 +7,7 @@ import { Header } from '@/components/ui';
 export const metadata = { title: 'Legal pages' };
 const st = { published: ['Published', 'ok'], draft: ['Draft', 'warn'], not_set_up: ['Not set up', ''] } as const;
 export default async function Legal() {
+  await gate('/settings/legal');
   const ps = await gateway().legalPages(); const missing = ps.filter(p => p.status !== 'published').length;
   return (<><Header title="Legal pages" back={{ href: '/settings', label: 'Settings' }} />
     {missing > 0 && <div className="w flat" style={{ marginBottom: 16 }}>{missing} page{missing > 1 ? 's' : ''} still to publish. These are needed before you launch.</div>}

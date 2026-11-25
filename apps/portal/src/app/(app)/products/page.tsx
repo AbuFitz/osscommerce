@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { ImportProducts } from '@/components/Dialogs';
 import { gateway } from '@/lib/gateway-instance';
 import { money } from '@/lib/format';
@@ -9,6 +10,7 @@ const tone = { published: 'ok', draft: 'warn', archived: '' } as const;
 const label = { published: 'Published', draft: 'Draft', archived: 'Archived' } as const;
 
 export default async function Products() {
+  await gate('/products');
   const ps = await gateway().products();
   return (<>
     <Header title="Products" eyebrow={`${ps.filter(p => p.status === 'published').length} published · ${ps.filter(p => p.status === 'draft').length} draft`}>

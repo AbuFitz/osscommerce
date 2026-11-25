@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { ZoneDialog } from '@/components/Dialogs';
 import { gateway } from '@/lib/gateway-instance';
 import { money } from '@/lib/format';
@@ -7,6 +8,7 @@ import { describePrice, describeWhen } from '@/lib/delivery';
 import { AlertTriangle } from 'lucide-react';
 export const metadata = { title: 'Shipping and tax' };
 export default async function Shipping() {
+  await gate('/settings/shipping');
   const t = await gateway().shippingTax();
   return (<><Header title="Shipping and tax" back={{ href: '/settings', label: 'Settings' }}><ZoneDialog /></Header>
     <div className="grid">

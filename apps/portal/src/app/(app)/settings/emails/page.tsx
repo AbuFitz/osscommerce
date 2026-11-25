@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { gateway } from '@/lib/gateway-instance';
 import { Header } from '@/components/ui';
 import Link from 'next/link';
@@ -6,6 +7,7 @@ import { renderTemplate, TEMPLATES, SAMPLE_ORDER, type TemplateId } from '@oss-c
 export const metadata = { title: 'Emails' };
 
 export default async function Emails({ searchParams }: { searchParams: Promise<{ t?: string; v?: string; subject?: string; preheader?: string; intro?: string }> }) {
+  await gate('/settings/emails');
   const q = await searchParams; const s = await gateway().emailSettings(); const v = (['templates', 'edit', 'preview'].includes(q.v ?? '') ? q.v : 'preview') as 'templates' | 'edit' | 'preview';
   const keep = new URLSearchParams(Object.entries({ subject: q.subject, intro: q.intro }).filter(([, x]) => x) as [string, string][]).toString(); const href = (t: string, view = v) => `/settings/emails?t=${t}&v=${view}${keep ? `&${keep}` : ''}`;
   const id = (TEMPLATES.find(x => x.id === q.t)?.id ?? 'order_confirmation') as TemplateId;

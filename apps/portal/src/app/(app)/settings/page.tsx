@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { CreditCard, Truck, Users, Store, Receipt, SlidersHorizontal, Mail, Scale, ArrowUpRight, ChevronRight, Plug } from 'lucide-react';
 import { Header } from '@/components/ui';
+import { gateway } from '@/lib/gateway-instance';
+import { canSee } from '@/lib/access';
 export const metadata = { title: 'Settings' };
 const items = [
   { href: '/settings/payments', t: 'Payments', d: 'Stripe account, payouts and fees', i: CreditCard, c: 'lime' },
@@ -18,9 +20,9 @@ const groups = [
   { h: 'Store', rows: ['/settings/payments', '/settings/shipping', '/settings/integrations', '/settings/preferences', '/settings/emails', '/settings/legal'] },
   { h: 'People and plan', rows: ['/settings/team', '/settings/activity', '/storefront', '/account/billing'] },
 ];
-export default function Settings() {
-  const by = (h: string) => items.find(x => x.href === h)!;
+export default async function Settings() {
+  const me = await gateway().viewer(); const by = (h: string) => items.find(x => x.href === h)!;
   return (<><Header title="Settings" eyebrow="Kiln & Thread" />
-    <div className="glist glist-2">{groups.map(g => <section key={g.h} aria-label={g.h}><h2>{g.h}</h2><ul>{g.rows.map(h => { const x = by(h); return <li key={h}><Link href={h}><span className={`ic ${x.c}`}><x.i size={18} aria-hidden /></span><span className="t"><b>{x.t}</b><span>{x.d}</span></span><ChevronRight size={18} className="chev" aria-hidden /></Link></li>; })}</ul></section>)}</div>
+    <div className="glist glist-2">{groups.filter(g => g.rows.some(h => canSee(me.kind, h))).map(g => <section key={g.h} aria-label={g.h}><h2>{g.h}</h2><ul>{g.rows.filter(h => canSee(me.kind, h)).map(h => { const x = by(h); return <li key={h}><Link href={h}><span className={`ic ${x.c}`}><x.i size={18} aria-hidden /></span><span className="t"><b>{x.t}</b><span>{x.d}</span></span><ChevronRight size={18} className="chev" aria-hidden /></Link></li>; })}</ul></section>)}</div>
   </>);
 }

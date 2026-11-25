@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { Check } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { DEMO } from '@/lib/env';
@@ -18,6 +19,7 @@ function stepIndex(s: PaymentSetupStatus, payouts: boolean, charges: boolean) { 
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : undefined);
 
 export default async function Payments({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
+  await gate('/settings/payments');
   const { state } = await searchParams; const g = gateway();
   const [p, store] = await Promise.all([g.paymentSetup(DEMO ? state : undefined), g.store()]); const domainOk = store.store.hostnames[0]?.verified ?? false;
   const tone = TONE[p.status], step = stepIndex(p.status, p.payoutsEnabled, p.chargesEnabled), cta = CTA[p.status], deadline = when(p.deadline);

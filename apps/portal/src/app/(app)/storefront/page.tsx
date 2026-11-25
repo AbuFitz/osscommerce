@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import { LaunchRequest, DesignChange, DomainCheckButton } from '@/components/Dialogs';
 import { Check, ExternalLink, History, X } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
@@ -8,6 +9,7 @@ export const metadata = { title: 'Storefront' };
 const st = { healthy: ['Healthy', 'ok'], building: ['Building', 'info'], failed: ['Deploy failed', 'bad'] } as const;
 
 export default async function Storefront() {
+  await gate('/storefront');
   const [sf, store] = await Promise.all([gateway().storefront(), gateway().store()]);
   const h = store.store.hostnames[0] ?? { host: 'No domain connected', verified: false }; const blockers = store.readiness.filter(g => !g.done && g.gate !== 'launch_approved' && g.gate !== 'contract_signed').map(g => g.label + '. ' + g.hint); const requested = !!sf.launchRequested;
   return (<>

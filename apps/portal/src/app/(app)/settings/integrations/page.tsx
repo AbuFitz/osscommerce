@@ -1,3 +1,4 @@
+import { gate } from '@/lib/gate';
 import Link from 'next/link';
 import { CATALOGUE, readyToAdvertise } from '@oss-commerce/integrations';
 import { Header } from '@/components/ui';
@@ -8,6 +9,7 @@ const BRAND: Record<string, string> = { stripe_connect: 'stripe', stripe_tax: 's
 const CAT: Record<string, string> = { payments: 'Payments', tax: 'Tax', shipping: 'Shipping', address: 'Addresses', search: 'Search', media: 'Media', fulfilment: 'Fulfilment', print_on_demand: 'Print on demand', identifiers: 'Barcodes', automation: 'Automation', maps: 'Maps', email: 'Email' };
 
 export default async function Integrations({ searchParams }: { searchParams: Promise<{ c?: string }> }) {
+  await gate('/settings/integrations');
   const { c } = await searchParams; const cats = [...new Set(CATALOGUE.map(m => m.category))];
   const cards: Card[] = CATALOGUE.filter(m => !c || m.category === c).map(m => ({ id: m.id, name: m.name, brand: BRAND[m.id] ?? m.id, category: CAT[m.category] ?? m.category, summary: m.summary, availability: m.availability, payer: m.cost.payer, costNote: m.cost.note, docsUrl: m.docsUrl, regions: m.regions, notes: m.notes, missing: readyToAdvertise(m).missing }));
   const live = CATALOGUE.filter(m => m.availability === 'available').length;
