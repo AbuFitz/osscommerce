@@ -11,7 +11,7 @@ export function Switcher({ name }: { name: string }) {
   const box = useRef<HTMLDivElement>(null);
   const path = usePathname();
   const [narrow, setNarrow] = useState(false);
-  useEffect(() => { const m = matchMedia('(max-width:900px)'); const f = () => setNarrow(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
+  useEffect(() => { const m = matchMedia('(max-width:767px)'); const f = () => setNarrow(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []);
   useEffect(() => {
     if (!open || narrow) return;
     const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };

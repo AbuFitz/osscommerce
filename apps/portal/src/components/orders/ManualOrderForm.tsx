@@ -57,7 +57,7 @@ export function ManualOrderForm({ items, shipping, customers }: { items: Orderab
         <div className="field"><label htmlFor="mn">Private note <span className="muted">(optional)</span></label><textarea id="mn" rows={2} maxLength={2000} value={note} onChange={e => setNote(e.target.value)} placeholder="Only your team can see this" /></div>
       </section>
     </div>
-    <aside className="pf-side"><section className="w fd pf-sticky" aria-labelledby="mo5"><h2 id="mo5">Payment</h2>
+    <aside className="pf-side mo-side"><section className="w fd pf-sticky" aria-labelledby="mo5"><h2 id="mo5">Payment</h2>
       <fieldset className="dseg"><legend className="sr">How it was paid</legend><div role="radiogroup" aria-label="How it was paid" style={{ gridTemplateColumns: '1fr' }}>{PAY.map(p => <button key={p.k} type="button" role="radio" aria-checked={pay === p.k} onClick={() => setPay(p.k)}><b>{p.l}</b></button>)}</div></fieldset>
       <dl className="kv"><dt>Items</dt><dd className="num">{money(sub)}</dd><dt>Delivery and discounts</dt><dd className="muted">Worked out when placed</dd></dl>
       <p className="muted pf-note">The order is placed and marked as paid straight away, and the stock is reserved. This payment is recorded, not taken, so it does not go through Stripe or carry our fee.</p>

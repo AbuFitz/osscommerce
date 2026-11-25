@@ -19,7 +19,7 @@ const fromProduct = (p: ProductDetail): V => { const v = p.variantList[0]; retur
 function Count({ n, soft, hard }: { n: number; soft: number; hard: number }) { return <span className={`pf-count${n > hard ? ' bad' : n > soft ? ' warn' : ''}`} aria-live="polite">{n}/{soft}</span>; }
 
 /** One form for adding and editing a product. Edits to an existing product's price and stock live with its variants below; everything about the product itself is here. */
-export function ProductForm({ product }: { product?: ProductDetail }) {
+export function ProductForm({ product, variants }: { product?: ProductDetail; variants?: React.ReactNode }) {
   const toast = useToast(); const router = useRouter(); const [pending, start] = useTransition(); const editing = !!product;
   const initial = useMemo(() => (product ? fromProduct(product) : BLANK), [product]); const [v, setV] = useState<V>(initial); const [files, setFiles] = useState<File[]>([]); const [touched, setTouched] = useState<Record<string, boolean>>({}); const [tried, setTried] = useState(false); const [del, setDel] = useState(false); const [handleEdited, setHandleEdited] = useState(!!product?.handle);
   useEffect(() => { setV(initial); setHandleEdited(!!product?.handle); }, [initial, product?.handle]);
@@ -70,6 +70,7 @@ export function ProductForm({ product }: { product?: ProductDetail }) {
           <div className="pf-row">{fld('stock', 'Stock on hand', { inputMode: 'numeric', hint: 'How many you have right now.' })}{fld('weight', 'Weight (grams)', { inputMode: 'numeric', hint: 'Used for weight-based delivery prices.' })}</div>
           <p className="muted pf-note">Need sizes, colours or other options? Save the product first, then add them under Variants.</p>
         </section></>)}
+      {variants}
       <section className="w fd" aria-labelledby="pf-s5"><h2 id="pf-s5">Search engine listing</h2>
         <div className="pf-serp" aria-label="How this looks in search results"><span className="u">yourstore.co.uk › products › {v.handle || slug(v.title) || 'product'}</span><b className="t">{seoTitle.slice(0, 70)}{seoTitle.length > 70 ? '…' : ''}</b><span className="d">{seoDesc.slice(0, 160)}{seoDesc.length > 160 ? '…' : ''}</span></div>
         <div className="field"><div className="pf-lab"><label htmlFor="pf-seoTitle">Page title</label><Count n={v.seoTitle.length} soft={60} hard={120} /></div><input id="pf-seoTitle" value={v.seoTitle} maxLength={120} onChange={e => set('seoTitle', e.target.value)} placeholder={v.title || 'Defaults to the product name'} /></div>
@@ -83,9 +84,11 @@ export function ProductForm({ product }: { product?: ProductDetail }) {
         <div className="seg-field" role="radiogroup" aria-label="Status">{([['draft', 'Draft', EyeOff], ['published', 'Published', Eye]] as const).map(([k, l, I]) => <button key={k} type="button" role="radio" aria-checked={v.status === k} data-on={v.status === k || undefined} onClick={() => set('status', k)}><I size={14} aria-hidden /> {l}</button>)}</div>
         <p className="muted pf-note">{v.status === 'published' ? 'Customers can see and buy this product.' : 'Hidden from your store until you publish it.'}</p>
         {editing && v.status === 'published' && (product!.onHand - product!.allocated) <= 0 && <p className="pf-warn"><AlertTriangle size={14} aria-hidden />Published, but nothing is in stock.</p>}
+        <div className="pf-save" data-dirty={dirty || !editing}>
         <button className="btn primary" type="submit" disabled={pending || (editing && !dirty)} aria-busy={pending}>{pending ? 'Saving…' : editing ? 'Save changes' : v.status === 'published' ? 'Save and publish' : 'Save as draft'}</button>
         {dirty && <button type="button" className="btn" disabled={pending} onClick={() => { setV(initial); setTouched({}); setTried(false); if (!editing) { setFiles([]); router.refresh(); } }}>Discard changes</button>}
         {dirty && <p className="pf-dirty" role="status">You have unsaved changes.</p>}
+        </div>
       </section>
     </aside>
     {editing && <Dialog open={del} onClose={() => !pending && setDel(false)} title={`Delete ${product!.title}?`} description="This cannot be undone."

@@ -10,7 +10,7 @@ import type { Notice } from '@/lib/gateway';
 
 const ICON = { danger: CircleAlert, warn: TriangleAlert, info: Info, success: CircleCheck } as const;
 const ago = (iso: string) => { const m = Math.round((Date.parse('2026-11-15T09:00:00Z') - Date.parse(iso)) / 60000); if (m < 60) return `${Math.max(m, 1)} min ago`; if (m < 1440) return `${Math.round(m / 60)} h ago`; return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
-const useNarrow = () => { const [n, setN] = useState(false); useEffect(() => { const m = matchMedia('(max-width:900px)'); const f = () => setN(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []); return n; };
+const useNarrow = () => { const [n, setN] = useState(false); useEffect(() => { const m = matchMedia('(max-width:767px)'); const f = () => setN(m.matches); f(); m.addEventListener('change', f); return () => m.removeEventListener('change', f); }, []); return n; };
 
 
 const KIND = { payment: 'Payments', stock: 'Inventory', order: 'Orders', access: 'Access', quote: 'Support', setup: 'Setup' } as const;
