@@ -27,3 +27,19 @@ Last verified: 24 November 2026. This is an evidence record, not a claim that th
 ## Do not call live until
 
 The custom domain resolves publicly, enquiries persist, portal demo mode is removed, engine/gateway/worker health checks pass, migrations and tenant isolation are proven on production, R2/Stripe/Resend end-to-end proofs pass, legal review is recorded, and a paid production hosting/backup posture is in place.
+
+## Switch-on checklist (updated 25 November 2026)
+
+Everything below is built and tested; each item is a setting or an account, not more code. Staging engine: migrations through `StaffTokens1795400000000` are applied there; control-plane migrations now run through `0019_account_email_rules`.
+
+| Item | Where | Needed |
+|---|---|---|
+| Staff invitation and reset links | Engine (`PORTAL_URL`) | The portal's public address. Without it the engine refuses invitations rather than creating an account nobody can enter. |
+| Account emails sender | Automation worker (`ACCOUNT_EMAIL_FROM`, optional `ACCOUNT_EMAIL_REPLY_TO`) | An address on the Resend-verified domain. |
+| Account email rules | Control plane | Apply `0019_account_email_rules` (adds `staff_invite` and `staff_password_reset` for every store, existing and new). |
+| Resend | Worker | Verified sending domain, API key and webhook secret (via the secure credential form). Until then invitations are queued in the engine outbox and sent once delivery is on. |
+| Stripe | Engine and billing | Sandbox then live keys; webhook routing per store follows. |
+| Sentry | Engine, portal, site | DSN (error reporting only). |
+| Control plane for the portal | Portal | `CONTROL_PLANE_DATABASE_URL`. Preferences, payment setup and enquiries fail closed without it. |
+
+Proven on a real Postgres 16 with the real engine and portal in live mode (see the capability audit): sign-in, role-limited staff, invitation and reset by emailed link, sign-in lockout, orders by hand, bulk fulfil, customer export and erase, rich-text descriptions, activity log, phone and tablet layouts.
