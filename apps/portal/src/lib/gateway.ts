@@ -18,6 +18,8 @@ export interface Order {
   editing?: 'modifying' | 'payment_due';
   /** How the customer paid, as reported by Stripe. Card number is never held: brand and last four only. */
   method?: { brand: 'visa' | 'mastercard' | 'amex'; last4: string; wallet?: 'applepay' | 'googlepay' | 'link' };
+  /** How a hand-made order was paid (Cash, Bank transfer…). Card payments show as `method` instead. */
+  paidBy?: string;
 }
 export interface Product { id: string; imageUrl?: string; title: string; status: 'draft' | 'published' | 'archived'; sku: string; priceMinor: number; onHand: number; allocated: number; threshold: number; variants: number }
 export interface Customer { id: string; name: string; email: string; orders: number; spentMinor: number; lastOrder: string; marketing: boolean }

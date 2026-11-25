@@ -33,7 +33,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<{
               <tr key={o.id}>
                 <td><Link className="link" href={`/orders/${o.id}`}>#{o.number}</Link></td>
                 <td><span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}><Avatar name={o.customer} i={i} />{o.customer}</span></td>
-                <td className="muted nw">{when(o.placedAt)}</td><td><PayBadge s={o.payment} /></td><td className="c-method"><PayMethod m={o.method} compact /></td><td><FulBadge s={o.fulfilment} state={o.state} /></td>
+                <td className="muted nw">{when(o.placedAt)}</td><td><PayBadge s={o.payment} /></td><td className="c-method"><PayMethod m={o.method} other={o.paidBy} compact /></td><td><FulBadge s={o.fulfilment} state={o.state} /></td>
                 <td className="r num">{money(o.totalMinor)}</td>
               </tr>))}</tbody>
           </table>

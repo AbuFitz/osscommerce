@@ -18,7 +18,7 @@ export function MethodRow({ items }: { items: { key: string; label: string; on: 
 
 const NAME: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', applepay: 'Apple Pay', googlepay: 'Google Pay', link: 'Link' };
 /** "Visa ···· 4242", with the wallet mark first when one was used. */
-export function PayMethod({ m, compact }: { m?: { brand: string; last4: string; wallet?: string }; compact?: boolean }) {
-  if (!m) return <span className="muted">Not recorded</span>;
+export function PayMethod({ m, other, compact }: { m?: { brand: string; last4: string; wallet?: string }; other?: string; compact?: boolean }) {
+  if (!m) return other ? <span>{other}</span> : <span className="muted">Not recorded</span>;
   return (<span className="pm"><Brand name={m.wallet ?? m.brand} label={NAME[m.wallet ?? m.brand]} size={compact ? 22 : 26} title />{!compact && m.wallet && <Brand name={m.brand} label={NAME[m.brand]} size={26} title />}<span className="mono pmtxt">{compact ? `···· ${m.last4}` : `${NAME[m.brand]} ···· ${m.last4}`}</span></span>);
 }

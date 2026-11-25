@@ -355,3 +355,10 @@ test('rich text: a product description is cleaned to the safe subset however it 
   assert.equal(await until(v => !v.includes('script')), '<p>Fine <strong>mug</strong></p>bad', 'script, handlers and script links are gone; the words stay');
   await set('Plain text\n\nSecond paragraph'); assert.equal(await until(v => v.startsWith('<p>')), '<p>Plain text</p><p>Second paragraph</p>', 'old plain text becomes paragraphs');
 });
+
+test('myRole: each person is told their own role, in their own store', async () => {
+  const mine = async (x: ReturnType<typeof httpExec>) => (await x(`query{ myRole }`)).myRole;
+  assert.equal(await mine(m.A.x), 'owner'); assert.equal(await mine(m.B.x), 'owner');
+  const pwOf = async (email: string, role: string) => { const id = (await m.A.x(`mutation($e:String!,$r:String!){ inviteStaff(email:$e, firstName:"R", lastName:"R", role:$r){ id } }`, { e: email, r: role })).inviteStaff.id; const t = (await tokenOf('staff.invited', email))!; const pw = `Role-pass-${role}-1`; assert.equal((await callAs('A', ACCEPT, { t, p: pw })).data.acceptStaffToken, true); return { id, pw }; };
+  for (const role of ['manager', 'fulfilment', 'analyst']) { const { pw } = await pwOf(`role-${role}@a.test`, role); const s = await engineLogin({ url: URL, channelToken: m.A.channelToken }, `role-${role}@a.test`, pw); assert.equal(await mine(httpExec({ url: URL, channelToken: m.A.channelToken }, s!.token)), role); }
+});

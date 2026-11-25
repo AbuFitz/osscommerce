@@ -37,7 +37,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     return result;
   };
   return {
-    async viewer() { const a = (await x('query{ activeAdministrator{ firstName lastName emailAddress user{ roles{ code } } } }')).activeAdministrator; const name = `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim() || a?.emailAddress || 'Signed in'; const code: string = a?.user?.roles?.map((r: { code: string }) => r.code).find((c: string) => /^(owner|manager|fulfilment|analyst)-|^merchant-owner$/.test(c)) ?? 'owner-'; const kind = (code.startsWith('merchant-owner') ? 'owner' : code.split('-')[0]) as Viewer['kind']; return { name, initials: name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase(), role: ROLE_INFO[kind]?.label ?? 'Team member', kind: ROLE_INFO[kind] ? kind : 'owner' }; },
+    async viewer() { const r = await x('query{ activeAdministrator{ firstName lastName emailAddress } myRole }'); const a = r.activeAdministrator; const name = `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim() || a?.emailAddress || 'Signed in'; const kind = (ROLE_INFO[r.myRole as Viewer['kind']] ? r.myRole : 'analyst') as Viewer['kind']; return { name, initials: name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase(), role: ROLE_INFO[kind].label, kind }; },
     store: storeView,
     async summary() { return summarise(await A.listOrders(x), await lowStockOf()); },
     async live() { return A.liveView(x); },

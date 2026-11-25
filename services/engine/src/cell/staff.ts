@@ -15,7 +15,7 @@ export const staffApiExtensions = gql`
   type StaffInvite { id: ID! email: String! }
   type ActivityEntry { id: Int! at: DateTime! actor: String! action: String! summary: String! subjectType: String subjectId: String }
   type ActivityPage { items: [ActivityEntry!]! hasMore: Boolean! }
-  extend type Query { staffMembers: [StaffMember!]! activity(take: Int, before: Int, actor: String): ActivityPage! }
+  extend type Query { myRole: String! staffMembers: [StaffMember!]! activity(take: Int, before: Int, actor: String): ActivityPage! }
   extend type Mutation {
     inviteStaff(email: String!, firstName: String!, lastName: String!, role: String!): StaffInvite!
     setStaffRole(id: ID!, role: String!): Boolean!
@@ -42,6 +42,12 @@ export class StaffService {
     const codes = ['owner', 'manager', 'fulfilment', 'analyst'].map(r => roleCode(r, ctx)).concat(['merchant-owner']);
     const rows = await this.conn.getRepository(ctx, Administrator).createQueryBuilder('a').innerJoinAndSelect('a.user', 'u').innerJoinAndSelect('u.roles', 'r').innerJoin('r.channels', 'ch', 'ch.id = :ch', { ch: ctx.channelId }).where('r.code IN (:...codes)', { codes }).andWhere('a.deletedAt IS NULL').orderBy('a.id', 'ASC').getMany();
     return rows.map(a => { const code = a.user.roles.find(r => codes.includes(r.code))!.code; const kind = code.startsWith('owner-') || code === 'merchant-owner' ? 'owner' : code.split('-')[0]; return { id: a.id, name: `${a.firstName} ${a.lastName}`.trim() || a.emailAddress, email: a.emailAddress, role: kind, owner: kind === 'owner', pending: !a.user.verified }; });
+  }
+  /** The signed-in person's role in this store: owner, manager, fulfilment or analyst. The platform operator counts as owner. Vendure hides role lists from non-administrators of the whole system, so the portal asks here. */
+  async myRole(ctx: RequestContext): Promise<string> {
+    if (ctx.session?.user?.channelPermissions?.some(c => c.permissions.includes(Permission.SuperAdmin))) return 'owner';
+    const me = ctx.activeUserId ? await this.admins.findOneByUserId(ctx, ctx.activeUserId) : null;
+    return (me && (await this.list(ctx)).find(m => String(m.id) === String(me.id))?.role) || 'analyst';
   }
   private async staffRole(ctx: RequestContext, role: StaffRole) {
     const code = roleCode(role, ctx); const repo = this.conn.getRepository(ctx, Role); const found = await repo.findOne({ where: { code } }); if (found) return found;
@@ -120,6 +126,7 @@ export class StaffService {
 @Resolver()
 export class StaffResolver {
   constructor(@Inject(StaffService) private staff: StaffService, @Inject(ActivityService) private log: ActivityService) {}
+  @Query() @Allow(Permission.Authenticated) myRole(@Ctx() ctx: RequestContext) { return this.staff.myRole(ctx); }
   @Query() @Allow(ManageStaff.Permission) staffMembers(@Ctx() ctx: RequestContext) { return this.staff.list(ctx); }
   @Query() @Allow(ReadActivity.Permission) activity(@Ctx() ctx: RequestContext, @Args() a: { take?: number; before?: number; actor?: string }) { return this.log.list(ctx, a); }
   @Transaction() @Mutation() @Allow(ManageStaff.Permission) inviteStaff(@Ctx() ctx: RequestContext, @Args() a: { email: string; firstName: string; lastName: string; role: string }) { return this.staff.invite(ctx, a); }
