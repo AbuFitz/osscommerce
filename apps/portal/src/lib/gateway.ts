@@ -14,6 +14,8 @@ export interface Order {
   refundedMinor: number; timeline: OrderEvent[]; shipTo: string;
   /** Delivery town and country, kept apart from the display string so the live map can place the order. */
   ship?: { city?: string; country?: string };
+  /** Set when an edit was started but not finished: still being edited, or waiting for the extra amount to be recorded. */
+  editing?: 'modifying' | 'payment_due';
   /** How the customer paid, as reported by Stripe. Card number is never held: brand and last four only. */
   method?: { brand: 'visa' | 'mastercard' | 'amex'; last4: string; wallet?: 'applepay' | 'googlepay' | 'link' };
 }
@@ -36,7 +38,7 @@ export interface ShippingChoice { id: string; name: string }
 /** One sellable item's stock. `available` is what can still be sold (on hand minus reserved for open orders). */
 export interface StockRow { variantId: string; productId: string; title: string; variant?: string; sku: string; imageUrl?: string; onHand: number; allocated: number; available: number; lowAt: number; tracked: boolean; backorder: boolean; status: 'ok' | 'low' | 'out' | 'backorder' | 'untracked'; published: boolean }
 export interface StockMove { id: string; at: string; /** What happened: a sale, stock set aside for an order, released back, a return, or a change by hand. */ kind: 'sale' | 'reserved' | 'released' | 'returned' | 'adjusted'; quantity: number; orderId?: string; orderCode?: string; reason?: string; by?: string; note?: string }
-export interface StockDetail extends StockRow { moves: StockMove[] }
+export interface StockDetail extends StockRow { moves: StockMove[]; /** How many movements exist in all; the first page is in `moves`. */ totalMoves: number }
 export interface VariantStockAdjust { variantId: string; mode: 'set' | 'add'; qty: number; reason: 'recount' | 'received' | 'damaged' | 'returned' | 'other'; note?: string; by?: string }
 export interface StockSettings { tracked: boolean; backorder: boolean; lowAt: number }
 export interface StockCountResult extends MutationResult { changed: number; unchanged: number; problems: { variantId: string; error: string }[] }
@@ -113,7 +115,7 @@ export interface VariantInput { options: string[]; sku: string; priceMinor: numb
 /** A shelf of products. `rule`: products join by themselves when their name contains a word. `manual`: you pick them. `other`: set up another way (we can still delete it). */
 export interface Collection { id: string; name: string; kind?: 'rule' | 'manual' | 'other'; contains: string; productIds?: string[]; count: number; products: string[] }
 export interface CollectionInput { id?: string; name: string; kind: 'rule' | 'manual'; contains?: string; productIds?: string[] }
-export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string }
+export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string; /** The step cannot finish until the person says how an extra amount was paid. */ needsPayment?: boolean }
 /** A refund, optionally for specific returned lines. Returned lines can be put back in stock. Our fee on the refunded part is returned by platform policy, not chosen per refund. */
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; lines?: { lineId: string; qty: number }[] }
 /** Changes to an order after it was placed. Quantities are the new totals (0 removes a line). */
@@ -140,6 +142,7 @@ export interface CommerceGateway {
   customer(id: string): Promise<CustomerDetail | null>;
   addCustomerNote(customerId: string, text: string): Promise<MutationResult>;
   stockRows(): Promise<StockRow[]>;
+  stockMoves(variantId: string, page: number): Promise<StockMove[]>;
   stockDetail(variantId: string): Promise<StockDetail | null>;
   adjustVariantStock(a: VariantStockAdjust): Promise<MutationResult>;
   saveStockSettings(variantId: string, s: StockSettings): Promise<MutationResult>;
@@ -180,6 +183,8 @@ export interface CommerceGateway {
   refundOrder(i: RefundInput): Promise<MutationResult>;
   previewOrderEdit(i: OrderEditInput): Promise<OrderEditPreview>;
   applyOrderEdit(i: OrderEditApply): Promise<MutationResult>;
+  /** Finish an edit that was left part-way, so the order can be fulfilled or refunded normally again. */
+  resolveOrderEdit(orderId: string, payment?: ManualOrderInput['payment']): Promise<MutationResult>;
   inviteMember(email: string, role: Member['role']): Promise<MutationResult>;
   rollbackTheme(version: string): Promise<MutationResult>;
   decideGrant(id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<MutationResult>;

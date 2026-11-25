@@ -809,3 +809,5 @@ html{scroll-padding-top:84px}
 .dz-when{display:grid;gap:12px;padding:14px;border-radius:16px;background:var(--amber-soft);border:1px solid rgba(229,160,13,.28)}
 .dz-when-t{color:var(--amber-ink,#8a5a00);font-weight:550}
 .pcheck{flex-wrap:wrap}.pcheck .field{flex:1 1 150px}
+
+.oe-banner{display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:var(--amber-soft);border-color:rgba(229,160,13,.4);border-style:solid}.oe-banner p{margin:2px 0 0}

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { Dialog } from '@oss-commerce/ui';
 import { ArrowDown, ArrowUp, Minus, Plus, Search } from 'lucide-react';
 import { money } from '@/lib/format';
-import { applyOrderEdit, orderableItemsAction, previewOrderEdit, refundOrder } from '@/app/actions';
+import { applyOrderEdit, orderableItemsAction, previewOrderEdit, refundOrder, resolveOrderEdit } from '@/app/actions';
 import type { ManualOrderInput, Order, OrderEditPreview, OrderableItem } from '@/lib/gateway';
 import { useRun } from '../Actions';
 
@@ -86,3 +86,16 @@ export function ReturnAction({ order, feeNote }: { order: Order; feeNote?: strin
     </Dialog>
   </>);
 }
+
+/** An edit that was started but not finished (a lost connection, a closed tab). Finishing it puts the order back so it can be fulfilled or refunded as normal; if an extra amount is owed, it asks how it was paid. */
+export function FinishEditAction({ order }: { order: Order }) {
+  const [open, setOpen] = useState(false); const [pay, setPay] = useState<ManualOrderInput['payment'] | ''>(''); const [pending, start] = useTransition(); const { toastResult } = useResult();
+  const go = (p?: ManualOrderInput['payment']) => start(async () => { const r = await resolveOrderEdit(order.id, p); if (r.needsPayment) { setOpen(true); return; } toastResult(r); if (r.ok) setOpen(false); });
+  return (<div className="w flat oe-banner" role="status"><div><b>This order is part-way through an edit.</b><p className="muted">{order.editing === 'payment_due' ? 'The change was saved, but the extra amount has not been recorded as paid.' : 'The edit was started but not finished.'} Finish it so the order can be fulfilled or refunded as normal.</p></div>
+    <button className="btn primary" type="button" onClick={() => go()} disabled={pending} aria-busy={pending}>{pending ? 'Finishing…' : 'Finish the edit'}</button>
+    <Dialog open={open} onClose={() => setOpen(false)} title="How was the extra amount paid?" description="The edit left an amount to pay. Record how you were paid and the edit will finish."
+      footer={<><button className="btn" type="button" onClick={() => setOpen(false)} disabled={pending}>Cancel</button><button className="btn primary" type="button" disabled={!pay || pending} onClick={() => go(pay as ManualOrderInput['payment'])}>Record payment and finish</button></>}>
+      <div className="seg-field wrap" role="radiogroup" aria-label="Payment method">{PAY.map(([k, l]) => <button key={k} type="button" role="radio" aria-checked={pay === k} data-on={pay === k} onClick={() => setPay(k)}>{l}</button>)}</div>
+      <p className="note">This records a payment you took yourself. It does not charge the customer's card.</p></Dialog></div>);
+}
+function useResult() { const { run } = useRun(); return { toastResult: (r: { ok: boolean; message: string }) => run(async () => r) }; }

@@ -157,6 +157,15 @@ function editOrder(x: Scratch, i: import('./gateway').OrderEditApply | import('.
   }
   return { ok: true, message: '', newTotalMinor: newTotal, changeMinor: change, shippingMinor: o.shippingMinor, lines };
 }
+/** Every movement for an item in the demo, newest first: reservations, sales and releases from orders (each with its order), and changes by hand. */
+function demoMoves(x: Scratch, id: string, sku: string): import('./gateway').StockMove[] {
+  const set = x.vstock[id]; const moves: import('./gateway').StockMove[] = [];
+  for (const o of x.orders) { if (o.payment === 'failed') continue; for (const l of o.lines) if (l.variantId ? l.variantId === id : l.sku === sku) { const link = { orderId: o.id, orderCode: String(o.number) };
+    moves.push({ id: `${o.id}-r`, at: o.placedAt, kind: 'reserved', quantity: l.qty, ...link });
+    if (o.state === 'cancelled') moves.push({ id: `${o.id}-x`, at: o.placedAt, kind: 'released', quantity: l.qty, ...link }); else if ((l.sent ?? (o.fulfilment === 'fulfilled' ? l.qty : 0)) > 0) moves.push({ id: `${o.id}-s`, at: o.placedAt, kind: 'sale', quantity: l.sent ?? l.qty, ...link }); } }
+  parseLog(set?.log).forEach((e, i) => moves.push({ id: `a${i}`, at: e.at, kind: 'adjusted', quantity: e.to - e.from, reason: e.reason, by: e.by, note: e.note }));
+  return moves.sort((a, b) => b.at.localeCompare(a.at));
+}
 function findVariant(x: Scratch, variantId: string) { for (const p of x.products) { const v = detail(x, p).list.find(q => q.id === variantId); if (v) return { p, v }; } return null; }
 /** Keeps a product's totals equal to the sum of its items after an item changes. */
 function syncProduct(x: Scratch, p: Product) { const l = detail(x, p).list; p.onHand = l.reduce((n, v) => n + v.onHand, 0); p.allocated = l.reduce((n, v) => n + v.allocated, 0); }
@@ -260,14 +269,8 @@ export const demoGateway: CommerceGateway = {
     return { ok: true, id: `o${number}`, message: `Order placed and marked as paid (${label}). Stock is reserved.` };
   },
   async stockRows() { const x = await S(); return stockRowsOf(x); },
-  async stockDetail(id) {
-    const x = await S(); const row = stockRowsOf(x).find(r => r.variantId === id); if (!row) return null; const set = x.vstock[id]; const moves: import('./gateway').StockMove[] = [];
-    for (const o of x.orders) { if (o.payment === 'failed') continue; for (const l of o.lines) if (l.sku === row.sku) {
-      moves.push({ id: `${o.id}-r`, at: o.placedAt, kind: 'reserved', quantity: l.qty });
-      if (o.state === 'cancelled') moves.push({ id: `${o.id}-x`, at: o.placedAt, kind: 'released', quantity: l.qty }); else if ((l.sent ?? (o.fulfilment === 'fulfilled' ? l.qty : 0)) > 0) moves.push({ id: `${o.id}-s`, at: o.placedAt, kind: 'sale', quantity: l.sent ?? l.qty }); } }
-    const log = parseLog(set?.log); log.forEach((e, i) => moves.push({ id: `a${i}`, at: e.at, kind: 'adjusted', quantity: e.to - e.from, reason: e.reason, by: e.by, note: e.note }));
-    return { ...row, moves: moves.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100) };
-  },
+  async stockDetail(id) { const x = await S(); const row = stockRowsOf(x).find(r => r.variantId === id); if (!row) return null; const all = demoMoves(x, id, row.sku); return { ...row, moves: all.slice(0, 50), totalMoves: all.length }; },
+  async stockMoves(id, page) { const x = await S(); const row = stockRowsOf(x).find(r => r.variantId === id); if (!row) return []; return demoMoves(x, id, row.sku).slice(50 * page, 50 * page + 50); },
   async adjustVariantStock(a) {
     const x = await S(); const hit = findVariant(x, a.variantId); if (!hit) return { ok: false, message: 'That item no longer exists.' }; const { p, v } = hit;
     const plan = planAdjust({ onHand: v.onHand, allocated: v.allocated }, a); if (!plan.ok) return { ok: false, message: plan.error }; if (plan.delta === 0) return { ok: true, message: `No change: ${p.title} already has ${v.onHand}.` };
@@ -432,6 +435,7 @@ export const demoGateway: CommerceGateway = {
     o.timeline.push({ at: new Date().toISOString(), text: `Refund of £${(i.amountMinor / 100).toFixed(2)} confirmed${i.reason ? ` (${i.reason})` : ''}.${back ? ` ${back} item${back > 1 ? 's' : ''} put back in stock.` : ''}` });
     return { ok: true, message: `Refunded £${(i.amountMinor / 100).toFixed(2)} to ${o.customer.split(' ')[0]}. Our fee on it (£${(fee / 100).toFixed(2)}) is returned to you.${back ? ` ${back} item${back > 1 ? 's' : ''} back in stock.` : ''}` };
   },
+  async resolveOrderEdit() { return { ok: true, message: 'This order is not part-way through an edit.' }; },
   async previewOrderEdit(i) { return editOrder(await S(), i, false); },
   async applyOrderEdit(i) {
     const x = await S(); const p = await editOrder(x, i, true); if (!p.ok) return { ok: false, message: p.message };

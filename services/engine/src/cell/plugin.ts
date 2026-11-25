@@ -6,6 +6,7 @@ import { OutboxService } from './events.ts';
 import { OSS_CALCULATORS, deliveryZoneChecker } from './shipping.ts';
 import { fixedOrderDiscount, buyXGetYAction } from './discounts.ts';
 import { PaymentSessionResolver, shopApiExtensions } from './shop-extension.ts';
+import { STOCK_RESOLVERS, stockApiExtensions } from './stock-extension.ts';
 import Stripe from 'stripe';
 import { connectHandler } from './handler.ts';
 import { stripeWebhookMiddleware, WEBHOOK_PATH } from './webhook-route.ts';
@@ -38,6 +39,7 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
   entities: [OssOutbox],
   providers: [OutboxService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }],
   shopApiExtensions: { schema: shopApiExtensions, resolvers: [PaymentSessionResolver] },
+  adminApiExtensions: { schema: stockApiExtensions, resolvers: STOCK_RESOLVERS },
   configuration: (config) => {
     const o = CellPlugin.options;
     config.paymentOptions.paymentMethodHandlers.push(connectHandler({ stripe: o.stripe, account: o.account, feeBp: o.feeBp, refundsReturnFee: o.refundsReturnFee }));

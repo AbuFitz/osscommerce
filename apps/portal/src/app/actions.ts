@@ -12,7 +12,9 @@ export async function fulfilOrder(id: string, tracking?: string, lines?: { sku: 
 export async function cancelOrder(i: { orderId: string; reason: string; refund: boolean }) { return run(() => gateway().cancelOrder({ ...i, reason: i.reason.trim().slice(0, 200) }), ['/orders', `/orders/${i.orderId}`, '/', '/inventory']); }
 export async function addOrderNote(orderId: string, note: string) { return run(() => gateway().addOrderNote(orderId, note), [`/orders/${orderId}`]); }
 export async function refundOrder(i: RefundInput) { return run(() => gateway().refundOrder(i), ['/orders', '/', '/inventory']); }
+export async function olderStockMoves(variantId: string, page: number) { return gateway().stockMoves(variantId, page); }
 export async function orderableItemsAction() { return gateway().orderableItems(); }
+export async function resolveOrderEdit(orderId: string, payment?: ManualOrderInput['payment']) { return run(() => gateway().resolveOrderEdit(orderId, payment), ['/orders', '/']); }
 export async function previewOrderEdit(i: OrderEditInput) { return gateway().previewOrderEdit(i); }
 export async function applyOrderEdit(i: OrderEditApply) { return run(() => gateway().applyOrderEdit(i), ['/orders', '/', '/inventory', '/analytics']); }
 export async function inviteMember(email: string, role: Member['role']) { return run(() => gateway().inviteMember(email, role), ['/settings/team']); }

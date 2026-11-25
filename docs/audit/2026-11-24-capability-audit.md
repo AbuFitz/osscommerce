@@ -157,3 +157,8 @@ Next in Phase 2: edit an order after it is placed, stock locations and stock his
 
 Next in Phase 2: delivery rules by weight, value and postcode, abandoned checkouts, staff roles and activity log, stock locations (deliberately left out unless a merchant needs them).
 
+- **Delivery rules**: postcode areas, ranges and outward codes in zones (served by the same logic the portal's postcode checker uses), order-value and weight limits per option, weight-band pricing, catch-all zones that automatically defer to specific ones, and a checker that tries a postcode, order value and weight against the zones. Proven against a real Vendure (what a customer is offered, with and without the Highlands, free-over, light-parcel and by-weight bands).
+- **Limits addressed**: stock history pages instead of stopping at 100; every stock movement names its order (a correction: earlier reservations were not actually linked either); edits left part-way can be finished. Multi-location stock was researched and is recorded in `docs/design/stock-locations-and-limits.md` with the trigger for building it.
+
+Next in Phase 2: abandoned checkouts, staff roles and an activity log.
+

@@ -37,7 +37,7 @@ export function mapOrder(o: RawOrder): Order {
   ...(o.history?.items ?? []).flatMap((h): { at: string; text: string; note?: boolean; by?: string }[] => h.type === 'ORDER_NOTE' && typeof h.data.note === 'string' ? [{ at: h.createdAt, text: h.data.note, note: true, by: h.administrator ? `${h.administrator.firstName} ${h.administrator.lastName}`.trim() : undefined }] : h.type === 'ORDER_MODIFIED' ? [{ at: h.createdAt, text: 'Order edited.' }] : h.type === 'ORDER_CANCELLATION' ? [{ at: h.createdAt, text: `Order cancelled${typeof h.data.reason === 'string' && h.data.reason ? `: ${h.data.reason}` : ''}.` }] : [])].sort((x, y) => x.at.localeCompare(y.at));
   return { id: o.id, number: Number(String(o.id).replace(/\D/g, '')) || 0, placedAt: placed, customer: o.customer ? `${o.customer.firstName} ${o.customer.lastName}`.trim() : 'Guest', email: o.customer?.emailAddress ?? '', lines,
     shippingMinor: o.shippingWithTax, discountMinor: Math.abs(o.discounts.reduce((s, d) => s + d.amountWithTax, 0)), taxMinor: o.totalWithTax - o.total, totalMinor: o.totalWithTax,
-    payment, fulfilment, state, refundedMinor: refunded, timeline, shipTo: a ? [a.fullName, a.streetLine1, a.city, a.postalCode].filter(Boolean).join(', ') : '', ship: a ? { city: a.city, country: a.countryCode } : undefined };
+    payment, fulfilment, state, refundedMinor: refunded, timeline, editing: o.state === 'Modifying' ? 'modifying' : o.state === 'ArrangingAdditionalPayment' ? 'payment_due' : undefined, shipTo: a ? [a.fullName, a.streetLine1, a.city, a.postalCode].filter(Boolean).join(', ') : '', ship: a ? { city: a.city, country: a.countryCode } : undefined };
 }
 /** Orders that were actually placed (the engine also holds baskets that never checked out). Newest first. */
 /** Orders placed on or after a calendar day, for reports. Fetched in pages so a busy store is not cut off at the screen limit. */
@@ -381,6 +381,22 @@ export async function refundOrder(x: Exec, i: RefundInput): Promise<MutationResu
 }
 
 // ---- Editing an order after it was placed ----
+/** Finishes an edit left part-way: puts the order back where it was, taking the unpaid amount first if there is one. Safe to call on an order that is fine (it says so and does nothing). */
+export async function resolveOrderEdit(x: Exec, orderId: string, payment?: ManualOrderInput['payment']): Promise<MutationResult> {
+  try {
+    const o = await stateOf(x, orderId); if (!o) return { ok: false, message: 'Order not found.' };
+    if (o.state !== 'Modifying' && o.state !== 'ArrangingAdditionalPayment') return { ok: true, message: 'This order is not part-way through an edit.' };
+    const sent = new Map<string, number>(); for (const f of o.fulfillments.filter(f => f.state !== 'Cancelled')) for (const l of f.lines) sent.set(l.orderLineId, (sent.get(l.orderLineId) ?? 0) + l.quantity);
+    const all = o.lines.length > 0 && o.lines.every(l => (sent.get(l.id) ?? 0) >= l.quantity); const target = all ? 'Shipped' : sent.size ? 'PartiallyShipped' : 'PaymentSettled';
+    if (o.state === 'Modifying') { try { await transition(x, o.id, target); return { ok: true, message: 'The edit is finished and the order is back to normal.' }; } catch { await transition(x, o.id, 'ArrangingAdditionalPayment'); } }
+    if (!payment) return { ok: false, needsPayment: true, message: 'The edit left an amount to be paid. Choose how it was paid to finish it.' };
+    const p = (await x(`mutation($i:ManualPaymentInput!){ addManualPaymentToOrder(input:$i){ __typename ... on Order{ id state } ... on ErrorResult{ message } } }`, { i: { orderId: o.id, method: EXTRA_PAYMENT[payment], transactionId: `edit-${Date.now().toString(36)}`, metadata: {} } })).addManualPaymentToOrder;
+    if (p.__typename !== 'Order') return { ok: false, message: p.message ?? 'The payment could not be recorded.' };
+    const now = (await stateOf(x, o.id))?.state; if (now && now !== target) await transition(x, o.id, target);
+    return { ok: true, message: 'The extra payment is recorded and the edit is finished.' };
+  } catch (e) { return fail(e); }
+}
+
 const EDITABLE = new Set(['PaymentAuthorized', 'PaymentSettled', 'PartiallyShipped', 'Shipped', 'PartiallyDelivered']);
 const MODIFY_FIELDS = `id state totalWithTax shippingWithTax lines{ id quantity unitPriceWithTax linePriceWithTax productVariant{ id name product{ name } } } payments{ id state amount refunds{ total state } } fulfillments{ state lines{ orderLineId quantity } }`;
 type ModOrder = { id: string; state: string; totalWithTax: number; shippingWithTax: number; lines: { id: string; quantity: number; unitPriceWithTax: number; linePriceWithTax: number; productVariant: { id: string; name: string; product: { name: string } } }[]; payments: { id: string; state: string; amount: number; refunds: { total: number; state: string }[] }[]; fulfillments: { state: string; lines: { orderLineId: string; quantity: number }[] }[] };
@@ -567,18 +583,32 @@ export function mapStockRow(v: RawStock): StockRow {
 }
 export async function listStockRows(x: Exec): Promise<StockRow[]> { return ((await x(`query{ productVariants(options:{ take: 500, sort:{ sku: ASC } }){ items{ ${STOCK_FIELDS} } } }`)).productVariants.items as RawStock[]).map(mapStockRow); }
 const KINDS: Record<string, StockMove['kind']> = { ALLOCATION: 'reserved', SALE: 'sale', RELEASE: 'released', CANCELLATION: 'returned', ADJUSTMENT: 'adjusted', RETURN: 'returned' };
-export async function getStockDetail(x: Exec, id: string): Promise<StockDetail | null> {
-  // The engine cannot sort movements, so ask how many there are and read the last 100.
-  const total = ((await x(`query($id:ID!){ productVariant(id:$id){ stockMovements(options:{ take: 1 }){ totalItems } } }`, { id })).productVariant?.stockMovements.totalItems ?? 0) as number;
-  const v = (await x(`query($id:ID!,$skip:Int!){ productVariant(id:$id){ ${STOCK_FIELDS} stockMovements(options:{ take: 100, skip: $skip }){ items{ ... on StockMovement { id type createdAt quantity } } } } }`, { id, skip: Math.max(0, total - 100) })).productVariant as (RawStock & { stockMovements: { items: { id: string; type: string; createdAt: string; quantity: number; orderLine?: { order: { id: string; code: string } } }[] } }) | null;
-  if (!v) return null; const log = parseLog(v.customFields?.stockLog).reverse(); const used = new Set<number>();
-  const moves: StockMove[] = [...v.stockMovements.items].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(b.id) - Number(a.id)).map(m => {
-    const kind = KINDS[m.type] ?? 'adjusted'; const mv: StockMove = { id: m.id, at: m.createdAt, kind, quantity: kind === 'adjusted' ? m.quantity : Math.abs(m.quantity), orderId: m.orderLine?.order.id, orderCode: m.orderLine?.order.code };
+const MOVES_PAGE = 50;
+// Each movement that belongs to an order names it through the cell's own safe `orderRef` (Vendure's own order-line field is unsafe to select).
+const MOVE_FIELDS = `... on StockMovement { id type createdAt quantity } ... on Allocation { orderRef{ id code } } ... on Sale { orderRef{ id code } } ... on Cancellation { orderRef{ id code } } ... on Release { orderRef{ id code } }`;
+type RawMove = { id: string; type: string; createdAt: string; quantity: number; orderRef?: { id: string; code: string } | null };
+function mapMoves(items: RawMove[], logRaw: string | null | undefined): StockMove[] {
+  const log = parseLog(logRaw).reverse(); const used = new Set<number>();
+  return [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(b.id.replace(/\D/g, '')) - Number(a.id.replace(/\D/g, ''))).map(m => {
+    const kind = KINDS[m.type] ?? 'adjusted'; const mv: StockMove = { id: m.id, at: m.createdAt, kind, quantity: kind === 'adjusted' ? m.quantity : Math.abs(m.quantity), orderId: m.orderRef?.id, orderCode: m.orderRef?.code };
     if (kind === 'adjusted') { const i = log.findIndex((e, n) => !used.has(n) && e.to - e.from === m.quantity && Math.abs(Date.parse(e.at) - Date.parse(m.createdAt)) < 120_000); if (i >= 0) { used.add(i); mv.reason = log[i].reason; mv.by = log[i].by; mv.note = log[i].note; } }
     return mv;
   });
-  return { ...mapStockRow(v), moves };
 }
+/** One page of history, newest page first. The engine cannot sort movements, so ask how many there are and read the page counted back from the end. */
+async function movesPage(x: Exec, id: string, page: number): Promise<{ total: number; items: RawMove[]; log?: string | null; row?: RawStock }> {
+  const meta = (await x(`query($id:ID!){ productVariant(id:$id){ ${STOCK_FIELDS} stockMovements(options:{ take: 1 }){ totalItems } } }`, { id })).productVariant as (RawStock & { stockMovements: { totalItems: number } }) | null; if (!meta) return { total: 0, items: [] };
+  const total = meta.stockMovements.totalItems; const end = total - page * MOVES_PAGE; if (end <= 0) return { total, items: [], log: meta.customFields?.stockLog, row: meta };
+  const skip = Math.max(0, end - MOVES_PAGE);
+  const r = (await x(`query($id:ID!,$skip:Int!,$take:Int!){ productVariant(id:$id){ stockMovements(options:{ take: $take, skip: $skip }){ items{ ${MOVE_FIELDS} } } } }`, { id, skip, take: end - skip })).productVariant.stockMovements.items as RawMove[];
+  return { total, items: r, log: meta.customFields?.stockLog, row: meta };
+}
+export async function getStockDetail(x: Exec, id: string): Promise<StockDetail | null> {
+  const p = await movesPage(x, id, 0); if (!p.row) return null;
+  return { ...mapStockRow(p.row), moves: mapMoves(p.items, p.log), totalMoves: p.total };
+}
+/** Older history, a page at a time (page 0 is the newest and arrives with the item). */
+export async function getStockMoves(x: Exec, id: string, page: number): Promise<StockMove[]> { const p = await movesPage(x, id, Math.max(1, Math.floor(page))); return mapMoves(p.items, p.log); }
 const todayIso = () => new Date().toISOString();
 export async function adjustVariantStock(x: Exec, a: VariantStockAdjust): Promise<MutationResult> {
   try {

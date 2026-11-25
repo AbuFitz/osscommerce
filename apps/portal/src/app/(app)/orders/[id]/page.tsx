@@ -7,7 +7,7 @@ import { money, when } from '@/lib/format';
 import { PayBadge, FulBadge, Avatar } from '@/components/ui';
 import { Media } from '@/components/art';
 import { CancelAction, FulfilAction, NoteForm } from '@/components/Actions';
-import { EditOrderAction, ReturnAction } from '@/components/orders/OrderEdit';
+import { EditOrderAction, FinishEditAction, ReturnAction } from '@/components/orders/OrderEdit';
 import { Printer } from 'lucide-react';
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,6 +36,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <Link className="btn ghost" href={`/slip/${o.id}`} target="_blank"><Printer size={15} aria-hidden />Packing slip</Link>
         </div>
       </section>
+      {o.editing && <div style={{ marginBottom: 16 }}><FinishEditAction order={o} /></div>}
       {o.payment === 'failed' && <div className="w flat" style={{ marginBottom: 16 }}>Payment failed. No charge was made and nothing needs fulfilling.</div>}
       <div className="grid">
         <section className="w c-8" aria-labelledby="items">

@@ -350,3 +350,39 @@ test('delivery rules: postcode zones, order value, weight limits and weight band
   const higher = await A.saveShippingZone(x, { originalName: 'Highlands and islands', name: 'Highlands and islands', regions: 'IV, KW', rates: [rate('Highlands delivery', 1495)] }); assert.equal(higher.ok, true);
   assert.deepEqual(await offered(card.variantId, 1, 'HS1 2AA'), { Standard: inc(495), 'Light parcel': inc(295) }, 'HS is no longer excluded once it leaves the highlands zone'); assert.deepEqual(await offered(card.variantId, 1, 'IV2 3AB'), { 'Highlands delivery': inc(1495) });
 });
+
+test('stock history: every reservation and sale names its order, and a long history pages without losing or repeating anything', async () => {
+  const items = await A.listOrderableItems(x); const item = items.find(i => i.available > 20)!; assert.ok(item);
+  const shipping = (await A.listShippingChoices(x))[0];
+  const made = await A.createManualOrder(x, { customer: { email: 'history@example.com', firstName: 'His', lastName: 'Tory' }, items: [{ variantId: item.variantId, qty: 2 }], address: { fullName: 'His Tory', line1: '1 Road', city: 'Bath', postcode: 'BA1 1AA' }, shippingMethodId: shipping?.id, payment: 'cash' }); assert.equal(made.ok, true, made.message);
+  const order = (await A.getOrder(x, made.id!))!; assert.equal((await A.fulfilOrder(x, order.id, undefined, undefined)).ok, true);
+  const d = (await A.getStockDetail(x, item.variantId))!; const code = (await x(`query($id:ID!){ order(id:$id){ code } }`, { id: order.id })).order.code;
+  const res = d.moves.find(m => m.kind === 'reserved' && m.orderId === order.id); const sale = d.moves.find(m => m.kind === 'sale' && m.orderId === order.id);
+  assert.ok(res, 'the reservation names its order'); assert.equal(res!.orderCode, code); assert.ok(sale, 'the sale names its order too (Vendure does not expose this; the cell adds it)'); assert.equal(sale!.orderCode, code);
+  // a long history: 70 more movements by hand
+  for (let i = 0; i < 70; i++) assert.equal((await A.adjustVariantStock(x, { variantId: item.variantId, mode: 'add', qty: 1, reason: 'received', by: 'Test' })).ok, true);
+  const full = (await A.getStockDetail(x, item.variantId))!; assert.ok(full.totalMoves >= 72, `total ${full.totalMoves}`); assert.equal(full.moves.length, 50, 'the first page is 50');
+  const seen = new Set(full.moves.map(m => m.id)); let page = 1; let all = [...full.moves];
+  for (;;) { const more = await A.getStockMoves(x, item.variantId, page); if (!more.length) break; for (const m of more) { assert.equal(seen.has(m.id), false, `repeated ${m.id}`); seen.add(m.id); } all = all.concat(more); page++; if (page > 20) break; }
+  assert.equal(all.length, full.totalMoves, 'every movement arrives exactly once across the pages'); assert.ok(all.some(m => m.kind === 'sale' && m.orderId === order.id), 'older pages still link their orders');
+  assert.deepEqual(await A.getStockMoves(x, item.variantId, 99), [], 'past the end is empty, not an error');
+  const handMoves = full.moves.filter(m => m.kind === 'adjusted'); assert.ok(handMoves.every(m => m.reason === 'received' && m.by === 'Test'), 'reasons still match on the newest page');
+});
+
+test('an edit left part-way can be finished: back to normal when nothing is owed, payment first when something is', async () => {
+  const items = await A.listOrderableItems(x); const item = items.find(i => i.available > 5)!; const shipping = (await A.listShippingChoices(x))[0];
+  const mk = async (email: string) => { const m = await A.createManualOrder(x, { customer: { email, firstName: 'Fin', lastName: 'Ish' }, items: [{ variantId: item.variantId, qty: 1 }], address: { fullName: 'Fin Ish', line1: '1 Lane', city: 'Bath', postcode: 'BA1 1AA' }, shippingMethodId: shipping?.id, payment: 'cash' }); assert.equal(m.ok, true, m.message); return m.id!; };
+  const state = async (id: string) => (await x(`query($id:ID!){ order(id:$id){ state } }`, { id })).order.state as string;
+  assert.equal((await A.resolveOrderEdit(x, await mk('fine@example.com'))).message, 'This order is not part-way through an edit.', 'a healthy order is left alone');
+  // started but not finished, nothing owed
+  const a = await mk('stuck-a@example.com'); await x(`mutation($id:ID!){ transitionOrderToState(id:$id, state:"Modifying"){ __typename } }`, { id: a });
+  assert.equal((await A.getOrder(x, a))!.editing, 'modifying'); const r1 = await A.resolveOrderEdit(x, a); assert.equal(r1.ok, true, r1.message); assert.equal(await state(a), 'PaymentSettled'); assert.equal((await A.getOrder(x, a))!.editing, undefined);
+  // saved with an unpaid amount, then abandoned
+  const b = await mk('stuck-b@example.com'); await x(`mutation($id:ID!){ transitionOrderToState(id:$id, state:"Modifying"){ __typename } }`, { id: b });
+  await x(`mutation($i:ModifyOrderInput!){ modifyOrder(input:$i){ __typename } }`, { i: { dryRun: false, orderId: b, surcharges: [{ description: 'Gift wrap', price: 500, priceIncludesTax: true, taxRate: 0 }] } });
+  const r2 = await A.resolveOrderEdit(x, b); assert.equal(r2.ok, false); assert.equal(r2.needsPayment, true); assert.equal((await A.getOrder(x, b))!.editing, 'payment_due');
+  const total = (await A.getOrder(x, b))!.totalMinor; const r3 = await A.resolveOrderEdit(x, b, 'cash'); assert.equal(r3.ok, true, r3.message); assert.equal(await state(b), 'PaymentSettled'); const fixed = (await A.getOrder(x, b))!; assert.equal(fixed.editing, undefined); assert.equal(fixed.payment, 'paid'); assert.equal(fixed.totalMinor, total);
+  // a fully sent order goes back to Shipped, not to the start
+  const c = await mk('stuck-c@example.com'); assert.equal((await A.fulfilOrder(x, c, undefined, undefined)).ok, true); await x(`mutation($id:ID!){ transitionOrderToState(id:$id, state:"Modifying"){ __typename } }`, { id: c });
+  assert.equal((await A.resolveOrderEdit(x, c)).ok, true); assert.equal(await state(c), 'Shipped', 'a fully sent order returns to Shipped');
+});
