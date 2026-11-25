@@ -78,8 +78,8 @@ function Globe({ points, asOf, sel, onPick, onFail, initial }: { points: MapPoin
       let createGlobe: typeof import('cobe').default; try { createGlobe = (await import('cobe')).default; } catch { return onFail(); }
       if (dead) return; const n = measure() || 480; const dpr = Math.min(window.devicePixelRatio || 1, 2);
       try {
-        globe = createGlobe(cv, { devicePixelRatio: dpr, width: n * dpr, height: n * dpr, phi: s.phi, theta: s.theta, dark: 1, scale: SCALE, diffuse: 1.5, mapSamples: 16000, mapBrightness: 7, mapBaseBrightness: 0.05, baseColor: [0.08, 0.16, 0.1], markerColor: [0.72, 0.95, 0.35], glowColor: [0.22, 0.52, 0.26], opacity: 0.95, markerElevation: 0.015,
-          markers: points.map(p => ({ location: [p.lat, p.lng] as [number, number], size: size(p), color: (fresh(p, asOf) ? [1, 0.76, 0.3] : [0.72, 0.95, 0.35]) as [number, number, number] })), context: { antialias: true } });
+        globe = createGlobe(cv, { devicePixelRatio: dpr, width: n * dpr, height: n * dpr, phi: s.phi, theta: s.theta, dark: 1, scale: SCALE, diffuse: 1.5, mapSamples: 16000, mapBrightness: 7, mapBaseBrightness: 0.05, baseColor: [0.13, 0.14, 0.26], markerColor: [0.55, 0.6, 1], glowColor: [0.3, 0.34, 0.75], opacity: 0.95, markerElevation: 0.015,
+          markers: points.map(p => ({ location: [p.lat, p.lng] as [number, number], size: size(p), color: (fresh(p, asOf) ? [1, 0.76, 0.3] : [0.55, 0.62, 1]) as [number, number, number] })), context: { antialias: true } });
       } catch { return onFail(); }
       setReady(true); place();
       const loop = () => {

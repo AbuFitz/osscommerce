@@ -37,7 +37,7 @@ export function Gauge({ value, total, label, sub }: { value: number; total: numb
   return (
     <div role="img" aria-label={`${label}: ${pct}%. ${sub}`} style={{ position: 'relative', maxWidth: 260, margin: '0 auto' }}>
       <svg viewBox="0 0 220 128" width="100%" aria-hidden>
-        <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stopColor="#5b5bd6" /><stop offset="1" stopColor="#3cc46a" /></linearGradient></defs>
+        <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stopColor="#5b5bd6" /><stop offset="1" stopColor="#0ea5a0" /></linearGradient></defs>
         <path d="M 20 110 A 90 90 0 0 1 200 110" pathLength={100} fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="16" strokeLinecap="round" />
         <path d="M 20 110 A 90 90 0 0 1 200 110" pathLength={100} fill="none" stroke="url(#gg)" strokeWidth="16" strokeLinecap="round" strokeDasharray={`${pct} 100`} />
       </svg>
@@ -49,7 +49,7 @@ export function Gauge({ value, total, label, sub }: { value: number; total: numb
   );
 }
 
-export const SLICE = ['#5b5bd6', '#3cc46a', '#e5a00d', '#2f8fdd', '#e5484d'];
+export const SLICE = ['#5b5bd6', '#0ea5a0', '#e5a00d', '#2f8fdd', '#e5484d'];
 export function Donut({ slices, centre, sub }: { slices: { label: string; value: number }[]; centre: string; sub: string }) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
   let acc = 0;

@@ -23,7 +23,7 @@ export function Weekdays({ items }: { items: Report['weekday'] }) {
         <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: 'rgba(26,26,29,.16)' }} tick={{ fill: '#64646e', fontSize: 12 }} />
         <YAxis tickFormatter={v => moneyShort(v)} tickLine={false} axisLine={false} width={48} tick={{ fill: '#64646e', fontSize: 12 }} />
         <Tooltip cursor={{ fill: 'rgba(30,30,33,.06)', radius: 8 }} isAnimationActive={false} content={({ active, payload }) => active && payload?.length ? <div className="an-tip"><p className="an-tip-d">{(payload[0].payload as Report['weekday'][number]).label}</p><p className="an-tip-v">Sales<b>{money(payload[0].payload.gross)}</b></p><p className="an-tip-v mute">Orders<b>{payload[0].payload.orders}</b></p></div> : null} />
-        <Bar dataKey="gross" radius={[6, 6, 0, 0]} fill="#3cc46a" maxBarSize={34} />
+        <Bar dataKey="gross" radius={[6, 6, 0, 0]} fill="#0ea5a0" maxBarSize={34} />
       </BarChart>
     </ResponsiveContainer></div></div>);
 }

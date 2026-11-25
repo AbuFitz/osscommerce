@@ -93,7 +93,7 @@ export default async function Overview() {
               <div className="wh"><h2 id="gauge">Order status</h2><span className="num" style={{ fontSize: 24, letterSpacing: '-.04em' }}>{total} <small className="muted" style={{ fontSize: 12 }}>orders</small></span></div>
               <div className="dials">
                 <Dial value={s.statusMix[1].count} total={total} label="To fulfil" tone="#f5b83d" />
-                <Dial value={s.statusMix[0].count} total={total} label="Fulfilled" tone="#b8f25a" />
+                <Dial value={s.statusMix[0].count} total={total} label="Fulfilled" tone="#2dd4bf" />
                 <Dial value={s.statusMix[2].count} total={total} label="Cancelled" tone="#ef6a6a" />
               </div>
               <div className="cta-strip"><span>{s.fulfilled} of {s.paidOrders} paid orders fulfilled</span><Link className="btn lime sm" href="/orders">Review</Link></div>
