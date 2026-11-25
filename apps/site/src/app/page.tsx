@@ -1,66 +1,64 @@
 import Link from 'next/link';
-import { Boxes, CreditCard, LayoutDashboard } from 'lucide-react';
-import { StoreFan } from '@/components/StoreFan';
-import { StoreShowcase } from '@/components/StoreShowcase';
-import { FulfilDemo, SalesBars, ScanDemo } from '@/components/Bento';
-import { Receipt } from '@/components/Receipt';
-import { FittingDemo } from '@/components/CustomDemos';
-import { Head, Cta, Price } from '@/components/Parts';
+import { ArrowRight, Check } from 'lucide-react';
+import { HeroStage } from '@/components/HeroStage';
 import { Reveal } from '@/components/Reveal';
+import { Faq } from '@/components/Faq';
+import { Flow } from '@/components/Flow';
+import { Marquee } from '@/components/Marquee';
+import { Statement } from '@/components/Statement';
+import { LiveSection } from '@/components/LiveSection';
+import { Timeline } from '@/components/Timeline';
+import { Closing } from '@/components/Sections';
 import { PRICE } from '@/config';
 
-const STEPS = [['Tell us about your business', 'A short call about what you sell, who buys it and how you work.'], ['We design your store', 'You see the design and a written scope before anything is built.'], ['We build and connect it', 'Store, dashboard, payments and delivery, set up together.'], ['You start selling', 'Your login, a walkthrough, and a person to ask when you need one.']] as const;
-const WHO = ['Food and drink', 'Fashion and streetwear', 'Candles and gifts', 'Beauty and skincare', 'Automotive parts', 'Collectibles', 'Homeware', 'Jewellery', 'Art and prints', 'Pet supplies', 'Health and wellness', 'Makers and craft'];
-const CMP = [
-  { t: 'DIY store builders', w: 'Fast to start', l: ['A template shared with thousands of shops', 'You do the design, setup and fixing', 'Extra features mean paid apps, each with its own bill', 'Support is a help centre'] },
-  { t: 'Agencies', w: 'Fully custom', l: ['Bespoke design, but a large upfront bill', 'Retainers for every change', 'Hosting and security are your problem', 'Slow to change once it ships'] },
-  { t: 'OneSimpleCommerce', w: 'Bespoke, run for you', us: true, l: ['A store designed around your brand', 'Dashboard, payments, hosting and security included', 'Custom functionality built in, not bolted on', `${PRICE.build} once, then ${PRICE.monthly} a month`] },
-];
-
+const STEPS = [['A short call', 'We learn what you sell, who buys it, and how you work.'], ['Design and scope', 'You see your store design and a written scope before anything is built or billed.'], ['Build and connect', 'We build the store, set up payments and delivery with you, and add your products.'], ['Launch', 'You get your dashboard login, a walkthrough, and we are there if you need us.']] as const;
 export default function Home() {
   return (<>
+    {/* 1. Hero: light, with the live dashboard */}
     <section className="hero"><div className="wrap">
-      <p className="tag">Online stores for independent businesses</p>
-      <h1 className="d1" style={{ marginTop: 18 }}>We build the store. <span className="it">You run the business.</span></h1>
-      <div className="hero-b"><p className="lede">A bespoke online store, a dashboard to run it, payments and delivery set up, all looked after for you. One build, one monthly price.</p>
-        <div><div className="acts"><Link className="btn go" href="/start">Start your store</Link><Link className="btn ln" href="/stores">See the stores</Link></div></div></div>
-      <StoreFan />
-    </div></section>
+      <Reveal><span className="eyebrow"><i />Bespoke online stores, one simple platform</span></Reveal>
+      <Reveal delay={0.06}><h1 className="d1">Your store, built for you.<br /><span className="grad">Run from one place.</span></h1></Reveal>
+      <Reveal delay={0.12}><p className="lede">We design and build an online store around your brand, then give you a dashboard that makes running it simple. We take care of the technology. You run the business.</p></Reveal>
+      <Reveal delay={0.18}><div className="acts" style={{ justifyContent: 'center' }}><Link className="btn pri" href="/start">Start your store <ArrowRight size={16} aria-hidden /></Link><Link className="btn" href="/pricing">See pricing</Link></div></Reveal>
+    </div><HeroStage /></section>
 
-    <section className="sec t"><div className="wrap"><Reveal><p className="d2" style={{ maxWidth: '24ch' }}>Not a template. Not a toolkit. <span className="it" style={{ color: 'var(--green)' }}>A finished store, built around how you sell.</span></p></Reveal></div></section>
+    {/* 2. One sentence on a moving black-and-white gradient. No title. */}
+    <Flow tone="dk" className="statement"><div className="wrap"><Statement text="You run the business. We take care of everything that keeps it online." /></div></Flow>
 
-    <section className="sec t"><div className="wrap"><ul className="cols three">
-      {([[Boxes, 'Your store', 'Designed around your brand and your products, so it never looks like anyone else’s.'], [LayoutDashboard, 'Your dashboard', 'Orders, stock, customers and sales in one calm place, on your phone or desktop.'], [CreditCard, 'Your payments', 'Cards, Apple Pay and Google Pay, paid to your bank. No juggling providers.']] as const).map(([I, b, s]) => <li key={b}><I size={26} aria-hidden /><b>{b}</b><span>{s}</span></li>)}
-    </ul></div></section>
+    {/* 3. A thin line of words */}
+    <Marquee items={['Orders', 'Stock', 'Discounts', 'Customers', 'Live map', 'Reports', 'Refunds', 'Delivery', 'Apple Pay', 'Google Pay', 'Photos from your phone']} />
 
-    <section className="sec"><div className="wrap"><Head split tag="The stores" title={<>Every business gets <span className="it">its own</span> store.</>} lede="Four different businesses, four different designs. Same dependable platform underneath." />
-      <StoreShowcase /></div></section>
+    {/* 4. Copy that holds still while panels of different heights pass */}
+    <section className="sec"><div className="wrap sticky-g">
+      <div className="sticky-l"><Reveal><h2>A dashboard that runs the day.</h2></Reveal><Reveal delay={0.08}><p className="lede">Open it on your phone between jobs or at your desk. The same dashboard, arranged for whichever screen you have.</p></Reveal><Reveal delay={0.14}><div><Link className="btn" href="/platform">Explore the platform <ArrowRight size={16} aria-hidden /></Link></div></Reveal></div>
+      <div className="panels">
+        <Reveal className="pn tall"><h3>Fulfil in a couple of taps</h3><p>See what needs sending, add tracking, mark it sent. Customers are told automatically.</p>
+          <div className="mini"><div className="mrow"><b>#1042</b><span className="muted">Bath</span><span className="pill a">To fulfil</span><em>£21.15</em></div><div className="mrow"><b>#1041</b><span className="muted">Leeds</span><span className="pill i">Part shipped</span><em>£68.00</em></div><div className="mrow"><b>#1040</b><span className="muted">Dublin</span><span className="pill t">Fulfilled</span><em>£126.00</em></div></div></Reveal>
+        <Reveal className="pn row2"><div><h3>Stock</h3><p>A warning before you run out.</p><div className="mrow" style={{ marginTop: 'auto' }}><span>Linen apron</span><span className="pill a">Low · 4</span></div></div><div className="g"><h3>Discounts</h3><p>Codes and offers, on or off in a tap.</p><div className="mrow" style={{ marginTop: 'auto' }}><span>WELCOME10</span><span className="pill t">Active</span></div></div></Reveal>
+        <Reveal className="pn dk tall"><h3>Sales you can read at a glance</h3><p>Net sales after refunds, best sellers and busy days, without a spreadsheet.</p><div className="bars" aria-hidden>{[34, 52, 40, 66, 48, 78, 92, 70, 84].map((h, i) => <i key={i} style={{ height: `${h}%` }} />)}</div></Reveal>
+        <Reveal className="pn short"><h3>Customers, remembered</h3><p>Who bought, what, and how often, with private notes.</p></Reveal>
+      </div>
+    </div><p className="muted" style={{ margin: '28px auto 0', width: 'min(1180px,calc(100% - 40px))', fontSize: 13 }}>Names and figures in these illustrations are sample data.</p></section>
 
-    <section className="sec dark"><div className="wrap"><Head tag="The dashboard" title={<>Run the whole shop <span className="it" style={{ color: 'var(--sig)' }}>from one place.</span></>} lede="Built for people who are busy making and selling, not for IT departments." />
-      <div className="bento">
-        <div className="bc s5"><h3 className="d3">Fulfil an order in one tap</h3><p className="d">The customer is emailed, the order moves on, and you get on with your day.</p><FulfilDemo /></div>
-        <div className="bc k s7" style={{ background: '#161b19' }}><h3 className="d3">See today as it happens</h3><p className="d">Sales, orders and your best sellers, live.</p><SalesBars /></div>
-        <div className="bc g s7"><h3 className="d3">Add a product from your phone</h3><p className="d">Point your camera, fill in the details, and it is on your shop.</p><ScanDemo /></div>
-        <div className="bc s5"><h3 className="d3">Everything else you would expect</h3><p className="d">Stock, discounts, delivery options, customers and payouts.</p>
-          <ul className="chips2 vis">{['Stock', 'Discounts', 'Delivery', 'Customers', 'Refunds', 'Payouts', 'Reports'].map(x => <li key={x}><span>{x}</span></li>)}</ul></div>
-      </div></div></section>
+    {/* 5. A tall, dark moment: the live map */}
+    <Flow tone="dk" className="live-f"><LiveSection /></Flow>
 
-    <section className="sec"><div className="wrap"><Head split tag="Custom builds" title={<>Your shop does what <span className="it">your business</span> needs.</>} lede="Fitting by postcode, personalised products, timed offers. If it is how you work, we build it into the store." />
-      <FittingDemo /><p style={{ marginTop: 28 }}><Link className="lk" href="/custom">More custom builds →</Link></p></div></section>
+    {/* 6. Four steps on a line that draws itself */}
+    <section className="tl-wrap"><div className="wrap">
+      <div className="tl-head"><h2>From first call to first order.</h2><Link className="btn sml" href="/how-it-works">The detail <ArrowRight size={14} aria-hidden /></Link></div>
+      <Timeline steps={STEPS} /></div></section>
 
-    <section className="sec dark"><div className="wrap"><Head tag="Payments" title={<>Know exactly <span className="it" style={{ color: 'var(--sig)' }}>what you keep.</span></>} lede="Drag the order value, choose how the customer paid, and read the receipt. Every figure is worked out the same way the dashboard does it." />
-      <Receipt dark /><p style={{ marginTop: 28, opacity: .7, maxWidth: '60ch' }}>Stripe processing costs vary by card type and are shown as published rates. Our fee is 0.5% of each payment.</p></div></section>
+    {/* 7. The price, as big as it deserves to be. No heading. */}
+    <section className="wrap" style={{ marginBottom: 'clamp(60px,9vw,130px)' }}><Reveal><Flow tone="dk" motion="sweep" className="round"><div className="pband">
+      <div><p className="pn1">{PRICE.build}<small> to build</small></p><p className="pn2">then {PRICE.monthly}<small> a month</small></p></div>
+      <ul className="ticks"><li><Check size={18} aria-hidden /><div>0.5% on payments taken through your store<span>On top of Stripe’s processing cost.</span></div></li><li><Check size={18} aria-hidden /><div>No VAT added<span>The price you see is the price you pay.</span></div></li><li><Check size={18} aria-hidden /><div>Hosting, security and updates included</div></li>
+        <li><Link className="btn" href="/pricing" style={{ background: '#fff', color: '#09090b' }}>See what is included <ArrowRight size={16} aria-hidden /></Link></li></ul></div></Flow></Reveal></section>
 
-    <section className="sec"><div className="wrap"><Head tag="Compared" title={<>Bespoke without the <span className="it">agency bill.</span></>} />
-      <div className="cmp">{CMP.map(c => <div key={c.t} className={c.us ? 'us' : ''}><h3 className="d3">{c.t}</h3><p className="w">{c.w}</p><ul>{c.l.map(x => <li key={x}>{x}</li>)}</ul></div>)}</div></div></section>
+    {/* 8. Questions beside a short heading */}
+    <section className="sec" style={{ paddingTop: 0 }}><div className="wrap faq-g"><h2>Before you start.</h2>
+      <Faq items={[['Do I need to be technical?', 'No. We build and connect everything, and the dashboard is made for non-technical people.'], ['Can I change things afterwards?', 'Yes. Products, prices, stock and content are yours to edit. For bigger changes, ask us.'], ['Who owns my store?', 'You own your brand, products and customer data.'], ['Is VAT added?', 'No. We are not VAT registered, so the prices shown are final.']]} /></div></section>
 
-    <section className="sec"><div className="wrap"><Head tag="How it works" title={<>From first call to <span className="it">first order.</span></>} />
-      <ol className="steps">{STEPS.map(([b, t], i) => <li key={b}><span className="mono">0{i + 1}</span><b>{b}</b><span className="t">{t}</span></li>)}</ol></div></section>
-
-    <section className="sec"><div className="wrap"><Head tag="Who it is for" title={<>Built for businesses that <span className="it">make and sell.</span></>} />
-      <ul className="ind">{WHO.map(w => <li key={w}>{w}</li>)}</ul></div></section>
-
-    <section className="sec t"><div className="wrap"><Head tag="Pricing" title={<>Simple to <span className="it">understand.</span></>} /><Price /></div></section>
-    <Cta />
+    {/* 9. A huge closing line on a light moving gradient */}
+    <Closing />
   </>);
 }

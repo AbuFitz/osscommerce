@@ -38,12 +38,12 @@ export function SignupFlow() {
     <fieldset className="fld chips"><legend>{legend}</legend><div>{opts.map(([val, l]) => <label key={val} data-on={v[k] === val || undefined}><input type="radio" name={k} value={val} checked={v[k] === val} onChange={() => pick(k, val)} />{l}</label>)}</div></fieldset>);
 
   if (st.s === 'done') return (
-    <div className="su-card" ref={card}><div className="su-done"><span className="su-tick"><Check size={26} aria-hidden /></span>
+    <div className="formcard" ref={card}><div className="su-done"><span className="su-tick"><Check size={26} aria-hidden /></span>
       <h2 tabIndex={-1}>Thank you, {v.name.split(' ')[0]}. That is everything we need.</h2>
       <p>We will reply to <b>{v.email}</b> personally to arrange a short call.{st.ref ? ` Your reference is ${st.ref}.` : ''}</p>
       <ol className="su-next"><li><b>A short call</b>We talk through your business, products and brand.</li><li><b>Design and quote</b>You see the storefront design and a written scope before anything is built or billed.</li><li><b>Build and launch</b>We build the store, set up payments and delivery with you, and you get your dashboard login.</li></ol></div></div>);
   return (
-    <div className="su-card" ref={card}>
+    <div className="formcard" ref={card}>
       <ol className="su-steps" aria-label="Progress">{STEPS.map((s, i) => <li key={s.t} data-state={i < step ? 'done' : i === step ? 'now' : 'next'} aria-current={i === step ? 'step' : undefined}><span>{i < step ? <Check size={13} aria-hidden /> : i + 1}</span>{s.t}</li>)}</ol>
       <form className="form" noValidate onSubmit={e => { e.preventDefault(); step < STEPS.length - 1 ? next() : send(); }}>
         <h2 tabIndex={-1}>{STEPS[step].h}</h2>
@@ -53,8 +53,8 @@ export function SignupFlow() {
         {step === 2 && <>{Choice({ k: 'productRange', legend: 'Roughly how many products?', opts: RANGE })}
           <div className="fld"><label htmlFor="f-message">What do you sell, and is there anything the shop must do?</label><textarea id="f-message" value={v.message} onChange={set('message')} aria-describedby="h-message" /><small id="h-message">Optional. A sentence or two is plenty.</small></div></>}
         <div className="hp" aria-hidden><label>Leave this empty<input tabIndex={-1} autoComplete="off" value={v.company_url} onChange={set('company_url')} /></label></div>
-        <div className="su-acts">{step > 0 ? <button type="button" className="btn line" onClick={() => { setErr({}); setStep(s => s - 1); focusCard(); }}><ArrowLeft size={18} aria-hidden />Back</button> : <span />}
-          <button className="btn green" type="submit" disabled={st.s === 'sending'} aria-busy={st.s === 'sending'}>{step < STEPS.length - 1 ? <>Continue <ArrowRight size={18} aria-hidden /></> : st.s === 'sending' ? 'Sending…' : <>Send to the team <ArrowRight size={18} aria-hidden /></>}</button></div>
+        <div className="su-acts">{step > 0 ? <button type="button" className="btn" onClick={() => { setErr({}); setStep(s => s - 1); focusCard(); }}><ArrowLeft size={18} aria-hidden />Back</button> : <span />}
+          <button className="btn pri" type="submit" disabled={st.s === 'sending'} aria-busy={st.s === 'sending'}>{step < STEPS.length - 1 ? <>Continue <ArrowRight size={18} aria-hidden /></> : st.s === 'sending' ? 'Sending…' : <>Send to the team <ArrowRight size={18} aria-hidden /></>}</button></div>
         <small className="su-fine">Step {step + 1} of {STEPS.length}. We use these details only to reply about your store. <a href="/legal/privacy">Privacy notice</a>.</small>
       </form>
     </div>);

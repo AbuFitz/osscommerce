@@ -1,9 +1,7 @@
 export const PRODUCT = [
-  { href: '/stores', label: 'Bespoke stores', note: 'Designed around your brand, never a template' },
-  { href: '/platform', label: 'The platform', note: 'Products, orders, customers and growth in one place' },
-  { href: '/payments', label: 'Payments', note: 'Cards, Apple Pay and Google Pay, paid to you' },
-  { href: '/custom', label: 'Custom builds', note: 'Functionality shaped around how you work' },
-  { href: '/integrations', label: 'Integrations', note: 'Shipping, search, email and more, connected' },
-  { href: '/how-it-works', label: 'How it works', note: 'From first call to first order' },
+  { href: '/platform', label: 'The platform', note: 'Orders, products, stock and customers in one dashboard', icon: 'dashboard' },
+  { href: '/payments', label: 'Payments', note: 'Cards, Apple Pay and Google Pay, paid straight to you', icon: 'card' },
+  { href: '/custom', label: 'Custom builds', note: 'Functionality shaped around how you work', icon: 'wrench' },
+  { href: '/integrations', label: 'Integrations', note: 'Shipping, email, search and more, connected', icon: 'plug' },
 ] as const;
-export const LINKS = [{ href: '/pricing', label: 'Pricing' }, { href: '/contact', label: 'Contact' }] as const;
+export const LINKS = [{ href: '/how-it-works', label: 'How it works' }, { href: '/pricing', label: 'Pricing' }, { href: '/contact', label: 'Contact' }] as const;

@@ -2,7 +2,7 @@
 const { chromium } = require('playwright');
 const BASE = process.env.BASE || 'http://localhost:3200';
 const res = []; const ok = (n, c, d = '') => { res.push(c); console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${d ? ' — ' + d : ''}`); };
-const PAGES = ['/', '/platform', '/features/online-store', '/features/checkout', '/features/payments', '/features/orders', '/features/products', '/features/analytics', '/features/delivery', '/how-it-works', '/pricing', '/start', '/contact', '/legal', '/legal/terms'];
+const PAGES = ['/', '/platform', '/payments', '/custom', '/integrations', '/how-it-works', '/pricing', '/start', '/contact', '/legal', '/legal/terms'];
 (async () => {
   const b = await chromium.launch();
   for (const [name, vp] of [['desktop', { width: 1440, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
@@ -13,21 +13,21 @@ const PAGES = ['/', '/platform', '/features/online-store', '/features/checkout',
       ok(`[${name}] ${u} has no outdated prices or plan names`, !/49\.99|£99\b|£699|1,499|Commerce Plus/.test(t));
       ok(`[${name}] ${u} does not overflow sideways`, (await p.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0);
       const fonts = await p.evaluate(() => [getComputedStyle(document.querySelector('h1')).fontFamily, getComputedStyle(document.body).fontFamily]);
-      ok(`[${name}] ${u} uses Funnel Display and Hanken Grotesk`, /Funnel Display/.test(fonts[0]) && /Hanken Grotesk/.test(fonts[1]));
+      ok(`[${name}] ${u} uses Geist`, /Geist/.test(fonts[0]) && /Geist/.test(fonts[1]));
       const broken = await p.evaluate(async () => { const out = []; for (const a of [...new Set([...document.querySelectorAll('a[href^="/"]')].map(a => a.getAttribute('href')))]) { const r = await fetch(a, { method: 'GET' }); if (r.status >= 400) out.push(a + ' ' + r.status); } return out; });
       ok(`[${name}] ${u} has no broken internal links`, broken.length === 0, broken.join(', '));
     }
     await p.goto(BASE + '/pricing'); const pt = await p.locator('main').innerText(); ok(`[${name}] pricing shows £479 and £39`, pt.includes('£479') && pt.includes('£39'));
     const nf = await p.goto(BASE + '/nope'); ok(`[${name}] unknown page returns a 404 page`, nf.status() === 404 && (await p.getByText('That page is not here').count()) === 1);
-    if (name === 'phone') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Open menu' }).click(); await p.locator('#hd-menu').getByRole('link', { name: /^Payments/ }).click(); await p.waitForURL('**/features/payments'); await p.waitForTimeout(400); ok('[phone] menu opens and navigates', (await p.locator('#hd-menu').isHidden())); }
-    if (name === 'desktop') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Product' }).click(); ok('[desktop] product menu opens and lists every capability', (await p.locator('#mega a').count()) >= 8); await p.keyboard.press('Escape'); ok('[desktop] product menu closes with Escape', await p.locator('#mega').isHidden()); }
-    for (const u of ['/', '/features/orders', '/features/payments', '/platform', '/how-it-works', '/start']) { await p.goto(BASE + u); ok(`[${name}] ${u} shows no price or fee (those live on the pricing page)`, !/£479|£39\b/.test(await p.locator('main').innerText())); }
-    for (const [from, to] of [['/storefronts', '/features/online-store'], ['/payments', '/features/payments'], ['/integrations', '/platform']]) { await p.goto(BASE + from); ok(`[${name}] old link ${from} redirects`, p.url().endsWith(to)); }
-    await p.goto(BASE + '/'); ok(`[${name}] hero showcase is a described picture with nothing to operate`, (await p.locator('.stack[role=img]').count()) === 1 && (await p.locator('.stack button, .stack a').count()) === 0);
-    ok(`[${name}] no vase imagery anywhere on the home page`, (await p.locator('img[src*="vase"]').count()) === 0 && !/vase/i.test(await p.locator('main').innerText()));
-    await p.goto(BASE + '/pricing'); await p.getByLabel('Order value').fill('100'); await p.getByText('International cards', { exact: true }).first().click();
-    ok(`[${name}] calculator: £100 on an international card costs £3.85`, (await p.locator('.rcpt.big').innerText()).includes('£3.85') && (await p.locator('.rcpt.big').innerText()).includes('£96.15'));
-    await p.getByLabel('Order value').fill('abc'); ok(`[${name}] calculator: nonsense is refused with a reason`, (await p.getByText('Enter an amount between').count()) === 1);
+    if (name === 'phone') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Open menu' }).click(); await p.locator('.sheet').getByRole('link', { name: /^Payments/ }).click(); await p.waitForURL('**/payments'); await p.waitForTimeout(700); ok('[phone] menu opens, navigates and closes', (await p.locator('.sheet').count()) === 0); }
+    if (name === 'desktop') { await p.goto(BASE + '/'); await p.getByRole('button', { name: 'Product' }).click(); await p.waitForTimeout(500); ok('[desktop] product menu opens and lists every capability', (await p.locator('.menu a').count()) >= 4); await p.keyboard.press('Escape'); await p.waitForTimeout(600); ok('[desktop] product menu closes with Escape', (await p.locator('.menu').count()) === 0); }
+    for (const u of ['/platform', '/custom', '/integrations', '/how-it-works', '/start']) { await p.goto(BASE + u); ok(`[${name}] ${u} shows no price or fee (those live on the pricing page)`, !/£479|£39\b/.test(await p.locator('main').innerText())); }
+    for (const from of ['/stores', '/storefronts']) { await p.goto(BASE + from); ok(`[${name}] removed page ${from} sends people home`, new URL(p.url()).pathname === '/'); }
+    await p.goto(BASE + '/features/orders'); ok(`[${name}] old feature links reach the platform page`, new URL(p.url()).pathname === '/platform');
+    await p.goto(BASE + '/'); ok(`[${name}] no fake storefront showcase or demo stores`, (await p.locator('img').count()) === 0 && !/vase|storefront preview/i.test(await p.locator('main').innerText()));
+    ok(`[${name}] sample data is labelled as sample`, (await p.getByText('Sample data').count()) >= 1);
+    await p.goto(BASE + '/payments'); await p.locator('input[type=range]').fill('100'); await p.getByText('International cards', { exact: true }).first().click(); await p.waitForTimeout(900);
+    const rc = await p.locator('.rc').innerText(); ok(`[${name}] calculator: £100 on an international card leaves £96.15`, rc.includes('£100.00') && rc.includes('£96.15'), rc.replace(/\n/g, ' '));
     // sign-up flow
     const cont = () => p.getByRole('button', { name: /Continue|Send to the team/ });
     await p.goto(BASE + '/start'); await cont().click();
@@ -44,7 +44,7 @@ const PAGES = ['/', '/platform', '/features/online-store', '/features/checkout',
     const mt = await p.locator('main').innerText(); ok(`[${name}] sign-up: a storage failure is reported, never shown as success`, /could not save your details/.test(mt) && !/everything we need/.test(mt) && (await p.locator('main a[href^="https://wa.me/"]').count()) > 0);
     await p.unroute('**/api/enquiry'); await p.goto(BASE + '/');
     ok(`[${name}] WhatsApp link points at the published number`, (await p.locator('a.wa').first().getAttribute('href')) === 'https://wa.me/447732420976');
-    ok(`[${name}] brand reads OneSimpleCommerce, not the old name`, !/OSS Commerce/.test(await p.locator('body').innerText()) && (await p.locator('.hd .wm').getAttribute('aria-label')) === 'OneSimpleCommerce');
+    ok(`[${name}] brand reads OneSimpleCommerce, not the old name`, !/OSS Commerce/.test(await p.locator('body').innerText()) && (await p.locator('.nav a[aria-label]').first().getAttribute('aria-label')) === 'OneSimpleCommerce home');
     ok(`[${name}] no console or page errors`, errs.filter(e => !/503|404/.test(e)).length === 0, errs.slice(0, 2).join(' / '));
     await c.close();
   }

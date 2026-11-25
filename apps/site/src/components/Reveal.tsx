@@ -1,17 +1,8 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 
-/** One reveal language for the whole page: rise and fade, staggered by `i`. Content is visible without JS and under reduced motion. */
-export function Reveal({ children, i = 0, className = '', as: Tag = 'div' }: { children: React.ReactNode; i?: number; className?: string; as?: 'div' | 'section' | 'li' | 'figure' }) {
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const el = ref.current; if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const r = el.getBoundingClientRect(); if (r.top < innerHeight * 0.92 && r.bottom > 0) return; // already on screen: no flash
-    el.dataset.r = 'hide';
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { el.dataset.r = 'show'; io.disconnect(); } }, { threshold: 0.12, rootMargin: '0px 0px -6% 0px' });
-    io.observe(el); return () => io.disconnect();
-  }, []);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const T = Tag as any;
-  return <T ref={ref} className={className} style={{ ['--d' as string]: i }}>{children}</T>;
+/** Rises into place the first time it scrolls into view. Static for people who prefer reduced motion. */
+export function Reveal({ children, delay = 0, y = 28, className, as = 'div' }: { children: React.ReactNode; delay?: number; y?: number; className?: string; as?: 'div' | 'li' }) {
+  const M = as === 'li' ? motion.li : motion.div;
+  return (<M className={className} data-reveal initial={{ opacity: 0, y }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: '0px 0px -80px 0px' }} transition={{ type: 'spring', bounce: 0.12, duration: 0.9, delay }}>{children}</M>);
 }
