@@ -348,7 +348,7 @@ export const demoGateway: CommerceGateway = {
   },
   async serviceRequests() { return (await S()).requests; },
   async emailSettings() {
-    return { brand: { shopName: 'Kiln & Thread', accent: '#2c3a15', supportEmail: 'hello@kilnandthread.example', footer: 'Thank you for supporting a small studio.' }, notifications: { newOrder: true, lowStock: true, paymentIssue: true, dailySummary: false }, sendingDomain: { host: 'mail.kilnandthread.example', verified: false } };
+    return { brand: { shopName: 'Kiln & Thread', accent: '#262629', supportEmail: 'hello@kilnandthread.example', footer: 'Thank you for supporting a small studio.' }, notifications: { newOrder: true, lowStock: true, paymentIssue: true, dailySummary: false }, sendingDomain: { host: 'mail.kilnandthread.example', verified: false } };
   },
   async preferences() { return { lowStock: true, newOrder: true, guest: true, consent: false, showSoldOut: true, pause: false }; },
   async saveSection() { return okDemo('Section saved as a draft.'); },

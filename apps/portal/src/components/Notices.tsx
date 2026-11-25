@@ -32,7 +32,7 @@ export function NotificationBell({ notices }: { notices: Notice[] }) {
     </button>
     {narrow
       ? <Dialog open={open} onClose={() => setOpen(false)} title="Notifications" actions={markAll} footer={<div className="nfoot">{foot}</div>}><div className="nlist">{list}</div></Dialog>
-      : <Popover open={open} onClose={() => setOpen(false)} anchor={btn} label="Notifications" width={400}><div className="nlist nlist-pop"><div className="nhead"><h2>Notifications</h2>{markAll}</div><div className="nscroll">{list}</div><div className="nfoot">{foot}</div></div></Popover>}
+      : <Popover open={open} onClose={() => setOpen(false)} anchor={btn} label="Notifications" width={400}><div className="nlist nlist-pop"><div className="nhead"><h2>Notifications</h2>{markAll}</div><div className="nscroll" data-fade>{list}</div><div className="nfoot">{foot}</div></div></Popover>}
   </>);
 }
 function Item({ n, onGo, onRead }: { n: Notice; onGo: () => void; onRead: () => void }) {

@@ -37,7 +37,7 @@ export function Gauge({ value, total, label, sub }: { value: number; total: numb
   return (
     <div role="img" aria-label={`${label}: ${pct}%. ${sub}`} style={{ position: 'relative', maxWidth: 260, margin: '0 auto' }}>
       <svg viewBox="0 0 220 128" width="100%" aria-hidden>
-        <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stopColor="#7d9a3f" /><stop offset="1" stopColor="#e8f2c8" /></linearGradient></defs>
+        <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stopColor="#5b5bd6" /><stop offset="1" stopColor="#0ea5a0" /></linearGradient></defs>
         <path d="M 20 110 A 90 90 0 0 1 200 110" pathLength={100} fill="none" stroke="rgba(255,255,255,.12)" strokeWidth="16" strokeLinecap="round" />
         <path d="M 20 110 A 90 90 0 0 1 200 110" pathLength={100} fill="none" stroke="url(#gg)" strokeWidth="16" strokeLinecap="round" strokeDasharray={`${pct} 100`} />
       </svg>
@@ -49,7 +49,7 @@ export function Gauge({ value, total, label, sub }: { value: number; total: numb
   );
 }
 
-export const SLICE = ['#4a6024', '#b9d072', '#b9d3ee', '#cfc2f3', '#efc9a6'];
+export const SLICE = ['#5b5bd6', '#0ea5a0', '#e5a00d', '#2f8fdd', '#e5484d'];
 export function Donut({ slices, centre, sub }: { slices: { label: string; value: number }[]; centre: string; sub: string }) {
   const total = slices.reduce((s, x) => s + x.value, 0) || 1;
   let acc = 0;
@@ -57,7 +57,7 @@ export function Donut({ slices, centre, sub }: { slices: { label: string; value:
     <div>
       <div style={{ position: 'relative', width: 170, margin: '4px auto 18px' }}>
         <svg viewBox="0 0 42 42" role="img" aria-label={slices.map(s => `${s.label} ${Math.round((s.value / total) * 100)}%`).join(', ')}>
-          <circle cx="21" cy="21" r="15.9155" fill="none" stroke="rgba(30,40,15,.07)" strokeWidth="5.5" />
+          <circle cx="21" cy="21" r="15.9155" fill="none" stroke="rgba(26,26,29,.07)" strokeWidth="5.5" />
           {slices.map((s, i) => { const p = (s.value / total) * 100, off = -acc; acc += p;
             return <circle key={s.label} cx="21" cy="21" r="15.9155" fill="none" stroke={SLICE[i % SLICE.length]} strokeWidth="5.5" strokeLinecap="butt" pathLength={100} strokeDasharray={`${Math.max(p - 1.2, 0)} ${100 - Math.max(p - 1.2, 0)}`} strokeDashoffset={off} transform="rotate(-90 21 21)" />; })}
         </svg>

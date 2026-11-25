@@ -13,16 +13,16 @@ export function SalesPulse({ series }: { series: SalesPoint[] }) {
   return (<div className="an-plot sm" role="img" aria-label={`Net sales per day, ${fmtDay(series[0].day)} to ${fmtDay(series.at(-1)!.day)}. Total ${money(series.reduce((s, p) => s + p.netMinor, 0))}. The Analytics page has every value in a table.`}>
     <ResponsiveContainer width="100%" height="100%">
       <ComposedChart data={series} margin={{ top: 10, right: 6, bottom: 0, left: 0 }}>
-        <defs><linearGradient id={`${id}-g`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4a6024" stopOpacity=".32" /><stop offset="100%" stopColor="#4a6024" stopOpacity="0" /></linearGradient></defs>
-        <CartesianGrid vertical={false} stroke="rgba(30,40,15,.1)" strokeDasharray="3 4" />
-        <XAxis dataKey="day" tickFormatter={k => fmtDay(k)} tickLine={false} axisLine={{ stroke: 'rgba(30,40,15,.16)' }} tick={{ fill: '#6b7260', fontSize: 12 }} minTickGap={34} />
-        <YAxis tickFormatter={v => moneyShort(v)} tickLine={false} axisLine={false} width={50} tick={{ fill: '#6b7260', fontSize: 12 }} domain={[0, (m: number) => Math.max(m, 100)]} />
-        <Tooltip isAnimationActive={false} cursor={{ stroke: '#232f10', strokeWidth: 1, strokeDasharray: '4 3' }} content={p => {
+        <defs><linearGradient id={`${id}-g`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5b5bd6" stopOpacity=".32" /><stop offset="100%" stopColor="#5b5bd6" stopOpacity="0" /></linearGradient></defs>
+        <CartesianGrid vertical={false} stroke="rgba(26,26,29,.1)" strokeDasharray="3 4" />
+        <XAxis dataKey="day" tickFormatter={k => fmtDay(k)} tickLine={false} axisLine={{ stroke: 'rgba(26,26,29,.16)' }} tick={{ fill: '#64646e', fontSize: 12 }} minTickGap={34} />
+        <YAxis tickFormatter={v => moneyShort(v)} tickLine={false} axisLine={false} width={50} tick={{ fill: '#64646e', fontSize: 12 }} domain={[0, (m: number) => Math.max(m, 100)]} />
+        <Tooltip isAnimationActive={false} cursor={{ stroke: '#1e1e21', strokeWidth: 1, strokeDasharray: '4 3' }} content={p => {
           if (!p.active || !p.payload?.length) return null; const d = p.payload[0].payload as SalesPoint;
           return (<div className="an-tip" role="status"><p className="an-tip-d">{fmtDay(d.day, true)}</p><p className="an-tip-v"><i className="dot cur" />Net sales<b>{money(d.netMinor)}</b></p>{d.grossMinor !== d.netMinor && <p className="an-tip-v mute"><i className="dot prev" />Before refunds<b>{money(d.grossMinor)}</b></p>}</div>);
         }} />
-        {refunds > 0 && <Line type="monotone" dataKey="grossMinor" stroke="#9aa08c" strokeWidth={1.5} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={!reduce} />}
-        <Area type="monotone" dataKey="netMinor" stroke="#4a6024" strokeWidth={2.4} fill={`url(#${id}-g)`} dot={false} activeDot={{ r: 5, fill: '#fff', stroke: '#232f10', strokeWidth: 2.2 }} isAnimationActive={!reduce} />
+        {refunds > 0 && <Line type="monotone" dataKey="grossMinor" stroke="#91919b" strokeWidth={1.5} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={!reduce} />}
+        <Area type="monotone" dataKey="netMinor" stroke="#5b5bd6" strokeWidth={2.4} fill={`url(#${id}-g)`} dot={false} activeDot={{ r: 5, fill: '#fff', stroke: '#1e1e21', strokeWidth: 2.2 }} isAnimationActive={!reduce} />
       </ComposedChart>
     </ResponsiveContainer>
   </div>);

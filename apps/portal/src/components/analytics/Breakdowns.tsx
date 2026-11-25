@@ -19,11 +19,11 @@ export function Weekdays({ items }: { items: Report['weekday'] }) {
   return (<div className="an-wd"><div role="img" aria-label={`Sales by day of week. ${best.gross ? `${best.label} is strongest at ${money(best.gross)}.` : 'No sales yet.'}`}>
     <ResponsiveContainer width="100%" height={190}>
       <BarChart data={items} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
-        <CartesianGrid vertical={false} stroke="rgba(30,40,15,.09)" strokeDasharray="3 4" />
-        <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: 'rgba(30,40,15,.16)' }} tick={{ fill: '#6b7260', fontSize: 12 }} />
-        <YAxis tickFormatter={v => moneyShort(v)} tickLine={false} axisLine={false} width={48} tick={{ fill: '#6b7260', fontSize: 12 }} />
-        <Tooltip cursor={{ fill: 'rgba(35,47,16,.06)', radius: 8 }} isAnimationActive={false} content={({ active, payload }) => active && payload?.length ? <div className="an-tip"><p className="an-tip-d">{(payload[0].payload as Report['weekday'][number]).label}</p><p className="an-tip-v">Sales<b>{money(payload[0].payload.gross)}</b></p><p className="an-tip-v mute">Orders<b>{payload[0].payload.orders}</b></p></div> : null} />
-        <Bar dataKey="gross" radius={[6, 6, 0, 0]} fill="#b9d072" maxBarSize={34} />
+        <CartesianGrid vertical={false} stroke="rgba(26,26,29,.09)" strokeDasharray="3 4" />
+        <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: 'rgba(26,26,29,.16)' }} tick={{ fill: '#64646e', fontSize: 12 }} />
+        <YAxis tickFormatter={v => moneyShort(v)} tickLine={false} axisLine={false} width={48} tick={{ fill: '#64646e', fontSize: 12 }} />
+        <Tooltip cursor={{ fill: 'rgba(30,30,33,.06)', radius: 8 }} isAnimationActive={false} content={({ active, payload }) => active && payload?.length ? <div className="an-tip"><p className="an-tip-d">{(payload[0].payload as Report['weekday'][number]).label}</p><p className="an-tip-v">Sales<b>{money(payload[0].payload.gross)}</b></p><p className="an-tip-v mute">Orders<b>{payload[0].payload.orders}</b></p></div> : null} />
+        <Bar dataKey="gross" radius={[6, 6, 0, 0]} fill="#0ea5a0" maxBarSize={34} />
       </BarChart>
     </ResponsiveContainer></div></div>);
 }

@@ -6,7 +6,7 @@ export function Brand({ name, label, size = 28, title }: { name: string; label?:
   const common = { className: 'mark', style: { width: w, height: size }, role: title ? ('img' as const) : undefined, 'aria-label': title ? (label ?? m.label) : undefined, 'aria-hidden': title ? undefined : (true as const) };
   if (m.kind === 'image') return <span {...common}><img src={m.src} alt="" style={{ height: Math.round(size * 0.78), width: 'auto', maxWidth: '100%' }} /></span>;
   if (m.kind === 'glyph') { const light = isLight(m.hex); return <span {...common}><svg viewBox={m.box.join(' ')} height={Math.round(size * 0.66)} style={{ maxWidth: '100%' }} fill={`#${light ? '1b2410' : m.hex}`} focusable="false"><path d={m.path} /></svg></span>; }
-  const I = m.icon; return <span {...common}><I size={Math.round(size * 0.62)} strokeWidth={1.6} color="#5b6648" aria-hidden /></span>;
+  const I = m.icon; return <span {...common}><I size={Math.round(size * 0.62)} strokeWidth={1.6} color="#53535b" aria-hidden /></span>;
 }
 function isLight(hex: string) { const n = parseInt(hex, 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255; return 0.299 * r + 0.587 * g + 0.114 * b > 200; }
 

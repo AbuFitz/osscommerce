@@ -44,7 +44,7 @@ export function CommandPalette() {
     onKeyDown={e => { if (e.key === 'ArrowDown') { e.preventDefault(); setI(x => Math.min(x + 1, rows.length - 1)); } else if (e.key === 'ArrowUp') { e.preventDefault(); setI(x => Math.max(x - 1, 0)); } else if (e.key === 'Enter') { e.preventDefault(); go(rows[i]); } }}>
     <div className="cmdk-in">
       <div className="cmdk-q"><Search size={18} aria-hidden /><input ref={input} role="combobox" aria-expanded aria-controls="cmdk-list" aria-activedescendant={rows[i] ? `cmdk-${i}` : undefined} value={q} onChange={e => setQ(e.target.value)} placeholder="Search orders, products, customers, or jump to a page" aria-label="Search" autoComplete="off" /><kbd>Esc</kbd></div>
-      <ul id="cmdk-list" role="listbox" className="cmdk-l">
+      <ul id="cmdk-list" role="listbox" className="cmdk-l" data-fade>
         {rows.length === 0 && <li className="cmdk-none">Nothing found for “{q}”. Press Enter to search orders.</li>}
         {rows.map((c, n) => { const head = c.group !== last ? (last = c.group) : null; return (<li key={c.group + c.href + c.label} role="presentation">{head && <div className="cmdk-g">{head}</div>}
           <button id={`cmdk-${n}`} role="option" aria-selected={n === i} type="button" className="cmdk-r" onMouseMove={() => setI(n)} onClick={() => go(c)}><span>{c.label}</span>{c.hint && <small>{c.hint}</small>}</button></li>); })}

@@ -10,8 +10,13 @@ export function Dialog({ open, onClose, title, description, children, footer, ac
   const id = useId();
   useEffect(() => {
     const d = ref.current; if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
+    if (open) { d.removeAttribute('data-closing'); if (!d.open) d.showModal(); return; }
+    if (!d.open) return;
+    // Animate out first (the platform would close it instantly), unless the person prefers less motion.
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { d.close(); return; }
+    d.setAttribute('data-closing', 'true');
+    const t = setTimeout(() => { d.removeAttribute('data-closing'); if (d.open) d.close(); }, 200);
+    return () => clearTimeout(t);
   }, [open]);
   return (
     <dialog ref={ref} className="dlg" aria-labelledby={`${id}-t`} aria-describedby={description ? `${id}-d` : undefined}
@@ -22,7 +27,7 @@ export function Dialog({ open, onClose, title, description, children, footer, ac
           <div><h2 id={`${id}-t`}>{title}</h2>{description && <p id={`${id}-d`} className="muted">{description}</p>}</div>
           <div className="dlg-act">{actions}<button type="button" className="iconbtn sm" onClick={onClose} aria-label="Close"><X size={16} aria-hidden /></button></div>
         </div>
-        <div className="dlg-b">{children}</div>
+        <div className="dlg-b" data-fade>{children}</div>
         {footer && <div className="dlg-f">{footer}</div>}
       </div>
     </dialog>

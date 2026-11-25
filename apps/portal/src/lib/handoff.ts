@@ -20,4 +20,4 @@ export const AVAILABLE = DEMO;       // until the live platform provides storage
 export const callerNow = async (): Promise<Caller> => ({ storeId: 'demo_store', userId: 'demo_owner', role: 'owner' });
 
 export async function origin() { const h = await headers(); const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3100'; const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') || host.startsWith('127.') ? 'http' : 'https'); return `${proto}://${host}`; }
-export const qrSvg = (text: string) => QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#1b2410', light: '#ffffff' } });
+export const qrSvg = (text: string) => QRCode.toString(text, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#19191b', light: '#ffffff' } });

@@ -64,16 +64,16 @@ export function MainChart({ report, initial = 'net' }: { report: Report; initial
         <div className="an-plot" role="img" aria-label={`${m.label} by day from ${fmtDay(report.from)} to ${fmtDay(report.to)}. Total ${fmt(totalOf(report.totals, key), m.money)}. Use the table view for every value.`}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
-              <defs><linearGradient id={`${id}-g`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4a6024" stopOpacity=".34" /><stop offset="100%" stopColor="#4a6024" stopOpacity="0" /></linearGradient></defs>
-              <CartesianGrid vertical={false} stroke="rgba(30,40,15,.09)" strokeDasharray="3 4" />
-              <XAxis dataKey="day" tickFormatter={k => fmtDay(k)} interval="preserveStartEnd" tickLine={false} axisLine={{ stroke: 'rgba(30,40,15,.16)' }} tick={{ fill: '#6b7260', fontSize: 12 }} minTickGap={36} />
-              <YAxis tickFormatter={v => fmt(v, m.money, true)} tickLine={false} axisLine={false} width={m.money ? 52 : 34} tick={{ fill: '#6b7260', fontSize: 12 }} allowDecimals={false} domain={[0, (max: number) => Math.max(max, 1)]} />
-              <Tooltip content={p => <Tip active={p.active} payload={p.payload as ReadonlyArray<{ payload?: unknown }>} metric={m} compare={compare} />} cursor={kind === 'bar' ? { fill: 'rgba(35,47,16,.06)', radius: 8 } : { stroke: '#232f10', strokeWidth: 1, strokeDasharray: '4 3' }} isAnimationActive={false} />
-              {compare && kind !== 'bar' && <Line type="monotone" dataKey="prev" stroke="#9aa08c" strokeWidth={1.6} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={!reduce} />}
-              {compare && kind === 'bar' && <Bar dataKey="prev" fill="#d8dfc6" radius={[5, 5, 0, 0]} maxBarSize={22} isAnimationActive={!reduce} />}
-              {kind === 'area' && <Area type="monotone" dataKey="cur" stroke="#4a6024" strokeWidth={2.4} fill={`url(#${id}-g)`} dot={false} activeDot={{ r: 5, fill: '#fff', stroke: '#232f10', strokeWidth: 2.2 }} isAnimationActive={!reduce} />}
-              {kind === 'line' && <Line type="monotone" dataKey="cur" stroke="#4a6024" strokeWidth={2.6} dot={report.days <= 31 ? { r: 3, fill: '#4a6024', strokeWidth: 0 } : false} activeDot={{ r: 5.5, fill: '#fff', stroke: '#232f10', strokeWidth: 2.2 }} isAnimationActive={!reduce} />}
-              {kind === 'bar' && <Bar dataKey="cur" fill="#4a6024" radius={[5, 5, 0, 0]} maxBarSize={26} isAnimationActive={!reduce} />}
+              <defs><linearGradient id={`${id}-g`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5b5bd6" stopOpacity=".34" /><stop offset="100%" stopColor="#5b5bd6" stopOpacity="0" /></linearGradient></defs>
+              <CartesianGrid vertical={false} stroke="rgba(26,26,29,.09)" strokeDasharray="3 4" />
+              <XAxis dataKey="day" tickFormatter={k => fmtDay(k)} interval="preserveStartEnd" tickLine={false} axisLine={{ stroke: 'rgba(26,26,29,.16)' }} tick={{ fill: '#64646e', fontSize: 12 }} minTickGap={36} />
+              <YAxis tickFormatter={v => fmt(v, m.money, true)} tickLine={false} axisLine={false} width={m.money ? 52 : 34} tick={{ fill: '#64646e', fontSize: 12 }} allowDecimals={false} domain={[0, (max: number) => Math.max(max, 1)]} />
+              <Tooltip content={p => <Tip active={p.active} payload={p.payload as ReadonlyArray<{ payload?: unknown }>} metric={m} compare={compare} />} cursor={kind === 'bar' ? { fill: 'rgba(30,30,33,.06)', radius: 8 } : { stroke: '#1e1e21', strokeWidth: 1, strokeDasharray: '4 3' }} isAnimationActive={false} />
+              {compare && kind !== 'bar' && <Line type="monotone" dataKey="prev" stroke="#91919b" strokeWidth={1.6} strokeDasharray="5 5" dot={false} activeDot={false} isAnimationActive={!reduce} />}
+              {compare && kind === 'bar' && <Bar dataKey="prev" fill="#d0d0d5" radius={[5, 5, 0, 0]} maxBarSize={22} isAnimationActive={!reduce} />}
+              {kind === 'area' && <Area type="monotone" dataKey="cur" stroke="#5b5bd6" strokeWidth={2.4} fill={`url(#${id}-g)`} dot={false} activeDot={{ r: 5, fill: '#fff', stroke: '#1e1e21', strokeWidth: 2.2 }} isAnimationActive={!reduce} />}
+              {kind === 'line' && <Line type="monotone" dataKey="cur" stroke="#5b5bd6" strokeWidth={2.6} dot={report.days <= 31 ? { r: 3, fill: '#3f3f45', strokeWidth: 0 } : false} activeDot={{ r: 5.5, fill: '#fff', stroke: '#1e1e21', strokeWidth: 2.2 }} isAnimationActive={!reduce} />}
+              {kind === 'bar' && <Bar dataKey="cur" fill="#5b5bd6" radius={[5, 5, 0, 0]} maxBarSize={26} isAnimationActive={!reduce} />}
             </ComposedChart>
           </ResponsiveContainer>
           {empty && <div className="an-empty"><b>No sales in this period</b><span>Pick a longer range, or check back after your first order.</span></div>}
