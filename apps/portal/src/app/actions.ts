@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { CustomerProfile, CollectionInput, DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
+import type { ManualOrderInput, CustomerProfile, CollectionInput, DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -169,3 +169,7 @@ export async function deleteCollectionAction(id: string) { return run(() => gate
 export async function addCustomerNoteAction(id: string, text: string) { return run(() => gateway().addCustomerNote(id, text), [`/customers/${id}`]); }
 export async function deleteCustomerNoteAction(id: string, noteId: string) { return run(() => gateway().deleteCustomerNote(id, noteId), [`/customers/${id}`]); }
 export async function updateCustomerProfileAction(id: string, p: CustomerProfile) { return run(() => gateway().updateCustomerProfile(id, p), [`/customers/${id}`, '/customers']); }
+
+// ---- Orders taken by hand ----
+export async function orderFormDataAction() { const g = gateway(); const [items, shipping, customers] = await Promise.all([g.orderableItems(), g.shippingChoices(), g.customers()]); return { items, shipping, customers }; }
+export async function createManualOrderAction(i: ManualOrderInput) { return run(() => gateway().createManualOrder(i), ['/orders', '/', '/inventory', '/customers']); }

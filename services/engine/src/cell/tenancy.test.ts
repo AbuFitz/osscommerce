@@ -191,3 +191,22 @@ test('customer notes: each store notes and clears only its own customers\' notes
   const noteIdB = (await m.B.x(`query($id:ID!){ customer(id:$id){ history(options:{ take: 20 }){ items{ id type } } } }`, { id: cB })).customer.history.items.find((h: any) => h.type === 'CUSTOMER_NOTE').id;
   assert.equal((await m.B.x(`mutation($id:ID!){ deleteCustomerNote(id:$id){ result } }`, { id: noteIdB })).deleteCustomerNote.result, 'DELETED');
 });
+
+test('orders taken by hand: a merchant can take one in their own store, and cannot touch, complete or delete another store\'s draft', async () => {
+  const items = await A.listOrderableItems(m.A.x); const mug = items.find(i => i.sku === 'MUG-A')!; assert.ok(mug);
+  const made = await A.createManualOrder(m.A.x, { customer: { email: 'walkin-a@example.com', firstName: 'Walk', lastName: 'In' }, items: [{ variantId: mug.variantId, qty: 1 }], address: { fullName: 'Walk In', line1: '1 High St', city: 'Watford', postcode: 'WD24 6SX' }, shippingMethodId: (await A.listShippingChoices(m.A.x))[0].id, payment: 'cash' }); assert.equal(made.ok, true, made.message); assert.ok(made.id);
+  const o = (await A.getOrder(m.A.x, made.id!))!; assert.equal(o.payment, 'paid'); assert.equal(o.email, 'walkin-a@example.com');
+  assert.equal((await A.listOrders(m.B.x)).some(x => x.email === 'walkin-a@example.com'), false, 'B never sees A\'s order');
+  // A has a draft that B tries to hijack
+  const draft = (await m.A.x(`mutation{ createDraftOrder{ id } }`)).createDraftOrder.id; await m.A.x(`mutation($o:ID!,$i:AddItemToDraftOrderInput!){ addItemToDraftOrder(orderId:$o, input:$i){ __typename } }`, { o: draft, i: { productVariantId: mug.variantId, quantity: 1 } });
+  const denied = (label: string, r: { denied?: string; data?: unknown }) => assert.equal(r.denied, 'FORBIDDEN', `${label}: ${JSON.stringify(r)}`);
+  denied('add to A\'s draft', await as('B', `mutation($o:ID!,$i:AddItemToDraftOrderInput!){ addItemToDraftOrder(orderId:$o, input:$i){ __typename } }`, { o: draft, i: { productVariantId: mug.variantId, quantity: 1 } }));
+  denied('delete A\'s draft', await as('B', `mutation($o:ID!){ deleteDraftOrder(orderId:$o){ result } }`, { o: draft }));
+  denied('set customer on A\'s draft', await as('B', `mutation($o:ID!,$c:ID!){ setCustomerForDraftOrder(orderId:$o, customerId:$c){ __typename } }`, { o: draft, c: (await A.listCustomers(m.B.x))[0].id }));
+  denied('A\'s customer on B\'s own draft', await (async () => { const bd = (await m.B.x(`mutation{ createDraftOrder{ id } }`)).createDraftOrder.id; return as('B', `mutation($o:ID!,$c:ID!){ setCustomerForDraftOrder(orderId:$o, customerId:$c){ __typename } }`, { o: bd, c: (await A.listCustomers(m.A.x))[0].id }); })());
+  denied('move A\'s draft to payment', await as('B', `mutation($id:ID!){ transitionOrderToState(id:$id, state:"ArrangingPayment"){ __typename } }`, { id: draft }));
+  denied('mark A\'s draft paid', await as('B', `mutation($i:ManualPaymentInput!){ addManualPaymentToOrder(input:$i){ __typename } }`, { i: { orderId: draft, method: 'Cash', transactionId: 'x', metadata: {} } }));
+  // and the one transition a merchant may make is limited to that single state, even on their own order
+  denied('any other state change on their own order', await as('A', `mutation($id:ID!){ transitionOrderToState(id:$id, state:"Cancelled"){ __typename } }`, { id: draft }));
+  assert.equal((await m.A.x(`mutation($o:ID!){ deleteDraftOrder(orderId:$o){ result } }`, { o: draft })).deleteDraftOrder.result, 'DELETED', 'A can delete its own draft');
+});

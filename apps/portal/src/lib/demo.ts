@@ -199,6 +199,24 @@ export const demoGateway: CommerceGateway = {
       const stats = os.length ? { orders: os.length, spentMinor: os.reduce((n, o) => n + o.totalMinor - o.refundedMinor, 0), lastOrder: os.map(o => o.placedAt).sort().at(-1)! } : {};
       return { ...c, ...stats, ...(p ? { name: `${p.firstName} ${p.lastName}`.trim() || c.name } : {}) }; });
   },
+  async orderableItems() { const x = await S(); return x.products.filter(p => p.status === 'published').flatMap(p => detail(x, p).list.filter(v => v.enabled).map(v => ({ variantId: v.id, productId: p.id, title: p.title, variant: v.options.join(' · ') || undefined, sku: v.sku, priceMinor: v.priceMinor, available: Math.max(v.onHand - v.allocated, 0) }))); },
+  async shippingChoices() { return [{ id: 'std', name: 'Standard delivery, 2–4 days' }, { id: 'next', name: 'Next day' }, { id: 'collect', name: 'Collection (free)' }]; },
+  async createManualOrder(i) {
+    const x = await S(); const items = i.items.filter(l => l.qty > 0); if (!items.length) return { ok: false, message: 'Add at least one item.' };
+    if (!i.shippingMethodId) return { ok: false, message: 'Choose a delivery option. For a sale in person, choose Collection.' };
+    if ('email' in i.customer && !/^\S+@\S+\.\S+$/.test(i.customer.email)) return { ok: false, message: 'Enter a valid email address for the customer.' };
+    const all = await demoGateway.orderableItems(); const lines: import('./gateway').OrderLine[] = [];
+    for (const l of items) { const v = all.find(a => a.variantId === l.variantId); if (!v) return { ok: false, message: 'One of the items is not available to sell.' }; if (l.qty > v.available) return { ok: false, message: `Only ${v.available} of ${v.title}${v.variant ? ` (${v.variant})` : ''} in stock.` }; lines.push({ sku: v.sku, title: v.title, variant: v.variant, qty: l.qty, unitMinor: v.priceMinor, sent: 0 }); }
+    let discount = 0; if (i.coupon?.trim()) { const d = x.discounts.find(q => q.code === i.coupon!.trim().toUpperCase() && q.status === 'active'); if (!d) return { ok: false, message: 'That discount code does not work.' }; const sub0 = lines.reduce((n, l) => n + l.qty * l.unitMinor, 0); discount = d.kind === 'percent' ? Math.round(sub0 * d.value / 100) : d.kind === 'fixed' ? Math.min(d.value, sub0) : 0; }
+    const sub = lines.reduce((n, l) => n + l.qty * l.unitMinor, 0); const ship = i.shippingMethodId === 'collect' ? 0 : i.shippingMethodId === 'next' ? 795 : (sub >= 5000 ? 0 : 495); const total = sub - discount + ship;
+    const cust = 'id' in i.customer ? (await demoGateway.customers()).find(c => c.id === (i.customer as { id: string }).id) : null; if ('id' in i.customer && !cust) return { ok: false, message: 'That customer no longer exists.' };
+    const name = cust ? cust.name : `${(i.customer as { firstName: string }).firstName} ${(i.customer as { lastName: string }).lastName}`.trim(); const email = cust ? cust.email : (i.customer as { email: string }).email; const number = Math.max(...x.orders.map(o => o.number)) + 1; const at = new Date(AS_OF).toISOString();
+    const label = { cash: 'cash', card_in_person: 'card, in person', bank_transfer: 'bank transfer', other: 'another way' }[i.payment];
+    x.orders.unshift({ id: `o${number}`, number, placedAt: at, customer: name, email, lines, shippingMinor: ship, discountMinor: discount, taxMinor: Math.round(total / 6), totalMinor: total, payment: 'paid', fulfilment: 'unfulfilled', state: 'open', refundedMinor: 0, shipTo: i.address ? `${i.address.fullName}, ${i.address.line1}, ${i.address.city}, ${i.address.postcode}` : '',
+      timeline: [{ at, text: 'Order placed by hand.' }, { at, text: `Payment received (${label}).` }, ...(i.note?.trim() ? [{ at, text: i.note.trim(), note: true, by: 'Mo' }] : [])] });
+    for (const l of lines) for (const p of x.products) { const d = detail(x, p); const v = d.list.find(q => q.sku === l.sku); if (v) { v.allocated += l.qty; if (p.sku === l.sku) p.allocated += l.qty; } }
+    return { ok: true, id: `o${number}`, message: `Order placed and marked as paid (${label}). Stock is reserved.` };
+  },
   async customer(id) {
     if ((await state()) === 'new') return null; const x = await S(); const base = (await demoGateway.customers()).find(c => c.id === id); if (!base) return null;
     const prof = x.custProfile[id]; const [f, ...r] = base.name.split(' '); const os = x.orders.filter(o => o.email.toLowerCase() === base.email.toLowerCase()); const sales = os.filter(o => o.payment !== 'failed');

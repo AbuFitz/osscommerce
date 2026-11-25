@@ -40,3 +40,11 @@ test('with several operators and none matching, it refuses to guess', async () =
   await admins.create(ctx, { emailAddress: 'another-operator', firstName: 'A', lastName: 'O', password: 'fourth-long-password-4', roleIds: [sa.id] });
   await assert.rejects(sync('nobody', 'x-long-password-5'), /none is named like/);
 });
+
+test('merchant roles are brought up to date; the operator and unrelated roles are left alone', async () => {
+  const { syncMerchantRoles } = await import('./role-sync.ts'); const { Role, Permission } = await import('@vendure/core'); const { MERCHANT_PERMISSIONS } = await import('./merchant-role.ts'); const repo = server.app.get(TransactionalConnection).rawConnection.getRepository(Role);
+  await repo.save(repo.create({ code: 'owner-x', description: 'old store', permissions: [Permission.ReadCatalog] })); await repo.save(repo.create({ code: 'staff-reader', description: 'someone else', permissions: [Permission.ReadCatalog] }));
+  const ch = await syncMerchantRoles(server.app.get(TransactionalConnection)); assert.deepEqual(ch, ['owner-x']);
+  assert.deepEqual([...(await repo.findOneByOrFail({ code: 'owner-x' })).permissions].sort(), [...MERCHANT_PERMISSIONS].sort()); assert.deepEqual((await repo.findOneByOrFail({ code: 'staff-reader' })).permissions, [Permission.ReadCatalog]);
+  assert.deepEqual(await syncMerchantRoles(server.app.get(TransactionalConnection)), [], 'a second pass changes nothing');
+});

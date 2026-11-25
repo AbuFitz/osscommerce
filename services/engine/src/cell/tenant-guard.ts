@@ -13,11 +13,11 @@ import type { EntityTarget } from 'typeorm';
  */
 export const MERCHANT_QUERIES = new Set(['activeAdministrator', 'activeChannel', 'product', 'products', 'productVariant', 'productVariants', 'order', 'orders', 'customer', 'customers', 'collection', 'collections', 'previewCollectionVariants', 'taxCategories', 'asset', 'assets', 'facets', 'promotions', 'promotion', 'stockLocations', 'shippingMethod', 'shippingMethods', 'countries', 'search']);
 export const MERCHANT_MUTATIONS = new Set(['createProduct', 'updateProduct', 'deleteProduct', 'createProductOptionGroup', 'addOptionGroupToProduct', 'createProductVariants', 'updateProductVariants', 'deleteProductVariant', 'createCollection', 'updateCollection', 'deleteCollection',
-  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'addNoteToCustomer', 'deleteCustomerNote', 'createPromotion', 'updatePromotion', 'deletePromotion',
+  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'addNoteToCustomer', 'deleteCustomerNote', 'createDraftOrder', 'deleteDraftOrder', 'addItemToDraftOrder', 'adjustDraftOrderLine', 'removeDraftOrderLine', 'setCustomerForDraftOrder', 'setDraftOrderShippingAddress', 'setDraftOrderShippingMethod', 'applyCouponCodeToDraftOrder', 'removeCouponCodeFromDraftOrder', 'transitionOrderToState', 'addManualPaymentToOrder', 'createPromotion', 'updatePromotion', 'deletePromotion',
   'createShippingMethod', 'updateShippingMethod', 'deleteShippingMethod']);
 
 type Via = 'direct' | 'order' | 'optionGroup' | 'customerNote';
-type Check = { entity: EntityTarget<any>; ids: (a: any) => unknown[]; via?: Via };
+type Check = { entity: EntityTarget<any>; ids: (a: any) => unknown[]; via?: Via; /** The request is refused outright unless this holds. */ when?: (a: any) => boolean };
 const arr = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const inp = (a: any) => a?.input;
 /** Customer groups are deliberately NOT offered to merchants: in this Vendure they are global to the engine (no channel), so one store could see or change another's.
@@ -35,6 +35,15 @@ export const OWNERSHIP: Record<string, Check[]> = {
   updateCollection: [{ entity: Collection, ids: a => arr(inp(a)?.id) }, { entity: Asset, ids: a => photos(inp(a)) }], deleteCollection: [{ entity: Collection, ids: a => arr(a?.id) }],
   updateAsset: [{ entity: Asset, ids: a => arr(inp(a)?.id) }], deleteAssets: [{ entity: Asset, ids: a => arr(inp(a)?.assetIds) }],
   updateCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
+  deleteDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }],
+  addItemToDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }], adjustDraftOrderLine: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: OrderLine, ids: a => arr(a?.input?.orderLineId), via: 'order' }],
+  removeDraftOrderLine: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: OrderLine, ids: a => arr(a?.orderLineId), via: 'order' }],
+  setCustomerForDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: Customer, ids: a => arr(a?.customerId) }],
+  setDraftOrderShippingAddress: [{ entity: Order, ids: a => arr(a?.orderId) }], setDraftOrderShippingMethod: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: ShippingMethod, ids: a => arr(a?.shippingMethodId) }],
+  applyCouponCodeToDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }], removeCouponCodeFromDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }],
+  // Only the one step a hand-made order needs: Draft to ArrangingPayment. Any other state change stays with the platform.
+  transitionOrderToState: [{ entity: Order, ids: a => arr(a?.id), when: a => a?.state === 'ArrangingPayment' }],
+  addManualPaymentToOrder: [{ entity: Order, ids: a => arr(inp(a)?.orderId) }],
   addNoteToCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
   deleteCustomerNote: [{ entity: CustomerHistoryEntry, ids: a => arr(a?.id), via: 'customerNote' }],
   updatePromotion: [{ entity: Promotion, ids: a => arr(inp(a)?.id) }], deletePromotion: [{ entity: Promotion, ids: a => arr(a?.id) }],
@@ -67,6 +76,7 @@ export class TenantGuard implements NestInterceptor {
     return this.conn.getRepository(ctx, entity as any).createQueryBuilder('e').innerJoin('e.channels', 'ch').where('e.id IN (:...ids)', { ids }).andWhere('ch.id = :cid', { cid: ctx.channelId }).getCount();
   }
   private async assertOwned(ctx: RequestContext, c: Check, args: any) {
+    if (c.when && !c.when(args)) throw new ForbiddenError();
     const ids = uniq(c.ids(args)); if (!ids.length) return;
     if (c.via === 'optionGroup') {
       // Option groups are not channel-aware. One already attached to another store's product must not be re-used here.

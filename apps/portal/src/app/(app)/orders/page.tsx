@@ -15,7 +15,7 @@ export default async function Orders({ searchParams }: { searchParams: Promise<{
   const open = all.filter(o => o.state === 'open').length;
   return (
     <>
-      <Header title="Orders" eyebrow={`${all.length} orders · ${open} to fulfil`}><Link className="btn" href="/orders?filter=refunded">Refunds</Link></Header>
+      <Header title="Orders" eyebrow={`${all.length} orders · ${open} to fulfil`}><Link className="btn" href="/orders?filter=refunded">Refunds</Link><Link className="btn primary" href="/orders/new">Create order</Link></Header>
       <div className="toolbar">
         <nav className="seg" aria-label="Filter orders">{FILTERS.map(([v, l]) => <Link key={v} href={v ? `/orders?filter=${v}` : '/orders'} aria-current={filter === v}>{l}</Link>)}</nav>
         <form className="searchpill" role="search" action="/orders" style={{ width: 'min(320px,100%)' }}>

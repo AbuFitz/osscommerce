@@ -140,3 +140,11 @@ Findings worth keeping:
 - Provisioning now re-syncs an existing store's role permissions, so existing stores pick up new features.
 
 Not done in Phase 1: rich-text descriptions, product tags and duplicate, phone photo hand-off in the new editor, resend order confirmation, bulk fulfil, customer create/import/merge.
+
+
+## Progress log (Phase 2)
+- **Orders taken by hand** (phone, message, in person): create, fill, record payment (cash, card in person, bank transfer, other) and place in one step, with stock reserved. Failures delete the draft, so nothing half-made is left. Vendure requires a delivery option to take payment, so the form requires one (a free "Collection" option is used for sales in person). Manual payments are recorded as received: they do not go through Stripe, so they carry no platform fee.
+- **Guard**: the draft-order operations are opened with ownership checks on every order, line, customer and delivery method named; `transitionOrderToState` is limited to the single step a hand-made order needs. Tested against a second store.
+- **Merchant roles now sync at every start**, so new permissions reach existing stores without re-provisioning.
+
+Next in Phase 2: edit an order after it is placed, stock locations and stock history, returns, delivery rules by weight/value/postcode, abandoned checkouts, staff roles.

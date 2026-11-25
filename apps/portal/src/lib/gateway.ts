@@ -22,6 +22,15 @@ export interface CustomerDetail extends Customer {
   firstName: string; lastName: string; phone: string; since: string; addresses: string[]; aovMinor: number;
   recentOrders: { id: string; number: number; placedAt: string; totalMinor: number; payment: PaymentStatus; fulfilment: FulfilmentStatus; items: string }[]; notes: CustomerNote[];
 }
+/** One thing that can go on a hand-made order. */
+export interface OrderableItem { variantId: string; productId: string; title: string; variant?: string; sku: string; priceMinor: number; available: number }
+export interface ManualOrderInput {
+  customer: { id: string } | { email: string; firstName: string; lastName: string; phone?: string };
+  items: { variantId: string; qty: number }[];
+  shippingMethodId?: string; address?: { fullName: string; line1: string; line2?: string; city: string; postcode: string };
+  coupon?: string; note?: string; payment: 'cash' | 'card_in_person' | 'bank_transfer' | 'other';
+}
+export interface ShippingChoice { id: string; name: string }
 export interface CustomerProfile { firstName: string; lastName: string; phone: string }
 export interface SalesPoint { day: string; netMinor: number; grossMinor: number }
 export interface Summary { netMinor: number; grossMinor: number; orders: number; aovMinor: number; refundedMinor: number; toFulfil: number; lowStock: number; fulfilled: number; paidOrders: number; series: SalesPoint[]; topProducts: { title: string; netMinor: number }[]; statusMix: { label: string; count: number }[]; asOf: string }
@@ -111,6 +120,11 @@ export interface CommerceGateway {
   customers(): Promise<Customer[]>;
   customer(id: string): Promise<CustomerDetail | null>;
   addCustomerNote(customerId: string, text: string): Promise<MutationResult>;
+  /** Everything you can put on a hand-made order, with its price and what is in stock. */
+  orderableItems(): Promise<OrderableItem[]>;
+  shippingChoices(): Promise<ShippingChoice[]>;
+  /** Takes an order yourself (phone, shop, message) and records how it was paid. Created and paid in one step; stock is reserved at once. */
+  createManualOrder(i: ManualOrderInput): Promise<MutationResult>;
   deleteCustomerNote(customerId: string, noteId: string): Promise<MutationResult>;
   updateCustomerProfile(customerId: string, p: CustomerProfile): Promise<MutationResult>;
   discounts(): Promise<Discount[]>;

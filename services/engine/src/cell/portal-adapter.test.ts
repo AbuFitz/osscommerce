@@ -211,3 +211,23 @@ test('customer detail: history, totals, addresses, private notes and profile edi
   const up = await A.updateCustomerProfile(x, maya.id, { firstName: 'Maya', lastName: 'Okafor-Lee', phone: '07700 900123' }); assert.equal(up.ok, true, up.message);
   const after = (await A.getCustomer(x, maya.id))!; assert.equal(after.lastName, 'Okafor-Lee'); assert.equal(after.phone, '07700 900123'); assert.equal(after.email, 'maya@example.com', 'the email, which is the login, is not changed');
 });
+
+test('orders by hand: created, filled, paid and placed in one step, with stock reserved and failures leaving nothing behind', async () => {
+  const items = await A.listOrderableItems(x); const mug = items.find(i => i.sku === 'MUG-1')!; assert.ok(mug); const drafts = async () => (await x(`query{ orders(options:{ filter:{ state:{ eq:"Draft" } } }){ totalItems } }`)).orders.totalItems as number;
+  const before = (await A.listProducts(x)).find(p => p.sku === 'MUG-1')!; const startDrafts = await drafts();
+  const shipping = (await A.listShippingChoices(x))[0];
+  const made = await A.createManualOrder(x, { customer: { email: 'phone-order@example.com', firstName: 'Pat', lastName: 'Jones', phone: '07700 900111' }, items: [{ variantId: mug.variantId, qty: 2 }], address: { fullName: 'Pat Jones', line1: '5 Mill Lane', city: 'Bristol', postcode: 'BS1 4AX' }, shippingMethodId: shipping?.id, note: 'Took this over the phone.', payment: 'bank_transfer' });
+  assert.equal(made.ok, true, made.message); const o = (await A.getOrder(x, made.id!))!;
+  assert.equal(o.payment, 'paid'); assert.equal(o.email, 'phone-order@example.com'); assert.equal(o.lines[0].qty, 2); assert.equal(o.lines[0].sku, 'MUG-1'); assert.ok(o.timeline.some(t => t.note && /over the phone/.test(t.text))); assert.match(o.shipTo, /Bristol/);
+  assert.ok((await A.listOrders(x)).some(r => r.id === made.id), 'it appears in the orders list'); assert.equal((await A.listProducts(x)).find(p => p.sku === 'MUG-1')!.allocated, before.allocated + 2, 'two units reserved');
+  assert.equal((await A.listCustomers(x)).some(c => c.email === 'phone-order@example.com'), true, 'the new customer was created');
+  // an existing customer
+  const maya = (await A.listCustomers(x)).find(c => c.email === 'maya@example.com')!; const again = await A.createManualOrder(x, { customer: { id: maya.id }, items: [{ variantId: mug.variantId, qty: 1 }], shippingMethodId: shipping.id, payment: 'cash' }); assert.equal(again.ok, true, again.message);
+  // refusals
+  assert.equal((await A.createManualOrder(x, { customer: { id: maya.id }, items: [], payment: 'cash' })).ok, false);
+  const tooMany = await A.createManualOrder(x, { customer: { id: maya.id }, items: [{ variantId: mug.variantId, qty: mug.available + 50 }], shippingMethodId: shipping.id, payment: 'cash' }); assert.equal(tooMany.ok, false); assert.match(tooMany.message, /Only \d+ of/);
+  assert.equal((await A.createManualOrder(x, { customer: { email: 'not-an-email', firstName: 'a', lastName: 'b' }, items: [{ variantId: mug.variantId, qty: 1 }], shippingMethodId: shipping.id, payment: 'cash' })).ok, false);
+  const noShipping = await A.createManualOrder(x, { customer: { id: maya.id }, items: [{ variantId: mug.variantId, qty: 1 }], payment: 'cash' }); assert.equal(noShipping.ok, false); assert.match(noShipping.message, /delivery option/);
+  const badCoupon = await A.createManualOrder(x, { customer: { id: maya.id }, items: [{ variantId: mug.variantId, qty: 1 }], coupon: 'NOSUCHCODE', shippingMethodId: shipping.id, payment: 'cash' }); assert.equal(badCoupon.ok, false);
+  assert.equal(await drafts(), startDrafts, 'a failed order leaves no half-made draft behind');
+});

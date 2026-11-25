@@ -16,6 +16,7 @@ import { buildCellConfig } from './cell/config.ts';
 import { CellPlugin, vendureWebhookDeps, type CheckoutGate } from './cell/plugin.ts';
 import { liveStripe } from './cell/stripe-live.ts';
 import { MERCHANT_PERMISSIONS } from './cell/merchant-role.ts';
+import { syncMerchantRoles } from './cell/role-sync.ts';
 import { syncSuperadmin } from './cell/superadmin-sync.ts';
 import { PackRefillPlugin } from './cell/pack-refill.ts';
 import { CatalogueFieldsPlugin } from './cell/catalogue-fields.ts';
@@ -101,6 +102,7 @@ async function setup() {
   const app = await bootstrap(config());
   try { const c = await syncSuperadmin(app.get(TransactionalConnection), app.get(PasswordCipher), env.SUPERADMIN_USER, env.SUPERADMIN_PASSWORD); const did = [c.identifier && 'username updated', c.password && 'password updated', c.retired.length && `retired ${c.retired.length} old operator account${c.retired.length > 1 ? 's' : ''} (${c.retired.join(', ')})`].filter(Boolean); if (did.length) console.log(`platform operator sign-in synced from the environment: ${did.join('; ')}`); }
   catch (e) { console.error(`PLATFORM OPERATOR SYNC FAILED, sign-in unchanged: ${e instanceof Error ? e.message : e}`); }  // loud, but never takes the shop down
+  try { const ch = await syncMerchantRoles(app.get(TransactionalConnection)); if (ch.length) console.log(`merchant permissions brought up to date for: ${ch.join(', ')}`); } catch (e) { console.error(`MERCHANT ROLE SYNC FAILED: ${e instanceof Error ? e.message : e}`); }
   await wire(app);
   if (assets) void checkAssetStorage(assets).then(r => console.log(`asset storage check: ${r.ok ? 'OK' : 'FAILED'}, ${r.detail}`));
   if (extra.MODE === 'both') await app.get(JobQueueService).start();

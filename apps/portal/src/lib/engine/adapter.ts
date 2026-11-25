@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile } from '../gateway';
+import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice } from '../gateway';
 import { createProductWithVariants, findTaxCategories, previewCollection, type Exec } from './catalogue';
 import { slugify } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from '../discounts';
@@ -420,4 +420,43 @@ export async function updateCustomerProfile(x: Exec, id: string, p: CustomerProf
     const r = (await x(`mutation($i: UpdateCustomerInput!){ updateCustomer(input:$i){ __typename ... on Customer{ id } ... on ErrorResult{ message } } }`, { i: { id, firstName: p.firstName.trim(), lastName: p.lastName.trim(), phoneNumber: p.phone.trim() } })).updateCustomer;
     return r.__typename === 'Customer' ? { ok: true, message: 'Customer details saved.' } : { ok: false, message: r.message ?? 'The details could not be saved.' };
   } catch (e) { return fail(e); }
+}
+
+// ---- Orders taken by hand ----
+export async function listOrderableItems(x: Exec): Promise<OrderableItem[]> {
+  const r = (await x(`query{ products(options:{ take: 500, sort:{ name:ASC }, filter:{ enabled:{ eq:true } } }){ items{ id name variants{ id sku name enabled priceWithTax stockOnHand stockAllocated outOfStockThreshold } } } }`)).products.items as { id: string; name: string; variants: { id: string; sku: string; name: string; enabled: boolean; priceWithTax: number; stockOnHand: number; stockAllocated: number }[] }[];
+  return r.flatMap(p => p.variants.filter(v => v.enabled).map(v => ({ variantId: v.id, productId: p.id, title: p.name, variant: v.name.startsWith(p.name) ? v.name.slice(p.name.length).trim() || undefined : v.name, sku: v.sku, priceMinor: v.priceWithTax, available: Math.max(v.stockOnHand - v.stockAllocated, 0) })));
+}
+export async function listShippingChoices(x: Exec): Promise<ShippingChoice[]> { return ((await x(`query{ shippingMethods(options:{ take: 50 }){ items{ id name } } }`)).shippingMethods.items as ShippingChoice[]).map(m => ({ id: m.id, name: m.name })); }
+const PAY_LABEL = { cash: 'Cash', card_in_person: 'Card, in person', bank_transfer: 'Bank transfer', other: 'Paid another way' } as const;
+/**
+ * Creates a draft order, fills it in, then takes the payment you say you received and places it. If any step fails the draft is deleted,
+ * so a half-made order is never left behind. Manual payments are recorded as received; they do not go through Stripe, so they carry no platform fee.
+ */
+export async function createManualOrder(x: Exec, i: ManualOrderInput): Promise<MutationResult> {
+  let draft: string | undefined;
+  try {
+    const items = i.items.filter(l => l.qty > 0); if (!items.length) return { ok: false, message: 'Add at least one item.' };
+    if (items.some(l => !Number.isInteger(l.qty) || l.qty > 999)) return { ok: false, message: 'Quantities must be whole numbers up to 999.' };
+    if (!PAY_LABEL[i.payment]) return { ok: false, message: 'Choose how it was paid.' };
+    if (!i.shippingMethodId) return { ok: false, message: 'Choose a delivery option. For a sale in person, add a free "Collection" option under Settings, then Delivery, and choose that.' };
+    if ('email' in i.customer && !/^\S+@\S+\.\S+$/.test(i.customer.email)) return { ok: false, message: 'Enter a valid email address for the customer.' };
+    // Stock first, so the merchant hears "only 2 left" instead of a failed order.
+    const stock = new Map((await listOrderableItems(x)).map(v => [v.variantId, v])); for (const l of items) { const v = stock.get(l.variantId); if (!v) return { ok: false, message: 'One of the items is not available to sell.' }; if (l.qty > v.available) return { ok: false, message: `Only ${v.available} of ${v.title}${v.variant ? ` (${v.variant})` : ''} in stock.` }; }
+    draft = (await x(`mutation{ createDraftOrder{ id } }`)).createDraftOrder.id as string;
+    for (const l of items) { const r = (await x(`mutation($o:ID!,$i:AddItemToDraftOrderInput!){ addItemToDraftOrder(orderId:$o, input:$i){ __typename ... on ErrorResult{ message } } }`, { o: draft, i: { productVariantId: l.variantId, quantity: l.qty } })).addItemToDraftOrder; if (r.__typename !== 'Order') throw new Error(r.message ?? 'An item could not be added.'); }
+    const c = (await x(`mutation($o:ID!,$id:ID,$in:CreateCustomerInput){ setCustomerForDraftOrder(orderId:$o, customerId:$id, input:$in){ __typename ... on ErrorResult{ message } } }`, { o: draft, ...('id' in i.customer ? { id: i.customer.id } : { in: { emailAddress: i.customer.email.trim(), firstName: i.customer.firstName.trim() || 'Customer', lastName: i.customer.lastName.trim() || '-', phoneNumber: i.customer.phone?.trim() || undefined } }) })).setCustomerForDraftOrder;
+    if (c.__typename !== 'Order') throw new Error(c.message ?? 'The customer could not be set.');
+    if (i.address) await x(`mutation($o:ID!,$i:CreateAddressInput!){ setDraftOrderShippingAddress(orderId:$o, input:$i){ id } }`, { o: draft, i: { fullName: i.address.fullName, streetLine1: i.address.line1, streetLine2: i.address.line2 || undefined, city: i.address.city, postalCode: i.address.postcode, countryCode: 'GB' } });
+    if (i.shippingMethodId) { const r = (await x(`mutation($o:ID!,$s:ID!){ setDraftOrderShippingMethod(orderId:$o, shippingMethodId:$s){ __typename ... on ErrorResult{ message } } }`, { o: draft, s: i.shippingMethodId })).setDraftOrderShippingMethod; if (r.__typename !== 'Order') throw new Error(r.message ?? 'That delivery option does not apply to this order.'); }
+    if (i.coupon?.trim()) { const r = (await x(`mutation($o:ID!,$c:String!){ applyCouponCodeToDraftOrder(orderId:$o, couponCode:$c){ __typename ... on ErrorResult{ message } } }`, { o: draft, c: i.coupon.trim().toUpperCase() })).applyCouponCodeToDraftOrder; if (r.__typename !== 'Order') throw new Error(r.message ?? 'That discount code does not work.'); }
+    const t = (await x(`mutation($id:ID!){ transitionOrderToState(id:$id, state:"ArrangingPayment"){ __typename ... on OrderStateTransitionError{ message transitionError } } }`, { id: draft })).transitionOrderToState; if (t.__typename !== 'Order') throw new Error(t.transitionError ?? t.message ?? 'The order could not be prepared for payment.');
+    const p = (await x(`mutation($i:ManualPaymentInput!){ addManualPaymentToOrder(input:$i){ __typename ... on Order{ id code state } ... on ErrorResult{ message } } }`, { i: { orderId: draft, method: PAY_LABEL[i.payment], transactionId: `manual-${Date.now().toString(36)}`, metadata: {} } })).addManualPaymentToOrder; if (p.__typename !== 'Order') throw new Error(p.message ?? 'The payment could not be recorded.');
+    const placed = draft; draft = undefined;
+    if (i.note?.trim()) await x(`mutation($i: AddNoteToOrderInput!){ addNoteToOrder(input:$i){ id } }`, { i: { id: placed, note: i.note.trim().slice(0, 2000), isPublic: false } });
+    return { ok: true, id: placed, message: `Order placed and marked as paid (${PAY_LABEL[i.payment].toLowerCase()}). Stock is reserved.` };
+  } catch (e) {
+    if (draft) { try { await x(`mutation($id:ID!){ deleteDraftOrder(orderId:$id){ result } }`, { id: draft }); } catch { /* the draft can be removed later; nothing was charged */ } }
+    return fail(e);
+  }
 }
