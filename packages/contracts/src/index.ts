@@ -62,3 +62,4 @@ export * from './plans';
 export * from './catalogue.ts';
 export * from './postcode.ts';
 export * from './fees.ts';
+export { sanitizeRichText, toRichText, plainText, safeHref, MAX_RICH_TEXT } from './rich-text.ts';

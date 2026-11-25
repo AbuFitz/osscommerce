@@ -4,7 +4,7 @@ import { LAUNCH_PLAN } from '@oss-commerce/contracts';
 import { orderPoints, recentOrders } from './geo/points';
 import { splitRegions, validateRate } from './delivery';
 import { GATE_COPY, LAUNCH_GATES, ROLE_INFO, type ActivityEntry, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
-import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
+import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft, sanitizeRichText } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from './discounts';
 import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus, type LogEntry } from './stock';
 
@@ -522,13 +522,13 @@ export const demoGateway: CommerceGateway = {
     if (p.compareAtMinor && p.compareAtMinor <= p.priceMinor) return { ok: false, message: 'The compare-at price must be higher than the price.' };
     const id = `p${Date.now().toString(36)}`; x.products.unshift({ id, title: p.title.trim(), status: p.status, sku, priceMinor: p.priceMinor, onHand: p.onHand, allocated: 0, threshold: 5, variants: 1 });
     x.variants[id] = { groups: [], list: [{ id: `${id}v0`, options: [], sku, priceMinor: p.priceMinor, onHand: p.onHand, allocated: 0, taxClass: p.taxClass ?? 'standard', enabled: true, weightGrams: p.weightGrams, compareAtMinor: p.compareAtMinor, barcode: p.barcode }] };
-    x.meta[id] = { description: p.description ?? '', handle: (p.handle || p.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), seoTitle: p.seoTitle ?? '', seoDescription: p.seoDescription ?? '', images: [] };
+    x.meta[id] = { description: sanitizeRichText(p.description ?? ''), handle: (p.handle || p.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), seoTitle: p.seoTitle ?? '', seoDescription: p.seoDescription ?? '', images: [] };
     return { ok: true, id, message: p.status === 'published' ? `${p.title} is published.` : `${p.title} saved as a draft.` };
   },
   async updateProduct(id, e) {
     const x = await S(); const p = x.products.find(q => q.id === id); if (!p) return { ok: false, message: 'Product not found.' }; if (!e.title.trim()) return { ok: false, message: 'A product needs a name.' };
     const handle = (e.handle || e.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); if (x.products.some(q => q.id !== id && x.meta[q.id]?.handle === handle)) return { ok: false, message: `The web address "${handle}" is already used by another product.` };
-    p.title = e.title.trim(); p.status = e.status; Object.assign(metaOf(x, p), { description: e.description, handle, seoTitle: e.seoTitle.trim(), seoDescription: e.seoDescription.trim() });
+    p.title = e.title.trim(); p.status = e.status; Object.assign(metaOf(x, p), { description: sanitizeRichText(e.description), handle, seoTitle: e.seoTitle.trim(), seoDescription: e.seoDescription.trim() });
     return { ok: true, message: e.status === 'published' ? 'Saved. This product is on your store.' : 'Saved as a draft. It is hidden from your store.' };
   },
   async deleteProduct(id) {

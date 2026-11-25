@@ -346,3 +346,12 @@ test('emailed links: an invitation works once, for one store, and a reset never 
   assert.equal((await callAs('A', RESET, { e: 'owner-a@example.com' })).data.requestStaffPasswordReset, true); assert.ok(await tokenOf('staff.password_reset', 'owner-a@example.com'));
   let limited = false; for (let i = 0; i < 6; i++) if ((await callAs('A', RESET, { e: 'spam@a.test' })).errors?.[0]?.message.startsWith('Too many')) limited = true; assert.ok(limited, 'repeated reset requests are stopped');
 });
+
+test('rich text: a product description is cleaned to the safe subset however it was written', async () => {
+  const id = ids.A.product; const set = (d: string) => m.A.x(`mutation($i:UpdateProductInput!){ updateProduct(input:$i){ id } }`, { i: { id, translations: [{ languageCode: 'en', description: d }] } });
+  const read = async () => (await m.A.x(`query($id:ID!){ product(id:$id){ description } }`, { id })).product.description as string;
+  const until = async (ok: (v: string) => boolean) => { let v = await read(); for (let i = 0; i < 20 && !ok(v); i++) { await new Promise(r => setTimeout(r, 100)); v = await read(); } return v; };
+  await set('<p>Fine <strong>mug</strong></p><script>alert(1)</script><img src=x onerror=alert(1)><a href="javascript:alert(1)">bad</a>');
+  assert.equal(await until(v => !v.includes('script')), '<p>Fine <strong>mug</strong></p>bad', 'script, handlers and script links are gone; the words stay');
+  await set('Plain text\n\nSecond paragraph'); assert.equal(await until(v => v.startsWith('<p>')), '<p>Plain text</p><p>Second paragraph</p>', 'old plain text becomes paragraphs');
+});

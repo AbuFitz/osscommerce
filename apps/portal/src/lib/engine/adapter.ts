@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { bandsFromJson, bandsJson, exclusionsFor, splitRegions, validateRate } from '../delivery';
 import type { RateWhen, ZoneRate, OrderEditApply, OrderEditInput, OrderEditPreview, Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice, StockRow, StockDetail, StockMove, VariantStockAdjust, StockSettings, StockCountResult } from '../gateway';
 import { createProductWithVariants, findTaxCategories, previewCollection, type Exec } from './catalogue';
-import { slugify } from '@oss-commerce/contracts';
+import { sanitizeRichText, slugify } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from '../discounts';
 import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus } from '../stock';
 
@@ -277,7 +277,7 @@ const errorResult = (r: { __typename?: string; message?: string } | null | undef
 export async function addProduct(x: Exec, p: NewProduct): Promise<MutationResult> {
   try { const sku = (p.sku || p.title.replace(/[^a-z0-9]+/gi, '-').slice(0, 12)).toUpperCase();
     const taken = (await x(`query($s:String!){ productVariants(options:{ filter:{ sku:{ eq:$s } }, take:1 }){ totalItems } }`, { s: sku })).productVariants.totalItems; if (taken) return { ok: false, message: `SKU ${sku} is already used by another product.` };
-    const id = await createProductWithVariants(x, { title: p.title, slug: p.handle || undefined, description: p.description, seoTitle: p.seoTitle, seoDescription: p.seoDescription, enabled: p.status === 'published', optionGroups: [], variants: [{ options: [], sku, priceMinor: p.priceMinor, stock: p.onHand, taxClass: p.taxClass, weightGrams: p.weightGrams, compareAtMinor: p.compareAtMinor, barcode: p.barcode }] });
+    const id = await createProductWithVariants(x, { title: p.title, slug: p.handle || undefined, description: sanitizeRichText(p.description ?? ''), seoTitle: p.seoTitle, seoDescription: p.seoDescription, enabled: p.status === 'published', optionGroups: [], variants: [{ options: [], sku, priceMinor: p.priceMinor, stock: p.onHand, taxClass: p.taxClass, weightGrams: p.weightGrams, compareAtMinor: p.compareAtMinor, barcode: p.barcode }] });
     return { ok: true, id, message: p.status === 'published' ? `${p.title} is published.` : `${p.title} saved as a draft.` };
   } catch (e) { return fail(e); }
 }
@@ -286,7 +286,7 @@ export async function updateProduct(x: Exec, id: string, e: ProductEdit): Promis
   try {
     if (!e.title.trim()) return { ok: false, message: 'A product needs a name.' };
     const handle = e.handle.trim() ? slugify(e.handle) : slugify(e.title);
-    const r = (await x(`mutation($i: UpdateProductInput!){ updateProduct(input:$i){ id } }`, { i: { id, enabled: e.status === 'published', translations: [{ languageCode: 'en', name: e.title.trim(), slug: handle, description: e.description }], customFields: { seoTitle: e.seoTitle.trim() || null, seoDescription: e.seoDescription.trim() || null } } })).updateProduct;
+    const r = (await x(`mutation($i: UpdateProductInput!){ updateProduct(input:$i){ id } }`, { i: { id, enabled: e.status === 'published', translations: [{ languageCode: 'en', name: e.title.trim(), slug: handle, description: sanitizeRichText(e.description) }], customFields: { seoTitle: e.seoTitle.trim() || null, seoDescription: e.seoDescription.trim() || null } } })).updateProduct;
     return r?.id ? { ok: true, message: e.status === 'published' ? 'Saved. This product is on your store.' : 'Saved as a draft. It is hidden from your store.' } : { ok: false, message: 'The product could not be saved.' };
   } catch (err) { return fail(err); }
 }

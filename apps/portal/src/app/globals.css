@@ -834,3 +834,12 @@ html{scroll-padding-top:84px}
 @media(max-width:560px){.act-list li{flex-wrap:wrap}.act-list time{width:100%;padding-left:21px}}
 .err{color:#e11d48;margin:0;font-size:13.5px}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:420px){.two{grid-template-columns:1fr}}
 .actf{display:flex;gap:8px;align-items:center;margin-left:auto}.actf .field{margin:0;min-width:150px}.wh:has(.actf){flex-wrap:wrap;gap:10px}
+
+/* Description editor */
+.rte{border:1px solid var(--line,rgba(120,120,140,.3));border-radius:16px;background:var(--field,rgba(255,255,255,.6));overflow:hidden}.rte:focus-within{border-color:var(--ac,#6366f1);box-shadow:0 0 0 3px color-mix(in srgb,var(--ac,#6366f1) 20%,transparent)}
+.rte-bar{display:flex;flex-wrap:wrap;gap:2px;padding:6px;border-bottom:1px solid var(--line,rgba(120,120,140,.2))}
+.rte-b{width:36px;height:36px;border-radius:10px;border:0;background:transparent;display:grid;place-items:center;color:inherit;cursor:pointer}.rte-b:hover{background:rgba(120,120,140,.14)}.rte-b[aria-pressed=true]{background:color-mix(in srgb,var(--ac,#6366f1) 18%,transparent);color:var(--ac,#6366f1)}
+@media(pointer:coarse){.rte-b{width:42px;height:42px}}
+.rte-link{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line,rgba(120,120,140,.2))}.rte-link input{flex:1;min-width:160px;height:36px;border-radius:10px;border:1px solid var(--line,rgba(120,120,140,.3));padding:0 10px;background:transparent;color:inherit}
+.rte-body{min-height:150px;max-height:420px;overflow:auto;padding:12px 14px;outline:0;line-height:1.55}.rte-body p{margin:0 0 .7em}.rte-body h2{font-size:1.15em;margin:.9em 0 .4em}.rte-body ul,.rte-body ol{margin:0 0 .7em;padding-left:1.4em}.rte-body blockquote{margin:0 0 .7em;padding-left:12px;border-left:3px solid var(--ac,#6366f1);color:var(--muted,#8a8a97)}.rte-body a{color:var(--ac,#6366f1);text-decoration:underline}
+.rte-body p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:var(--muted,#8a8a97);float:left;height:0;pointer-events:none}

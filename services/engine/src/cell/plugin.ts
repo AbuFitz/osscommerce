@@ -10,6 +10,7 @@ import { STOCK_RESOLVERS, stockApiExtensions } from './stock-extension.ts';
 import { StaffResolver, StaffService, staffApiExtensions } from './staff.ts';
 import { ActivityService, OssActivity } from './activity.ts';
 import { OssStaffToken } from './staff-token.ts';
+import { DescriptionGuard } from './description-guard.ts';
 import { RateLimit } from './rate-limit.ts';
 import { PrivacyResolver, PrivacyService, privacyApiExtensions } from './privacy.ts';
 import { ManageStaff, ReadActivity } from './merchant-role.ts';
@@ -45,7 +46,7 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
 @VendurePlugin({
   imports: [PluginCommonModule],
   entities: [OssOutbox, OssActivity, OssStaffToken],
-  providers: [OutboxService, ActivityService, StaffService, PrivacyService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }, { provide: APP_INTERCEPTOR, useClass: RateLimit }],
+  providers: [OutboxService, ActivityService, StaffService, PrivacyService, DescriptionGuard, { provide: APP_INTERCEPTOR, useClass: TenantGuard }, { provide: APP_INTERCEPTOR, useClass: RateLimit }],
   shopApiExtensions: { schema: shopApiExtensions, resolvers: [PaymentSessionResolver] },
   adminApiExtensions: { schema: gql`${print(stockApiExtensions)}\n${print(staffApiExtensions)}\n${print(privacyApiExtensions)}`, resolvers: [...STOCK_RESOLVERS, StaffResolver, PrivacyResolver] },
   configuration: (config) => {

@@ -4,7 +4,10 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { Dialog, useToast } from '@oss-commerce/ui';
 import { createProductWithImages, removeProduct, saveProduct } from '@/app/actions';
+import dynamic from 'next/dynamic';
+import { plainText, toRichText } from '@oss-commerce/contracts';
 import { ImageManager } from './ImageManager';
+const RichTextEditor = dynamic(() => import('./RichTextEditor'), { ssr: false, loading: () => <div className="rte"><div className="rte-body" aria-busy /></div> });
 import type { ProductDetail } from '@/lib/gateway';
 
 type V = { title: string; description: string; price: string; compareAt: string; taxClass: 'standard' | 'reduced' | 'zero'; sku: string; barcode: string; stock: string; weight: string; handle: string; seoTitle: string; seoDescription: string; status: 'draft' | 'published' };
@@ -13,7 +16,7 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(
 const gbp = (s: string) => (s && Number.isFinite(Number(s)) ? new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(Number(s)) : '');
 const isMoney = (s: string) => /^\d{1,7}(\.\d{1,2})?$/.test(s);
 
-const fromProduct = (p: ProductDetail): V => { const v = p.variantList[0]; return { ...BLANK, title: p.title, description: p.description, handle: p.handle, seoTitle: p.seoTitle, seoDescription: p.seoDescription, status: p.status === 'published' ? 'published' : 'draft',
+const fromProduct = (p: ProductDetail): V => { const v = p.variantList[0]; return { ...BLANK, title: p.title, description: toRichText(p.description), handle: p.handle, seoTitle: p.seoTitle, seoDescription: p.seoDescription, status: p.status === 'published' ? 'published' : 'draft',
   price: (p.priceMinor / 100).toFixed(2), sku: p.sku, ...(v ? { compareAt: v.compareAtMinor ? (v.compareAtMinor / 100).toFixed(2) : '', barcode: v.barcode ?? '', weight: v.weightGrams ? String(v.weightGrams) : '', taxClass: v.taxClass } : {}) }; };
 
 function Count({ n, soft, hard }: { n: number; soft: number; hard: number }) { return <span className={`pf-count${n > hard ? ' bad' : n > soft ? ' warn' : ''}`} aria-live="polite">{n}/{soft}</span>; }
@@ -49,14 +52,14 @@ export function ProductForm({ product, variants }: { product?: ProductDetail; va
   const fld = (k: keyof V, label: string, props: React.InputHTMLAttributes<HTMLInputElement> & { hint?: string; adorn?: string } = {}) => { const { hint, adorn, ...rest } = props; const e = show(k);
     return (<div className={`field${e ? ' bad' : ''}`}><label htmlFor={`pf-${k}`}>{label}</label><div className={adorn ? 'adorn' : undefined}>{adorn && <span aria-hidden>{adorn}</span>}<input id={`pf-${k}`} value={v[k]} onChange={x => set(k, x.target.value as never)} onBlur={() => blur(k)} aria-invalid={!!e} aria-describedby={e ? `pf-${k}-e` : hint ? `pf-${k}-h` : undefined} {...rest} /></div>
       {e ? <p className="ferr" id={`pf-${k}-e`} role="alert">{err[k]}</p> : hint ? <p className="fhint muted" id={`pf-${k}-h`}>{hint}</p> : null}</div>); };
-  const seoTitle = v.seoTitle || v.title || 'Product name'; const seoDesc = v.seoDescription || v.description.replace(/\s+/g, ' ').slice(0, 155) || 'The product description appears here.';
+  const seoTitle = v.seoTitle || v.title || 'Product name'; const seoDesc = v.seoDescription || plainText(v.description).slice(0, 155) || 'The product description appears here.';
 
   return (<form className="pf" noValidate onSubmit={e => { e.preventDefault(); submit(); }}>
     <div className="pf-main">
       <section className="w fd" aria-labelledby="pf-s1"><h2 id="pf-s1">Product</h2>
         {fld('title', 'Name', { required: true, maxLength: 140, placeholder: 'Stoneware mug, speckled', autoFocus: !editing })}
-        <div className="field"><label htmlFor="pf-description">Description</label><textarea id="pf-description" rows={7} value={v.description} onChange={e => set('description', e.target.value)} placeholder="What it is, what it is made from, size, care. Shoppers read this before they buy." />
-          <p className="fhint muted">Plain text. Blank lines start a new paragraph.</p></div>
+        <div className="field"><label htmlFor="pf-description">Description</label><RichTextEditor id="pf-description" value={v.description} onChange={h => set('description', h)} placeholder="What it is, what it is made from, size, care. Shoppers read this before they buy." />
+          <p className="fhint muted">Bold, lists and links are fine. Press the link button to add one.</p></div>
       </section>
       <section className="w" aria-labelledby="pf-s2"><div className="wh"><h2 id="pf-s2">Photos</h2></div><ImageManager productId={product?.id} initial={product?.images ?? []} onFiles={setFiles} /></section>
       {!editing && (<>
