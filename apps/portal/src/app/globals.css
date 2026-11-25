@@ -710,3 +710,16 @@ dialog.cmdk::backdrop{background:rgba(20,26,10,.45);backdrop-filter:blur(4px)}
   .an-pop::before{content:"";display:block;width:40px;height:4px;border-radius:99px;background:rgba(30,40,15,.2);margin:-6px auto 12px}
   .an-presets button{min-height:48px}.an-custom .btn{min-height:48px;justify-content:center}
 }
+
+/* A table that must stay a table on small screens (the count sheet): each row becomes a small card with labelled values */
+@media(max-width:859px){
+  table.t.keep{display:block}.t.keep thead{display:none}.t.keep tbody{display:grid}
+  .t.keep tr{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:14px 12px;border-top:1px solid var(--line)}.t.keep tr:first-child{border-top:0}
+  .t.keep td{display:block;padding:0;border:0;text-align:left}.t.keep td:first-child,.t.keep td:last-child{grid-column:1/-1}
+  .t.keep td[data-l]::before{content:attr(data-l);display:block;font-size:12px;color:var(--muted);margin-bottom:3px}
+  .t.keep td:last-child:empty,.t.keep td:last-child:has(.muted:only-child){display:none}
+  .t.keep .cs-in{width:100%;min-height:44px}
+}
+.t.keep td{background:none!important;border-radius:0!important}
+@media(max-width:767px){.cs-bar{bottom:calc(88px + env(safe-area-inset-bottom))}}
+@media(min-width:768px) and (max-width:980px){.pf-save[data-dirty=true]{left:124px;right:28px}}

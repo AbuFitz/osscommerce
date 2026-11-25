@@ -19,12 +19,12 @@ export function CountSheet({ rows }: { rows: StockRow[] }) {
     <div className="cl-bar"><div className="cl-search"><Search size={16} aria-hidden /><input type="search" aria-label="Search items" placeholder="Search by name or SKU" value={q} onChange={e => setQ(e.target.value)} /></div>
       <span className="muted" aria-live="polite">{lines.length} counted · {plan.changes.length} differ</span></div>
     <div className="w tw">
-      <table className="t"><thead><tr><th scope="col">Item</th><th scope="col" className="r">System says</th><th scope="col" className="r">You counted</th><th scope="col">Difference</th></tr></thead>
+      <table className="t keep"><thead><tr><th scope="col">Item</th><th scope="col" className="r">System says</th><th scope="col" className="r">You counted</th><th scope="col">Difference</th></tr></thead>
         <tbody>{shown.map(r => { const c = change.get(r.variantId); const err = bad.get(r.variantId); const has = (vals[r.variantId] ?? '').trim() !== ''; return (<tr key={r.variantId} className={err ? 'cs-bad' : c ? 'cs-diff' : ''}>
           <td><span className="cl-name"><Media src={r.imageUrl} alt="" size={40} /><span><b style={{ fontWeight: 600 }}>{r.title}</b>{r.variant && <span className="muted"> {r.variant}</span>}<div className="mono muted">{r.sku}</div></span></span></td>
-          <td className="r num">{r.onHand}</td>
-          <td className="r"><input className="cs-in" inputMode="numeric" aria-label={`Counted ${r.title}${r.variant ? ` ${r.variant}` : ''}`} value={vals[r.variantId] ?? ''} onChange={e => setVals(v => ({ ...v, [r.variantId]: e.target.value.replace(/[^\d]/g, '') }))} placeholder="—" aria-invalid={!!err} /></td>
-          <td>{err ? <span className="ferr" role="alert" style={{ fontSize: 13 }}>{err}</span> : c ? <b className={`num ${c.to > c.from ? 'cs-up' : 'cs-down'}`}>{c.to > c.from ? '+' : ''}{c.to - c.from}</b> : has ? <span className="muted">Matches</span> : <span className="muted">Not counted</span>}</td></tr>); })}</tbody></table>
+          <td className="r num" data-l="In the system">{r.onHand}</td>
+          <td className="r" data-l="You counted"><input className="cs-in" inputMode="numeric" aria-label={`Counted ${r.title}${r.variant ? ` ${r.variant}` : ''}`} value={vals[r.variantId] ?? ''} onChange={e => setVals(v => ({ ...v, [r.variantId]: e.target.value.replace(/[^\d]/g, '') }))} placeholder="—" aria-invalid={!!err} /></td>
+          <td data-l="Difference">{err ? <span className="ferr" role="alert" style={{ fontSize: 13 }}>{err}</span> : c ? <b className={`num ${c.to > c.from ? 'cs-up' : 'cs-down'}`}>{c.to > c.from ? '+' : ''}{c.to - c.from}</b> : has ? <span className="muted">Matches</span> : <span className="muted">Not counted</span>}</td></tr>); })}</tbody></table>
     </div>
     <div className="cs-bar"><span>{plan.changes.length ? `${plan.changes.length} item${plan.changes.length > 1 ? 's' : ''} will change` : lines.length ? 'Everything you counted matches' : 'Fill in what you count'}</span>
       <button type="button" className="btn primary" disabled={!lines.length || pending} onClick={() => setReview(true)}>Review count</button></div>
