@@ -7,6 +7,11 @@ import { OSS_CALCULATORS, deliveryZoneChecker } from './shipping.ts';
 import { fixedOrderDiscount, buyXGetYAction } from './discounts.ts';
 import { PaymentSessionResolver, shopApiExtensions } from './shop-extension.ts';
 import { STOCK_RESOLVERS, stockApiExtensions } from './stock-extension.ts';
+import { StaffResolver, StaffService, staffApiExtensions } from './staff.ts';
+import { ActivityService, OssActivity } from './activity.ts';
+import { ManageStaff, ReadActivity } from './merchant-role.ts';
+import { print } from 'graphql';
+import gql from 'graphql-tag';
 import Stripe from 'stripe';
 import { connectHandler } from './handler.ts';
 import { stripeWebhookMiddleware, WEBHOOK_PATH } from './webhook-route.ts';
@@ -36,15 +41,16 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
 /** Registers the Connect payment handler and mounts the signed webhook route. Order lookups go through Vendure's own connection. */
 @VendurePlugin({
   imports: [PluginCommonModule],
-  entities: [OssOutbox],
-  providers: [OutboxService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }],
+  entities: [OssOutbox, OssActivity],
+  providers: [OutboxService, ActivityService, StaffService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }],
   shopApiExtensions: { schema: shopApiExtensions, resolvers: [PaymentSessionResolver] },
-  adminApiExtensions: { schema: stockApiExtensions, resolvers: STOCK_RESOLVERS },
+  adminApiExtensions: { schema: gql`${print(stockApiExtensions)}\n${print(staffApiExtensions)}`, resolvers: [...STOCK_RESOLVERS, StaffResolver] },
   configuration: (config) => {
     const o = CellPlugin.options;
     config.paymentOptions.paymentMethodHandlers.push(connectHandler({ stripe: o.stripe, account: o.account, feeBp: o.feeBp, refundsReturnFee: o.refundsReturnFee }));
     config.apiOptions.middleware = [...(config.apiOptions.middleware ?? []), { route: WEBHOOK_PATH, beforeListen: true, handler: stripeWebhookMiddleware({ stripe: o.sdk, secret: o.webhookSecret, deps: CellPlugin.deps }) },
       ...(o.controlSecret && o.checkoutGate ? [{ route: CONTROL_PATH, beforeListen: true, handler: controlMiddleware({ secret: o.controlSecret, gate: o.checkoutGate }) }] : [])];
+    config.authOptions.customPermissions = [...(config.authOptions.customPermissions ?? []), ManageStaff, ReadActivity];
     config.shippingOptions.shippingCalculators = [...(config.shippingOptions.shippingCalculators ?? []), ...OSS_CALCULATORS];
     config.shippingOptions.shippingEligibilityCheckers = [...(config.shippingOptions.shippingEligibilityCheckers ?? []), deliveryZoneChecker];
     config.promotionOptions.promotionActions = [...(config.promotionOptions.promotionActions ?? []), fixedOrderDiscount, buyXGetYAction];

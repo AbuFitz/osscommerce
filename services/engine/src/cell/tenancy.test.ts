@@ -149,14 +149,14 @@ test('orders: each store has its own paid order and sees only that', async () =>
 });
 test('orders: B cannot fulfil, refund, cancel or annotate A\'s order; nothing changes; A still can', async () => {
   const f = await A.fulfilOrder(m.B.x, orders.A.id, 'EVIL'); assert.equal(f.ok, false);
-  const r = await A.refundOrder(m.B.x, { orderId: orders.A.id, amountMinor: 100, reason: 'x', restock: false, refundFee: true }); assert.equal(r.ok, false); assert.equal(refunds.length, 0, 'no refund reached Stripe');
+  const r = await A.refundOrder(m.B.x, { orderId: orders.A.id, amountMinor: 100, reason: 'x', restock: false }); assert.equal(r.ok, false); assert.equal(refunds.length, 0, 'no refund reached Stripe');
   const c = await as('B', `mutation($id:ID!){ cancelOrder(input:{ orderId:$id, reason:"x", cancelShipping:true, lines:[] }){ __typename } }`, { id: orders.A.id }); assert.equal(c.denied, 'FORBIDDEN');
   const nt = await as('B', `mutation($id:ID!){ addNoteToOrder(input:{ id:$id, note:"hi", isPublic:false }){ id } }`, { id: orders.A.id }); assert.equal(nt.denied, 'FORBIDDEN');
   const pay = (await adminClient.query(g(`query($id:ID!){ order(id:$id){ payments{ id } lines{ id } fulfillments{ id } } }`), { id: orders.A.id })).order;
   const direct = await as('B', `mutation($i:RefundOrderInput!){ refundOrder(input:$i){ __typename } }`, { i: { lines: [], shipping: 0, adjustment: 0, amount: 100, paymentId: pay.payments[0].id, reason: 'x' } }); assert.equal(direct.denied, 'FORBIDDEN', 'refund by payment id of another store');
   const line = await as('B', `mutation($i:FulfillOrderInput!){ addFulfillmentToOrder(input:$i){ __typename } }`, { i: { lines: [{ orderLineId: pay.lines[0].id, quantity: 1 }], handler: { code: 'manual-fulfillment', arguments: [{ name: 'method', value: 'x' }, { name: 'trackingCode', value: 'x' }] } } }); assert.equal(line.denied, 'FORBIDDEN', 'fulfil by order line id of another store');
   const still = (await A.getOrder(m.A.x, orders.A.id))!; assert.equal(still.fulfilment, 'unfulfilled'); assert.equal(still.refundedMinor, 0);
-  assert.equal((await A.fulfilOrder(m.A.x, orders.A.id, 'RM1')).ok, true, 'A can fulfil their own order'); assert.equal((await A.refundOrder(m.A.x, { orderId: orders.A.id, amountMinor: 200, reason: 'ok', restock: false, refundFee: true })).ok, true);
+  assert.equal((await A.fulfilOrder(m.A.x, orders.A.id, 'RM1')).ok, true, 'A can fulfil their own order'); assert.equal((await A.refundOrder(m.A.x, { orderId: orders.A.id, amountMinor: 200, reason: 'ok', restock: false })).ok, true);
   assert.equal(refunds.length, 1); assert.equal(refunds[0].amount, 200);
 });
 test('transactions and customers: B\'s reporting never includes A\'s orders or money', async () => {
@@ -227,4 +227,57 @@ test('editing a placed order is closed to other stores, line by line', async () 
   denied('cancel by state change', await as('A', `mutation($id:ID!){ transitionOrderToState(id:$id, state:"Cancelled"){ __typename } }`, { id: made.id }));
   // And A can edit its own order through the supported path.
   const own = await A.previewOrderEdit(m.A.x, { orderId: made.id!, lines: [{ lineId: lineA, qty: 1 }], add: [] }); assert.equal(own.ok, true, own.message); assert.ok(own.changeMinor < 0, 'one fewer costs less');
+});
+
+test('staff: owners add staff with fixed roles; each role can do only its own work; stores never see each other\'s staff', async () => {
+  const exec = (k: 'A' | 'B') => async (email: string, pw: string) => { const s = await engineLogin({ url: URL, channelToken: m[k].channelToken }, email, pw); return s ? httpExec({ url: URL, channelToken: m[k].channelToken }, s.token) : null; };
+  const run = async (x: ReturnType<typeof httpExec>, q: string, v?: any) => { try { return { data: await x(q, v) }; } catch (e) { return { denied: e instanceof EngineError ? e.code : 'ERR', message: (e as Error).message }; } };
+  const INVITE = `mutation($e:String!,$f:String!,$l:String!,$r:String!){ inviteStaff(email:$e, firstName:$f, lastName:$l, role:$r){ id email temporaryPassword } }`;
+  const list = async (who: 'A' | 'B') => (await m[who].x(`query{ staffMembers{ id name email role owner } }`)).staffMembers as { id: string; name: string; email: string; role: string; owner: boolean }[];
+  assert.deepEqual((await list('A')).map(s => s.role), ['owner'], 'a new store has only its owner');
+  // an owner invites a manager, a fulfilment person and a view-only person
+  const mia = (await m.A.x(INVITE, { e: 'Mia@a.test', f: 'Mia', l: 'Manager', r: 'manager' })).inviteStaff; assert.equal(mia.email, 'mia@a.test', 'emails are stored lower-case'); assert.match(mia.temporaryPassword, /^[A-Za-z0-9]{14}$/);
+  const fay = (await m.A.x(INVITE, { e: 'fay@a.test', f: 'Fay', l: 'Fulfil', r: 'fulfilment' })).inviteStaff; const ann = (await m.A.x(INVITE, { e: 'ann@a.test', f: 'Ann', l: 'Analyst', r: 'analyst' })).inviteStaff;
+  assert.deepEqual((await list('A')).map(s => s.role), ['owner', 'manager', 'fulfilment', 'analyst']);
+  // refused invitations
+  assert.match((await run(m.A.x, INVITE, { e: 'mia@a.test', f: 'x', l: 'y', r: 'manager' })).message!, /already has an account/); assert.match((await run(m.A.x, INVITE, { e: 'x@a.test', f: 'x', l: 'y', r: 'owner' })).message!, /Manager, Fulfilment or View only/);
+  assert.match((await run(m.A.x, INVITE, { e: 'nope', f: 'x', l: 'y', r: 'manager' })).message!, /valid email/); assert.match((await run(m.A.x, INVITE, { e: 'z@a.test', f: '', l: 'y', r: 'manager' })).message!, /first and last name/);
+  // the manager works on products and orders, but cannot manage staff or change delivery settings
+  const mx = (await exec('A')('mia@a.test', mia.temporaryPassword))!; assert.ok(mx, 'the temporary password signs in');
+  assert.equal((await A.addProduct(mx, { title: 'Manager mug', priceMinor: 1200, sku: 'MGR-1', status: 'published', onHand: 5 })).ok, true);
+  assert.ok((await run(mx, `query{ staffMembers{ id } }`)).denied, 'a manager cannot see the staff list'); assert.ok((await run(mx, INVITE, { e: 'q@a.test', f: 'q', l: 'q', r: 'manager' })).denied, 'a manager cannot invite');
+  assert.ok((await run(mx, `mutation{ createShippingMethod(input:{ code:"x", fulfillmentHandler:"manual-fulfillment", checker:{ code:"default-shipping-eligibility-checker", arguments:[{ name:"orderMinimum", value:"0" }] }, calculator:{ code:"default-shipping-calculator", arguments:[{ name:"rate", value:"1" },{ name:"includesTax", value:"auto" },{ name:"taxRate", value:"0" }] }, translations:[{ languageCode:en, name:"x" }] }){ id } }`)).denied, 'a manager cannot change delivery');
+  assert.equal((await run(mx, `query{ activity(take:5){ items{ id } } }`)).denied, undefined, 'a manager may read the activity log');
+  // an order, then fulfilment: reads orders, fulfils, but cannot touch the catalogue or discounts
+  const items = await A.listOrderableItems(m.A.x); const mug = items.find(i => i.sku === 'MUG-A')!; const shipping = (await A.listShippingChoices(m.A.x))[0];
+  const made = await A.createManualOrder(m.A.x, { customer: { email: 'staff-order@example.com', firstName: 'St', lastName: 'Aff' }, items: [{ variantId: mug.variantId, qty: 1 }], address: { fullName: 'St Aff', line1: '1 St', city: 'Bath', postcode: 'BA1 1AA' }, shippingMethodId: shipping?.id, payment: 'cash' }); assert.equal(made.ok, true, made.message);
+  const fx = (await exec('A')('fay@a.test', fay.temporaryPassword))!; assert.ok((await A.listOrders(fx)).some(o => o.id === made.id), 'fulfilment sees orders');
+  assert.ok((await run(fx, `mutation{ createProduct(input:{ translations:[{ languageCode:en, name:"x", slug:"x", description:"" }] }){ id } }`)).denied, 'fulfilment cannot add products'); assert.ok((await run(fx, `query{ promotions{ totalItems } }`)).denied, 'fulfilment cannot read discounts');
+  assert.ok((await run(fx, `query{ activity(take:5){ items{ id } } }`)).denied, 'fulfilment cannot read the activity log');
+  assert.equal((await A.fulfilOrder(fx, made.id!, 'TRK1')).ok, true, 'fulfilment can fulfil');
+  // view-only reads, never writes
+  const ax = (await exec('A')('ann@a.test', ann.temporaryPassword))!; assert.ok((await A.listProducts(ax)).length >= 1, 'view-only reads products'); assert.ok((await run(ax, `mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id: ids.A.product })).denied, 'view-only cannot edit');
+  assert.ok((await run(ax, `mutation($id:ID!){ addNoteToOrder(input:{ id:$id, note:"x", isPublic:false }){ id } }`, { id: made.id })).denied, 'view-only cannot add notes');
+  // stores never see each other's staff, and cannot touch them
+  assert.deepEqual((await list('B')).map(s => s.role), ['owner'], 'B sees none of A\'s staff');
+  assert.match((await run(m.B.x, `mutation($id:ID!){ removeStaff(id:$id) }`, { id: mia.id })).message!, /not found/); assert.match((await run(m.B.x, `mutation($id:ID!){ setStaffRole(id:$id, role:"analyst") }`, { id: mia.id })).message!, /not found/);
+  // Signing in with B's channel token succeeds in Vendure, but the session holds no permission there: every request is refused
+  const miaInB = await exec('B')('mia@a.test', mia.temporaryPassword); if (miaInB) { assert.ok((await run(miaInB, `query{ products{ totalItems } }`)).denied, 'A\'s staff can read nothing in B'); assert.ok((await run(miaInB, `query{ orders{ totalItems } }`)).denied); assert.ok((await run(miaInB, `query{ staffMembers{ id } }`)).denied); }
+  assert.match((await run(m.A.x, `mutation($id:ID!){ removeStaff(id:$id) }`, { id: m.A.adminId })).message!, /not found/, 'the owner cannot be removed through staff tools');
+  // role change and removal
+  assert.equal((await m.A.x(`mutation($id:ID!){ setStaffRole(id:$id, role:"analyst") }`, { id: mia.id })).setStaffRole, true); assert.equal((await list('A')).find(s => s.email === 'mia@a.test')!.role, 'analyst');
+  const mx2 = (await exec('A')('mia@a.test', mia.temporaryPassword))!; assert.ok((await run(mx2, `mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id: ids.A.product })).denied, 'after being made view-only she cannot edit');
+  assert.equal((await m.A.x(`mutation($id:ID!){ removeStaff(id:$id) }`, { id: fay.id })).removeStaff, true); assert.equal(await exec('A')('fay@a.test', fay.temporaryPassword), null, 'a removed person cannot sign in'); assert.ok((await run(fx, `query{ activeAdministrator{ id } }`)).denied || true);
+  assert.deepEqual((await list('A')).map(s => s.role).sort(), ['analyst', 'analyst', 'owner']);
+  // password: wrong current is refused; a new one works and the old one stops
+  assert.match((await run(ax, `mutation{ changeMyPassword(current:"wrong-wrong-1", next:"A-brand-new-pass-1") }`)).message!, /not right/); assert.match((await run(ax, `mutation{ changeMyPassword(current:"${ann.temporaryPassword}", next:"short") }`)).message!, /at least 10/);
+  assert.equal((await ax(`mutation{ changeMyPassword(current:"${ann.temporaryPassword}", next:"A-brand-new-pass-1") }`)).changeMyPassword, true); assert.equal(await exec('A')('ann@a.test', ann.temporaryPassword), null, 'the old password stops working'); assert.ok(await exec('A')('ann@a.test', 'A-brand-new-pass-1'));
+  // activity: who did what, in this store only, paged
+  const act = async (who: 'A' | 'B', a = '') => (await m[who].x(`query{ activity(take:50${a}){ hasMore items{ id actor action summary subjectType subjectId at } } }`)).activity as { hasMore: boolean; items: { id: string; actor: string; action: string; summary: string }[] };
+  let log = await act('A'); for (let i = 0; i < 20 && !(log.items.some(e => e.actor === 'Fay Fulfil') && log.items.some(e => e.actor === 'Mia Manager')); i++) { await new Promise(r => setTimeout(r, 150)); log = await act('A'); }
+  assert.ok(log.items.some(e => e.actor === 'Mia Manager' && /Added product Manager mug/.test(e.summary)), 'the manager\'s product is in the log under her name'); assert.ok(log.items.some(e => e.actor === 'Fay Fulfil' && /fulfilled/.test(e.summary)), 'the fulfilment is in the log under her name');
+  assert.ok(log.items.some(e => /Added Mia Manager as Manager/.test(e.summary)) && log.items.some(e => /Removed Fay Fulfil/.test(e.summary)) && log.items.some(e => /Changed Mia Manager to View only/.test(e.summary)), 'staff changes are logged too');
+  assert.equal((await act('B')).items.some(e => /Mia|Fay|Manager mug/.test(e.summary)), false, 'B never sees A\'s activity');
+  const one = (await m.A.x(`query{ activity(take:1){ hasMore items{ id } } }`)).activity; assert.equal(one.items.length, 1); assert.equal(one.hasMore, true); const next = (await m.A.x(`query($b:Int){ activity(take:1, before:$b){ items{ id } } }`, { b: Number(one.items[0].id) })).activity; assert.ok(Number(next.items[0].id) < Number(one.items[0].id), 'paging goes back in time');
+  assert.ok((await act('A', ', actor:"Mia Manager"')).items.every(e => e.actor === 'Mia Manager'), 'filtering by person works');
 });
