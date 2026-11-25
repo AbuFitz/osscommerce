@@ -676,3 +676,15 @@ dialog.cmdk::backdrop{background:rgba(20,26,10,.45);backdrop-filter:blur(4px)}
 @media (min-width:1500px){.gl-view{height:600px}}
 @media (max-width:700px){.live-k{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px}.live-k .kcard{padding:14px}.live-k .kpi{font-size:26px}}
 .gl-flat .gl-pin{width:max(24px,var(--s,16px));height:max(24px,var(--s,16px))}.gl-flat .gl-pin i{width:calc(var(--s,16px)*.5);height:calc(var(--s,16px)*.5)}
+
+/* ---- Touch: every tappable thing is at least 40px on touch screens; inline links get a larger hit area without changing their look ---- */
+@media (pointer:coarse){
+  a.btn,button.btn,.iconbtn,.seg a,.seg-field button,.gl-seg button{min-height:40px}
+  .iconbtn{min-width:40px}
+  .kcard,.cards>a,.tw a{min-height:44px}
+  td a,.w .wh a,.w a.link,.crumb a,.back{position:relative}
+  td a::after,.w .wh a::after,.w a.link::after,.back::after{content:"";position:absolute;inset:-10px -8px}
+  .seg-btns button{min-height:40px;min-width:42px}.an-check{min-height:40px;display:inline-flex;align-items:center;gap:8px}.an-check input{width:20px;height:20px}
+  .gl-recent small,.gl-places small{font-size:11px}
+}
+.gl-recent small{font-size:11px}
