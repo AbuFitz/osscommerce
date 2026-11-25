@@ -99,7 +99,8 @@ async function setup() {
   if (cmd === 'setup') { await setup(); process.exit(0); }
   if (extra.MODE === 'worker') { const w = await bootstrapWorker(config()); await wire(w.app); await w.startJobQueue(); console.log('cell worker running'); return; }
   const app = await bootstrap(config());
-  { const c = await syncSuperadmin(app.get(TransactionalConnection), app.get(PasswordCipher), env.SUPERADMIN_USER, env.SUPERADMIN_PASSWORD); if (c.password || c.identifier) console.log(`platform operator sign-in updated from the environment (${[c.identifier && 'username', c.password && 'password'].filter(Boolean).join(' and ')})`); }
+  try { const c = await syncSuperadmin(app.get(TransactionalConnection), app.get(PasswordCipher), env.SUPERADMIN_USER, env.SUPERADMIN_PASSWORD); const did = [c.identifier && 'username updated', c.password && 'password updated', c.retired.length && `retired ${c.retired.length} old operator account${c.retired.length > 1 ? 's' : ''} (${c.retired.join(', ')})`].filter(Boolean); if (did.length) console.log(`platform operator sign-in synced from the environment: ${did.join('; ')}`); }
+  catch (e) { console.error(`PLATFORM OPERATOR SYNC FAILED, sign-in unchanged: ${e instanceof Error ? e.message : e}`); }  // loud, but never takes the shop down
   await wire(app);
   if (assets) void checkAssetStorage(assets).then(r => console.log(`asset storage check: ${r.ok ? 'OK' : 'FAILED'}, ${r.detail}`));
   if (extra.MODE === 'both') await app.get(JobQueueService).start();
