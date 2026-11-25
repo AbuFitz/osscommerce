@@ -168,3 +168,8 @@ Next in Phase 2: abandoned checkouts, staff roles and an activity log.
 - Deploy note: this adds the `oss_activity` table (migration `1795300000000-activity`), applied by the engine's pre-deploy step.
 
 Next in Phase 2 (Stripe, Resend and Sentry are deferred): GDPR export and erase, rate limits, bulk fulfil, customer create and import, rich-text descriptions.
+
+- **Bulk fulfil**: on the "To fulfil" filter, one button marks every paid, unshipped order (up to 50) as fulfilled, one by one, so a single failure is reported and never blocks the rest.
+- **Customer privacy**: on a customer's page, "Download their data" (one readable file: details, addresses, orders, notes) and "Erase personal data" (name, email, phone, addresses, notes and login removed; each order's address blanked; the sale kept for your records; refused while any order is unfinished). Both are channel-checked, so one store can never read or erase another's customers, and both are written to the activity log.
+- **Rate limits**: sign-in is limited to 10 attempts per account and 60 per address per 15 minutes; password-change guesses to 5. In memory per cell (a restart only ever forgives).
+- Not built, by decision: standalone "add customer" and customer import. A customer already appears when you take an order for them, and Vendure's create would also reveal that an email exists in another store, so it needs a store-scoped version first.

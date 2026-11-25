@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { money, when } from '@/lib/format';
 import { PayMethod } from '@/components/Brand';
+import { BulkFulfil } from '@/components/orders/BulkFulfil';
 import { Header, PayBadge, FulBadge, Avatar } from '@/components/ui';
 
 export const metadata = { title: 'Orders' };
@@ -13,9 +14,10 @@ export default async function Orders({ searchParams }: { searchParams: Promise<{
   const g = gateway();
   const [orders, all] = await Promise.all([g.orders({ filter, q }), g.orders()]);
   const open = all.filter(o => o.state === 'open').length;
+  const ready = filter === 'unfulfilled' ? orders.filter(o => o.state === 'open' && o.payment === 'paid').slice(0, 50) : [];
   return (
     <>
-      <Header title="Orders" eyebrow={`${all.length} orders · ${open} to fulfil`}><Link className="btn" href="/orders?filter=refunded">Refunds</Link><Link className="btn" href="/orders/abandoned">Abandoned</Link><Link className="btn primary" href="/orders/new">Create order</Link></Header>
+      <Header title="Orders" eyebrow={`${all.length} orders · ${open} to fulfil`}><Link className="btn" href="/orders?filter=refunded">Refunds</Link><Link className="btn" href="/orders/abandoned">Abandoned</Link>{ready.length > 1 && <BulkFulfil ids={ready.map(o => o.id)} numbers={ready.map(o => o.number)} />}<Link className={ready.length > 1 ? 'btn' : 'btn primary'} href="/orders/new">Create order</Link></Header>
       <div className="toolbar">
         <nav className="seg" aria-label="Filter orders">{FILTERS.map(([v, l]) => <Link key={v} href={v ? `/orders?filter=${v}` : '/orders'} aria-current={filter === v}>{l}</Link>)}</nav>
         <form className="searchpill" role="search" action="/orders" style={{ width: 'min(320px,100%)' }}>

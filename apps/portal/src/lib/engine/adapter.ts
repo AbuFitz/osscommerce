@@ -686,3 +686,9 @@ export async function listActivity(x: Exec, q: { before?: number; actor?: string
   const r = await x('query($b:Int,$a:String){ activity(take:30,before:$b,actor:$a){ hasMore items{ id at actor action summary } } }', { b: q.before, a: q.actor });
   return r.activity as ActivityPage;
 }
+
+// ── Customer privacy ────────────────────────────────────────────────────────
+export async function exportCustomer(x: Exec, id: string): Promise<string | null> { try { return (await x('query($id:ID!){ customerDataExport(id:$id) }', { id })).customerDataExport as string; } catch { return null; } }
+export async function eraseCustomer(x: Exec, id: string): Promise<MutationResult> {
+  try { await x('mutation($id:ID!){ eraseCustomer(id:$id) }', { id }); return { ok: true, message: 'Personal details erased. The sales stay in your records.' }; } catch (e) { return said(e); }
+}

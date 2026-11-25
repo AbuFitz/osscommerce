@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { Dialog, useToast } from '@oss-commerce/ui';
 import { Pencil, Trash2 } from 'lucide-react';
-import { addCustomerNoteAction, deleteCustomerNoteAction, updateCustomerProfileAction } from '@/app/actions';
+import { addCustomerNoteAction, deleteCustomerNoteAction, eraseCustomerAction, exportCustomerAction, updateCustomerProfileAction } from '@/app/actions';
 import { when } from '@/lib/format';
 import type { CustomerNote, CustomerProfile } from '@/lib/gateway';
 
@@ -27,4 +27,16 @@ export function CustomerNotes({ id, notes }: { id: string; notes: CustomerNote[]
     <Dialog open={!!del} onClose={() => !pending && setDel(null)} title="Delete this note?" description="This cannot be undone."
       footer={<><button className="btn" type="button" onClick={() => setDel(null)} disabled={pending}>Keep it</button><button className="btn danger" type="button" disabled={pending} onClick={() => del && start(async () => { const r = await deleteCustomerNoteAction(id, del.id); toast(r.message, r.ok ? 'ok' : 'error'); setDel(null); })}>Delete note</button></>}>{del && <p className="cnq">{del.text}</p>}</Dialog>
   </div>);
+}
+
+/** The two things a person can ask a shop for under data-protection law: a copy of what is held, and erasure. */
+export function PrivacyPanel({ id, name }: { id: string; name: string }) {
+  const toast = useToast(); const [open, setOpen] = useState(false); const [pending, start] = useTransition();
+  const download = () => start(async () => { const t = await exportCustomerAction(id); if (!t) { toast('That did not go through. Nothing was changed.', 'error'); return; } const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([t], { type: 'application/json' })); a.download = `customer-data-${id}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Their data has been downloaded.', 'ok'); });
+  return (<>
+    <p className="muted" style={{ margin: '0 0 10px', fontSize: 13.5 }}>If they ask what you hold about them, or ask you to delete it.</p>
+    <div className="acts"><button className="btn sm" type="button" onClick={download} disabled={pending} aria-busy={pending}>Download their data</button><button className="btn sm" type="button" onClick={() => setOpen(true)}>Erase personal data</button></div>
+    <Dialog open={open} onClose={() => !pending && setOpen(false)} title={`Erase ${name}'s personal data?`} description="Their name, email, phone, addresses, notes and login are removed for good. Their orders stay in your sales records, with the address on each blanked. This cannot be undone."
+      footer={<><button className="btn" type="button" onClick={() => setOpen(false)} disabled={pending}>Keep</button><button className="btn danger" type="button" disabled={pending} onClick={() => start(async () => { const r = await eraseCustomerAction(id); toast(r.message, r.ok ? 'ok' : 'error'); if (r.ok) setOpen(false); })}>{pending ? 'Erasing…' : 'Erase'}</button></>}><span /></Dialog>
+  </>);
 }

@@ -12,9 +12,9 @@ import type { EntityTarget } from 'typeorm';
  * Both are enforced on the server whatever the portal sends.
  */
 const ORDER_STEPS = new Set(['ArrangingPayment', 'Modifying', 'ArrangingAdditionalPayment', 'PaymentAuthorized', 'PaymentSettled', 'PartiallyShipped', 'Shipped', 'PartiallyDelivered']);
-export const MERCHANT_QUERIES = new Set(['activeAdministrator', 'staffMembers', 'activity', 'activeChannel', 'product', 'products', 'productVariant', 'productVariants', 'order', 'orders', 'customer', 'customers', 'collection', 'collections', 'previewCollectionVariants', 'taxCategories', 'asset', 'assets', 'facets', 'promotions', 'promotion', 'stockLocations', 'shippingMethod', 'shippingMethods', 'countries', 'search']);
+export const MERCHANT_QUERIES = new Set(['activeAdministrator', 'staffMembers', 'activity', 'customerDataExport', 'activeChannel', 'product', 'products', 'productVariant', 'productVariants', 'order', 'orders', 'customer', 'customers', 'collection', 'collections', 'previewCollectionVariants', 'taxCategories', 'asset', 'assets', 'facets', 'promotions', 'promotion', 'stockLocations', 'shippingMethod', 'shippingMethods', 'countries', 'search']);
 export const MERCHANT_MUTATIONS = new Set(['createProduct', 'updateProduct', 'deleteProduct', 'createProductOptionGroup', 'addOptionGroupToProduct', 'createProductVariants', 'updateProductVariants', 'deleteProductVariant', 'createCollection', 'updateCollection', 'deleteCollection',
-  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'modifyOrder', 'inviteStaff', 'setStaffRole', 'removeStaff', 'changeMyPassword', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'addNoteToCustomer', 'deleteCustomerNote', 'createDraftOrder', 'deleteDraftOrder', 'addItemToDraftOrder', 'adjustDraftOrderLine', 'removeDraftOrderLine', 'setCustomerForDraftOrder', 'setDraftOrderShippingAddress', 'setDraftOrderShippingMethod', 'applyCouponCodeToDraftOrder', 'removeCouponCodeFromDraftOrder', 'transitionOrderToState', 'addManualPaymentToOrder', 'createPromotion', 'updatePromotion', 'deletePromotion',
+  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'modifyOrder', 'inviteStaff', 'eraseCustomer', 'setStaffRole', 'removeStaff', 'changeMyPassword', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'addNoteToCustomer', 'deleteCustomerNote', 'createDraftOrder', 'deleteDraftOrder', 'addItemToDraftOrder', 'adjustDraftOrderLine', 'removeDraftOrderLine', 'setCustomerForDraftOrder', 'setDraftOrderShippingAddress', 'setDraftOrderShippingMethod', 'applyCouponCodeToDraftOrder', 'removeCouponCodeFromDraftOrder', 'transitionOrderToState', 'addManualPaymentToOrder', 'createPromotion', 'updatePromotion', 'deletePromotion',
   'createShippingMethod', 'updateShippingMethod', 'deleteShippingMethod']);
 
 type Via = 'direct' | 'order' | 'optionGroup' | 'customerNote';
@@ -35,7 +35,7 @@ export const OWNERSHIP: Record<string, Check[]> = {
   createCollection: [{ entity: Asset, ids: a => photos(inp(a)) }],
   updateCollection: [{ entity: Collection, ids: a => arr(inp(a)?.id) }, { entity: Asset, ids: a => photos(inp(a)) }], deleteCollection: [{ entity: Collection, ids: a => arr(a?.id) }],
   updateAsset: [{ entity: Asset, ids: a => arr(inp(a)?.id) }], deleteAssets: [{ entity: Asset, ids: a => arr(inp(a)?.assetIds) }],
-  updateCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
+  updateCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }], eraseCustomer: [{ entity: Customer, ids: a => arr(a?.id) }],
   deleteDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }],
   addItemToDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }], adjustDraftOrderLine: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: OrderLine, ids: a => arr(a?.input?.orderLineId), via: 'order' }],
   removeDraftOrderLine: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: OrderLine, ids: a => arr(a?.orderLineId), via: 'order' }],

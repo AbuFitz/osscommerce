@@ -452,6 +452,8 @@ export const demoGateway: CommerceGateway = {
     const x = await S(); const p = await editOrder(x, i, true); if (!p.ok) return { ok: false, message: p.message };
     return { ok: true, message: p.changeMinor > 0 ? `Order updated. The extra £${(p.changeMinor / 100).toFixed(2)} is recorded as paid.` : p.changeMinor < 0 ? `Order updated. £${(-p.changeMinor / 100).toFixed(2)} refunded to the customer's original payment method.` : 'Order updated. The total is unchanged.' };
   },
+  async customerExport(id) { const c = await demoGateway.customer(id); return c ? JSON.stringify({ exportedAt: new Date().toISOString(), customer: { name: c.name, email: c.email, phone: c.phone }, addresses: c.addresses, orders: c.recentOrders, notes: c.notes }, null, 2) : null; },
+  async eraseCustomer(id) { const c = await demoGateway.customer(id); if (!c) return { ok: false, message: 'That customer was not found.' }; return { ok: true, message: 'Personal details erased. The sales stay in your records. (Demo: nothing is changed.)' }; },
   async inviteMember(i) {
     const x = await S(); const email = i.email.trim().toLowerCase(); if (x.members.some(m => m.email.toLowerCase() === email)) return { ok: false, message: 'That email already has an account. Use a different email address for this person.' };
     const id = `m${Date.now().toString(36)}`; x.members.push({ id, name: `${i.firstName} ${i.lastName}`.trim(), email, role: i.role, status: 'active' });

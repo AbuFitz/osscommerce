@@ -166,6 +166,10 @@ export interface CommerceGateway {
   createManualOrder(i: ManualOrderInput): Promise<MutationResult>;
   deleteCustomerNote(customerId: string, noteId: string): Promise<MutationResult>;
   updateCustomerProfile(customerId: string, p: CustomerProfile): Promise<MutationResult>;
+  /** Everything held about one customer, as a readable file (GDPR access request). */
+  customerExport(customerId: string): Promise<string | null>;
+  /** Removes a customer's personal details and keeps the sales. Refused while an order is unfinished. */
+  eraseCustomer(customerId: string): Promise<MutationResult>;
   discounts(): Promise<Discount[]>;
   storefront(): Promise<StorefrontView>;
   team(): Promise<{ members: Member[]; grants: AccessGrant[] }>;

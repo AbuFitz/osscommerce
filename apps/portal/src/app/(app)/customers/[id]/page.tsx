@@ -4,7 +4,7 @@ import { Mail, Phone } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { money, when, day } from '@/lib/format';
 import { Header, Avatar, PayBadge, FulBadge } from '@/components/ui';
-import { CustomerNotes, EditCustomer } from '@/components/customers/CustomerPanels';
+import { CustomerNotes, EditCustomer, PrivacyPanel } from '@/components/customers/CustomerPanels';
 import { daysSince } from '@/lib/customers';
 export const metadata = { title: 'Customer' };
 
@@ -27,6 +27,7 @@ export default async function CustomerPage({ params }: { params: Promise<{ id: s
           <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>Customer since {day(c.since)}</p>
           {c.addresses.length > 0 && <><h3 className="cah">Addresses</h3>{c.addresses.map(a => <p key={a} className="muted" style={{ margin: '0 0 6px', fontSize: 13.5 }}>{a}</p>)}</>}</section>
         <section className="w" aria-labelledby="cn"><h2 id="cn" style={{ marginBottom: 12 }}>Notes</h2><CustomerNotes id={c.id} notes={c.notes} /></section>
+        <section className="w" aria-labelledby="cpv"><h2 id="cpv" style={{ marginBottom: 12 }}>Privacy</h2><PrivacyPanel id={c.id} name={c.name} /></section>
       </aside>
     </div></>);
 }

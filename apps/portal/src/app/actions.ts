@@ -9,6 +9,14 @@ async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<
   catch { return { ok: false, message: 'That did not go through. Nothing was changed. Try again, or contact support.' }; }
 }
 export async function fulfilOrder(id: string, tracking?: string, lines?: { sku: string; qty: number }[]) { return run(() => gateway().fulfilOrder(id, tracking?.trim().slice(0, 120) || undefined, lines), ['/orders', `/orders/${id}`, '/']); }
+/** At most 50 at a time, one by one, so a single failure is reported and never hides the others. */
+export async function fulfilMany(ids: string[]): Promise<MutationResult> {
+  const list = [...new Set(ids)].slice(0, 50); let done = 0; const failed: string[] = [];
+  for (const id of list) { try { const r = await gateway().fulfilOrder(id); if (r.ok) done++; else failed.push(r.message); } catch { failed.push('An order did not go through.'); } }
+  ['/orders', '/', '/inventory'].forEach(p => revalidatePath(p));
+  if (!failed.length) return { ok: true, message: `${done} order${done === 1 ? '' : 's'} marked as fulfilled.` };
+  return { ok: done > 0, message: `${done} fulfilled, ${failed.length} not. ${failed[0]}` };
+}
 export async function cancelOrder(i: { orderId: string; reason: string; refund: boolean }) { return run(() => gateway().cancelOrder({ ...i, reason: i.reason.trim().slice(0, 200) }), ['/orders', `/orders/${i.orderId}`, '/', '/inventory']); }
 export async function addOrderNote(orderId: string, note: string) { return run(() => gateway().addOrderNote(orderId, note), [`/orders/${orderId}`]); }
 export async function refundOrder(i: RefundInput) { return run(() => gateway().refundOrder(i), ['/orders', '/', '/inventory']); }
@@ -190,3 +198,6 @@ export async function saveStockSettingsAction(id: string, s: StockSettings) { re
 export async function applyStockCountAction(lines: { variantId: string; counted: number }[], note?: string) {
   const by = await who(); try { const r = await gateway().applyStockCount(lines, by, note?.trim().slice(0, 200) || undefined); if (r.changed) ['/inventory', '/products', '/'].forEach(p => revalidatePath(p)); return r; } catch { return { ok: false, message: 'That did not go through. Nothing was changed.', changed: 0, unchanged: 0, problems: [] }; }
 }
+
+export async function exportCustomerAction(id: string) { return gateway().customerExport(id); }
+export async function eraseCustomerAction(id: string) { return run(() => gateway().eraseCustomer(id), ['/customers', `/customers/${id}`, '/settings/activity']); }

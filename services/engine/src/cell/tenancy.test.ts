@@ -281,3 +281,28 @@ test('staff: owners add staff with fixed roles; each role can do only its own wo
   const one = (await m.A.x(`query{ activity(take:1){ hasMore items{ id } } }`)).activity; assert.equal(one.items.length, 1); assert.equal(one.hasMore, true); const next = (await m.A.x(`query($b:Int){ activity(take:1, before:$b){ items{ id } } }`, { b: Number(one.items[0].id) })).activity; assert.ok(Number(next.items[0].id) < Number(one.items[0].id), 'paging goes back in time');
   assert.ok((await act('A', ', actor:"Mia Manager"')).items.every(e => e.actor === 'Mia Manager'), 'filtering by person works');
 });
+
+test('privacy: a store exports and erases only its own customers; the sale stays, the person goes', async () => {
+  const run = async (x: ReturnType<typeof httpExec>, q: string, v?: any) => { try { return { data: await x(q, v) }; } catch (e) { return { denied: e instanceof EngineError ? e.code : 'ERR', message: (e as Error).message }; } };
+  const items = await A.listOrderableItems(m.A.x); const mug = items.find(i => i.sku === 'MUG-A')!; const shipping = (await A.listShippingChoices(m.A.x))[0];
+  const made = await A.createManualOrder(m.A.x, { customer: { email: 'gdpr@example.com', firstName: 'Gee', lastName: 'Dee' }, items: [{ variantId: mug.variantId, qty: 1 }], address: { fullName: 'Gee Dee', line1: '9 Privacy Rd', city: 'Leeds', postcode: 'LS1 1AA' }, shippingMethodId: shipping?.id, payment: 'cash' }); assert.equal(made.ok, true, made.message);
+  const cid = (await m.A.x(`query{ customers(options:{ filter:{ emailAddress:{ eq:"gdpr@example.com" } } }){ items{ id } } }`)).customers.items[0].id as string;
+  const EXPORT = `query($id:ID!){ customerDataExport(id:$id) }`; const ERASE = `mutation($id:ID!){ eraseCustomer(id:$id) }`;
+  const file = JSON.parse((await m.A.x(EXPORT, { id: cid })).customerDataExport); assert.equal(file.customer.email, 'gdpr@example.com'); assert.equal(file.orders.length, 1); assert.match(JSON.stringify(file.orders[0].shippingAddress), /9 Privacy Rd/);
+  // another store learns nothing, can change nothing
+  const bExport = await run(m.B.x, EXPORT, { id: cid }); assert.ok(bExport.denied || /not found/.test(bExport.message ?? ''), 'B cannot export A\'s customer'); const bErase = await run(m.B.x, ERASE, { id: cid }); assert.ok(bErase.denied, 'B cannot erase A\'s customer');
+  // an unfinished order blocks erasure
+  assert.match((await run(m.A.x, ERASE, { id: cid })).message!, /not finished/);
+  assert.equal((await A.fulfilOrder(m.A.x, made.id!)).ok, true);
+  assert.equal((await m.A.x(ERASE, { id: cid })).eraseCustomer, true);
+  const after = JSON.parse((await m.A.x(EXPORT, { id: cid })).customerDataExport); assert.equal(after.customer.firstName, 'Erased'); assert.ok(!/gdpr@example\.com|Gee|Dee|Privacy Rd|Leeds/.test(JSON.stringify(after)), 'no personal detail is left'); assert.equal(after.orders.length, 1, 'the sale is kept');
+  assert.equal((await A.listOrders(m.A.x)).some(o => o.id === made.id), true, 'the order is still in the shop\'s records');
+  assert.ok(JSON.stringify((await m.A.x(`query{ activity(take:10){ items{ summary } } }`)).activity.items).includes('Erased the personal data'), 'the erasure is in the activity log');
+});
+
+test('rate limits: repeated sign-in guesses for one account are stopped, and another account is unaffected', async () => {
+  const guess = async (u: string) => { const r = await fetch(URL, { method: 'POST', headers: { 'content-type': 'application/json', 'vendure-token': m.A.channelToken }, body: JSON.stringify({ query: 'mutation($u:String!,$p:String!){ login(username:$u,password:$p){ __typename ... on ErrorResult { message } } }', variables: { u, p: 'wrong-password' } }) }); return (await r.json()) as { errors?: { message: string }[] }; };
+  let blockedAt = 0; for (let i = 1; i <= 14 && !blockedAt; i++) if ((await guess('victim@a.test')).errors?.[0]?.message.startsWith('Too many attempts')) blockedAt = i;
+  assert.equal(blockedAt, 11, 'the eleventh guess in a window is refused');
+  assert.equal((await guess('someone-else@a.test')).errors, undefined, 'a different account is not locked out by that');
+});
