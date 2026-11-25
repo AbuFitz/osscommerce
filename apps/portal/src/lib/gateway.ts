@@ -5,7 +5,7 @@ export type PaymentStatus = 'pending' | 'authorised' | 'paid' | 'failed' | 'part
 export type FulfilmentStatus = 'unfulfilled' | 'partial' | 'fulfilled' | 'returned';
 export type OrderState = 'open' | 'cancelled' | 'completed';
 
-export interface OrderLine { /** The engine's id for this line, needed to fulfil part of an order. */ id?: string; sku: string; title: string; variant?: string; qty: number; /** How many of `qty` have already been sent. */ sent?: number; unitMinor: number; imageUrl?: string }
+export interface OrderLine { /** The engine's id for this line, needed to fulfil part of an order. */ id?: string; /** Which item this line is, needed to put returned goods back in stock. */ variantId?: string; sku: string; title: string; variant?: string; qty: number; /** How many of `qty` have already been sent. */ sent?: number; unitMinor: number; imageUrl?: string }
 export interface OrderEvent { at: string; text: string; /** A note a team member wrote, as opposed to something that happened. */ note?: boolean; by?: string }
 export interface Order {
   id: string; number: number; placedAt: string; customer: string; email: string;
@@ -109,7 +109,12 @@ export interface VariantInput { options: string[]; sku: string; priceMinor: numb
 export interface Collection { id: string; name: string; kind?: 'rule' | 'manual' | 'other'; contains: string; productIds?: string[]; count: number; products: string[] }
 export interface CollectionInput { id?: string; name: string; kind: 'rule' | 'manual'; contains?: string; productIds?: string[] }
 export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string }
-export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; refundFee: boolean }
+/** A refund, optionally for specific returned lines. Returned lines can be put back in stock. Our fee on the refunded part is returned by platform policy, not chosen per refund. */
+export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; lines?: { lineId: string; qty: number }[] }
+/** Changes to an order after it was placed. Quantities are the new totals (0 removes a line). */
+export interface OrderEditInput { orderId: string; lines: { lineId: string; qty: number }[]; add: { variantId: string; qty: number }[]; surcharge?: { label: string; amountMinor: number }; address?: { fullName: string; line1: string; line2?: string; city: string; postcode: string }; note?: string }
+export interface OrderEditPreview { ok: boolean; message: string; newTotalMinor: number; changeMinor: number; shippingMinor: number; lines: { title: string; variant?: string; qty: number; unitMinor: number; lineMinor: number }[] }
+export interface OrderEditApply extends OrderEditInput { /** How an extra amount was paid, when the new total is higher. */ payment?: ManualOrderInput['payment']; reason?: string }
 /** The only seam to the commerce service. Server-side only; the browser never holds engine credentials. */
 export interface Viewer { name: string; initials: string; role: string }
 export interface CommerceGateway {
@@ -168,6 +173,8 @@ export interface CommerceGateway {
   /** A private note on the order, visible to the team only. */
   addOrderNote(orderId: string, note: string): Promise<MutationResult>;
   refundOrder(i: RefundInput): Promise<MutationResult>;
+  previewOrderEdit(i: OrderEditInput): Promise<OrderEditPreview>;
+  applyOrderEdit(i: OrderEditApply): Promise<MutationResult>;
   inviteMember(email: string, role: Member['role']): Promise<MutationResult>;
   rollbackTheme(version: string): Promise<MutationResult>;
   decideGrant(id: string, decision: 'approve' | 'decline' | 'revoke'): Promise<MutationResult>;

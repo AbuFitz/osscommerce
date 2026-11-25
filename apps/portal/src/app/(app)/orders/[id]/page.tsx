@@ -6,7 +6,8 @@ import { gateway } from '@/lib/gateway-instance';
 import { money, when } from '@/lib/format';
 import { PayBadge, FulBadge, Avatar } from '@/components/ui';
 import { Media } from '@/components/art';
-import { CancelAction, FulfilAction, NoteForm, RefundAction } from '@/components/Actions';
+import { CancelAction, FulfilAction, NoteForm } from '@/components/Actions';
+import { EditOrderAction, ReturnAction } from '@/components/orders/OrderEdit';
 import { Printer } from 'lucide-react';
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,7 +31,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         <div className="acts" style={{ marginTop: 18 }}>
           {canFulfil && <FulfilAction orderId={o.id} number={o.number} lines={o.lines} />}
           {o.state === 'open' && o.fulfilment === 'unfulfilled' && <CancelAction orderId={o.id} number={o.number} paid={o.payment === 'paid'} />}
-          {(o.payment === 'paid' || o.payment === 'partially_refunded') && <RefundAction orderId={o.id} number={o.number} totalMinor={o.totalMinor} refundedMinor={o.refundedMinor} feeBp={50} />}
+          {o.state === 'open' && (o.payment === 'paid' || o.payment === 'partially_refunded') && <EditOrderAction order={o} />}
+          {(o.payment === 'paid' || o.payment === 'partially_refunded') && <ReturnAction order={o} />}
         <Link className="btn ghost" href={`/slip/${o.id}`} target="_blank"><Printer size={15} aria-hidden />Packing slip</Link>
         </div>
       </section>

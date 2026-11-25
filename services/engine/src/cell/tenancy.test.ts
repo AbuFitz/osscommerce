@@ -210,3 +210,21 @@ test('orders taken by hand: a merchant can take one in their own store, and cann
   denied('any other state change on their own order', await as('A', `mutation($id:ID!){ transitionOrderToState(id:$id, state:"Cancelled"){ __typename } }`, { id: draft }));
   assert.equal((await m.A.x(`mutation($o:ID!){ deleteDraftOrder(orderId:$o){ result } }`, { o: draft })).deleteDraftOrder.result, 'DELETED', 'A can delete its own draft');
 });
+test('editing a placed order is closed to other stores, line by line', async () => {
+  const items = await A.listOrderableItems(m.A.x); const mug = items.find(i => i.sku === 'MUG-A')!;
+  const made = await A.createManualOrder(m.A.x, { customer: { email: 'edit-a@example.com', firstName: 'Ed', lastName: 'It' }, items: [{ variantId: mug.variantId, qty: 2 }], address: { fullName: 'Ed It', line1: '2 High St', city: 'Watford', postcode: 'WD1 1AA' }, shippingMethodId: (await A.listShippingChoices(m.A.x))[0]?.id, payment: 'cash' }); assert.equal(made.ok, true, made.message);
+  const lineA = (await A.getOrder(m.A.x, made.id!))!.lines[0].id!;
+  const mod = `mutation($i:ModifyOrderInput!){ modifyOrder(input:$i){ __typename } }`;
+  const denied = (label: string, r: { denied?: string; data?: unknown }) => assert.equal(r.denied, 'FORBIDDEN', `${label}: ${JSON.stringify(r)}`);
+  // B has an order of its own to try things with
+  const bItems = await A.listOrderableItems(m.B.x); const bItem = bItems[0]; const bMade = await A.createManualOrder(m.B.x, { customer: { email: 'edit-b@example.com', firstName: 'B', lastName: 'B' }, items: [{ variantId: bItem.variantId, qty: 1 }], address: { fullName: 'B B', line1: '3 Low St', city: 'Bath', postcode: 'BA1 1AA' }, shippingMethodId: (await A.listShippingChoices(m.B.x))[0]?.id, payment: 'cash' }); assert.equal(bMade.ok, true, bMade.message);
+  denied('change A\'s order', await as('B', mod, { i: { dryRun: true, orderId: made.id, surcharges: [{ description: 'x', price: 100, priceIncludesTax: true, taxRate: 0 }] } }));
+  denied('put A\'s state into editing', await as('B', `mutation($id:ID!){ transitionOrderToState(id:$id, state:"Modifying"){ __typename } }`, { id: made.id }));
+  denied('adjust A\'s line from B\'s own order', await as('B', mod, { i: { dryRun: true, orderId: bMade.id, adjustOrderLines: [{ orderLineId: lineA, quantity: 1 }] } }));
+  denied('add A\'s item to B\'s own order', await as('B', mod, { i: { dryRun: true, orderId: bMade.id, addItems: [{ productVariantId: mug.variantId, quantity: 1 }] } }));
+  denied('refund A\'s payment from B\'s own order', await as('B', mod, { i: { dryRun: true, orderId: bMade.id, refunds: [{ paymentId: (await m.A.x(`query($id:ID!){ order(id:$id){ payments{ id } } }`, { id: made.id })).order.payments[0].id, amount: 100 }] } }));
+  // The one state a store may NOT reach by itself: cancelling stays on its own guarded path.
+  denied('cancel by state change', await as('A', `mutation($id:ID!){ transitionOrderToState(id:$id, state:"Cancelled"){ __typename } }`, { id: made.id }));
+  // And A can edit its own order through the supported path.
+  const own = await A.previewOrderEdit(m.A.x, { orderId: made.id!, lines: [{ lineId: lineA, qty: 1 }], add: [] }); assert.equal(own.ok, true, own.message); assert.ok(own.changeMinor < 0, 'one fewer costs less');
+});

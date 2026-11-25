@@ -11,9 +11,10 @@ import type { EntityTarget } from 'typeorm';
  *   2. VERIFIES that every record the request names by id belongs to the caller's own channel before the operation runs.
  * Both are enforced on the server whatever the portal sends.
  */
+const ORDER_STEPS = new Set(['ArrangingPayment', 'Modifying', 'ArrangingAdditionalPayment', 'PaymentAuthorized', 'PaymentSettled', 'PartiallyShipped', 'Shipped', 'PartiallyDelivered']);
 export const MERCHANT_QUERIES = new Set(['activeAdministrator', 'activeChannel', 'product', 'products', 'productVariant', 'productVariants', 'order', 'orders', 'customer', 'customers', 'collection', 'collections', 'previewCollectionVariants', 'taxCategories', 'asset', 'assets', 'facets', 'promotions', 'promotion', 'stockLocations', 'shippingMethod', 'shippingMethods', 'countries', 'search']);
 export const MERCHANT_MUTATIONS = new Set(['createProduct', 'updateProduct', 'deleteProduct', 'createProductOptionGroup', 'addOptionGroupToProduct', 'createProductVariants', 'updateProductVariants', 'deleteProductVariant', 'createCollection', 'updateCollection', 'deleteCollection',
-  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'addNoteToCustomer', 'deleteCustomerNote', 'createDraftOrder', 'deleteDraftOrder', 'addItemToDraftOrder', 'adjustDraftOrderLine', 'removeDraftOrderLine', 'setCustomerForDraftOrder', 'setDraftOrderShippingAddress', 'setDraftOrderShippingMethod', 'applyCouponCodeToDraftOrder', 'removeCouponCodeFromDraftOrder', 'transitionOrderToState', 'addManualPaymentToOrder', 'createPromotion', 'updatePromotion', 'deletePromotion',
+  'createAssets', 'updateAsset', 'deleteAssets', 'addFulfillmentToOrder', 'transitionFulfillmentToState', 'refundOrder', 'modifyOrder', 'cancelOrder', 'addNoteToOrder', 'updateCustomer', 'addNoteToCustomer', 'deleteCustomerNote', 'createDraftOrder', 'deleteDraftOrder', 'addItemToDraftOrder', 'adjustDraftOrderLine', 'removeDraftOrderLine', 'setCustomerForDraftOrder', 'setDraftOrderShippingAddress', 'setDraftOrderShippingMethod', 'applyCouponCodeToDraftOrder', 'removeCouponCodeFromDraftOrder', 'transitionOrderToState', 'addManualPaymentToOrder', 'createPromotion', 'updatePromotion', 'deletePromotion',
   'createShippingMethod', 'updateShippingMethod', 'deleteShippingMethod']);
 
 type Via = 'direct' | 'order' | 'optionGroup' | 'customerNote';
@@ -41,14 +42,16 @@ export const OWNERSHIP: Record<string, Check[]> = {
   setCustomerForDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: Customer, ids: a => arr(a?.customerId) }],
   setDraftOrderShippingAddress: [{ entity: Order, ids: a => arr(a?.orderId) }], setDraftOrderShippingMethod: [{ entity: Order, ids: a => arr(a?.orderId) }, { entity: ShippingMethod, ids: a => arr(a?.shippingMethodId) }],
   applyCouponCodeToDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }], removeCouponCodeFromDraftOrder: [{ entity: Order, ids: a => arr(a?.orderId) }],
-  // Only the one step a hand-made order needs: Draft to ArrangingPayment. Any other state change stays with the platform.
-  transitionOrderToState: [{ entity: Order, ids: a => arr(a?.id), when: a => a?.state === 'ArrangingPayment' }],
+  // Only the steps a hand-made order and an order edit need: Draft to ArrangingPayment, into and out of editing, and the extra-payment step. Cancelling, delivering and every other state change stay with the platform (cancelOrder and fulfilment have their own checks).
+  transitionOrderToState: [{ entity: Order, ids: a => arr(a?.id), when: a => ORDER_STEPS.has(a?.state) }],
   addManualPaymentToOrder: [{ entity: Order, ids: a => arr(inp(a)?.orderId) }],
   addNoteToCustomer: [{ entity: Customer, ids: a => arr(inp(a)?.id) }],
   deleteCustomerNote: [{ entity: CustomerHistoryEntry, ids: a => arr(a?.id), via: 'customerNote' }],
   updatePromotion: [{ entity: Promotion, ids: a => arr(inp(a)?.id) }], deletePromotion: [{ entity: Promotion, ids: a => arr(a?.id) }],
   updateShippingMethod: [{ entity: ShippingMethod, ids: a => arr(inp(a)?.id) }], deleteShippingMethod: [{ entity: ShippingMethod, ids: a => arr(a?.id) }],
   addFulfillmentToOrder: [{ entity: OrderLine, ids: a => arr(inp(a)?.lines).map((l: any) => l?.orderLineId), via: 'order' }],
+  // Editing a placed order: the order, every line it touches, every refund payment, and every item being added must all belong to this store.
+  modifyOrder: [{ entity: Order, ids: a => arr(inp(a)?.orderId) }, { entity: OrderLine, ids: a => arr(inp(a)?.adjustOrderLines).map((l: any) => l?.orderLineId), via: 'order' }, { entity: Payment, ids: a => arr(inp(a)?.refunds).map((r: any) => r?.paymentId).concat(inp(a)?.refund?.paymentId ?? []), via: 'order' }, { entity: ProductVariant, ids: a => arr(inp(a)?.addItems).map((l: any) => l?.productVariantId) }],
   refundOrder: [{ entity: Payment, ids: a => arr(inp(a)?.paymentId), via: 'order' }, { entity: OrderLine, ids: a => arr(inp(a)?.lines).map((l: any) => l?.orderLineId), via: 'order' }],
   cancelOrder: [{ entity: Order, ids: a => arr(inp(a)?.orderId) }], addNoteToOrder: [{ entity: Order, ids: a => arr(inp(a)?.id) }],
   transitionFulfillmentToState: [{ entity: Fulfillment, ids: a => arr(a?.id), via: 'order' }],

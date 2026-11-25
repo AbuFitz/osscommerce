@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice, StockRow, StockDetail, StockMove, VariantStockAdjust, StockSettings, StockCountResult } from '../gateway';
+import type { OrderEditApply, OrderEditInput, OrderEditPreview, Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice, StockRow, StockDetail, StockMove, VariantStockAdjust, StockSettings, StockCountResult } from '../gateway';
 import { createProductWithVariants, findTaxCategories, previewCollection, type Exec } from './catalogue';
 import { slugify } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from '../discounts';
@@ -12,12 +12,12 @@ import { orderPoints, recentOrders } from '../geo/points';
  */
 const ORDER = `id code state active orderPlacedAt updatedAt total totalWithTax shippingWithTax currencyCode
   customer{ firstName lastName emailAddress } shippingAddress{ fullName streetLine1 city postalCode countryCode }
-  discounts{ amountWithTax } lines{ id quantity unitPriceWithTax productVariant{ sku name product{ name } } featuredAsset{ preview } }
+  discounts{ amountWithTax } lines{ id quantity unitPriceWithTax productVariant{ id sku name product{ name } } featuredAsset{ preview } }
   payments{ id state method amount createdAt refunds{ total state createdAt } } fulfillments{ id state trackingCode createdAt lines{ orderLineId quantity } }`;
 
 type RawOrder = { id: string; code: string; state: string; orderPlacedAt: string | null; updatedAt: string; total: number; totalWithTax: number; shippingWithTax: number;
   customer: { firstName: string; lastName: string; emailAddress: string } | null; shippingAddress: { fullName?: string; streetLine1?: string; city?: string; postalCode?: string; countryCode?: string } | null;
-  discounts: { amountWithTax: number }[]; lines: { id: string; quantity: number; unitPriceWithTax: number; productVariant: { sku: string; name: string; product: { name: string } }; featuredAsset: { preview: string } | null }[];
+  discounts: { amountWithTax: number }[]; lines: { id: string; quantity: number; unitPriceWithTax: number; productVariant: { id: string; sku: string; name: string; product: { name: string } }; featuredAsset: { preview: string } | null }[];
   payments: { id: string; state: string; method: string; amount: number; createdAt: string; refunds: { total: number; state: string; createdAt: string }[] }[] | null;
   fulfillments: { id: string; state: string; trackingCode: string | null; createdAt: string; lines: { orderLineId: string; quantity: number }[] }[] | null;
   history?: { items: { type: string; createdAt: string; data: Record<string, unknown>; administrator: { firstName: string; lastName: string } | null }[] } };
@@ -29,11 +29,11 @@ export function mapOrder(o: RawOrder): Order {
   const fuls = (o.fulfillments ?? []).filter(f => f.state !== 'Cancelled'); const sent = new Map<string, number>(); for (const f of fuls) for (const l of f.lines) sent.set(l.orderLineId, (sent.get(l.orderLineId) ?? 0) + l.quantity);
   const all = o.lines.length > 0 && o.lines.every(l => (sent.get(l.id) ?? 0) >= l.quantity); const fulfilment: FulfilmentStatus = all ? 'fulfilled' : sent.size ? 'partial' : 'unfulfilled';
   const state: OrderState = o.state === 'Cancelled' ? 'cancelled' : all ? 'completed' : 'open';
-  const lines: OrderLine[] = o.lines.map(l => { const base = l.productVariant.product.name; const v = l.productVariant.name.startsWith(base) ? l.productVariant.name.slice(base.length).trim() : ''; return { id: l.id, sent: sent.get(l.id) ?? 0, sku: l.productVariant.sku, title: base, variant: v || undefined, qty: l.quantity, unitMinor: l.unitPriceWithTax, imageUrl: l.featuredAsset?.preview }; });
+  const lines: OrderLine[] = o.lines.map(l => { const base = l.productVariant.product.name; const v = l.productVariant.name.startsWith(base) ? l.productVariant.name.slice(base.length).trim() : ''; return { id: l.id, variantId: l.productVariant.id, sent: sent.get(l.id) ?? 0, sku: l.productVariant.sku, title: base, variant: v || undefined, qty: l.quantity, unitMinor: l.unitPriceWithTax, imageUrl: l.featuredAsset?.preview }; });
   const placed = o.orderPlacedAt ?? o.updatedAt; const a = o.shippingAddress;
   const timeline = [{ at: placed, text: 'Order placed.' }, ...settled.map(p => ({ at: p.createdAt, text: 'Payment received.' })), ...fuls.map(f => ({ at: f.createdAt, text: f.trackingCode ? `Marked as fulfilled. Tracking ${f.trackingCode}.` : 'Marked as fulfilled.' })),
     ...pays.flatMap(p => p.refunds).map(r => ({ at: r.createdAt, text: `Refunded ${(r.total / 100).toFixed(2)}.` })),
-  ...(o.history?.items ?? []).flatMap((h): { at: string; text: string; note?: boolean; by?: string }[] => h.type === 'ORDER_NOTE' && typeof h.data.note === 'string' ? [{ at: h.createdAt, text: h.data.note, note: true, by: h.administrator ? `${h.administrator.firstName} ${h.administrator.lastName}`.trim() : undefined }] : h.type === 'ORDER_CANCELLATION' ? [{ at: h.createdAt, text: `Order cancelled${typeof h.data.reason === 'string' && h.data.reason ? `: ${h.data.reason}` : ''}.` }] : [])].sort((x, y) => x.at.localeCompare(y.at));
+  ...(o.history?.items ?? []).flatMap((h): { at: string; text: string; note?: boolean; by?: string }[] => h.type === 'ORDER_NOTE' && typeof h.data.note === 'string' ? [{ at: h.createdAt, text: h.data.note, note: true, by: h.administrator ? `${h.administrator.firstName} ${h.administrator.lastName}`.trim() : undefined }] : h.type === 'ORDER_MODIFIED' ? [{ at: h.createdAt, text: 'Order edited.' }] : h.type === 'ORDER_CANCELLATION' ? [{ at: h.createdAt, text: `Order cancelled${typeof h.data.reason === 'string' && h.data.reason ? `: ${h.data.reason}` : ''}.` }] : [])].sort((x, y) => x.at.localeCompare(y.at));
   return { id: o.id, number: Number(String(o.id).replace(/\D/g, '')) || 0, placedAt: placed, customer: o.customer ? `${o.customer.firstName} ${o.customer.lastName}`.trim() : 'Guest', email: o.customer?.emailAddress ?? '', lines,
     shippingMinor: o.shippingWithTax, discountMinor: Math.abs(o.discounts.reduce((s, d) => s + d.amountWithTax, 0)), taxMinor: o.totalWithTax - o.total, totalMinor: o.totalWithTax,
     payment, fulfilment, state, refundedMinor: refunded, timeline, shipTo: a ? [a.fullName, a.streetLine1, a.city, a.postalCode].filter(Boolean).join(', ') : '', ship: a ? { city: a.city, country: a.countryCode } : undefined };
@@ -343,7 +343,7 @@ export async function cancelOrder(x: Exec, i: { orderId: string; reason: string;
     const hadPaid = o.payment === 'paid';
     const r = (await x(`mutation($i: CancelOrderInput!){ cancelOrder(input:$i){ __typename ... on Order { id state } ... on ErrorResult { message } } }`, { i: { orderId: i.orderId, reason: i.reason.slice(0, 200), cancelShipping: true } })).cancelOrder;
     if (r.__typename !== 'Order') return { ok: false, message: r.message ?? 'The order could not be cancelled.' };
-    if (i.refund && hadPaid) { const f = await refundOrder(x, { orderId: i.orderId, amountMinor: o.totalMinor - o.refundedMinor, reason: i.reason, restock: false, refundFee: true }); if (!f.ok) return { ok: true, message: `Order cancelled and its stock released, but the refund did not go through: ${f.message} Refund it from the order page.` }; return { ok: true, message: `Order cancelled and ${(f.message.replace(/^Refunded /, 'refunded ')).replace(/\.$/, '')}.` }; }
+    if (i.refund && hadPaid) { const f = await refundOrder(x, { orderId: i.orderId, amountMinor: o.totalMinor - o.refundedMinor, reason: i.reason, restock: false }); if (!f.ok) return { ok: true, message: `Order cancelled and its stock released, but the refund did not go through: ${f.message} Refund it from the order page.` }; return { ok: true, message: `Order cancelled and ${(f.message.replace(/^Refunded /, 'refunded ')).replace(/\.$/, '')}.` }; }
     return { ok: true, message: hadPaid ? 'Order cancelled and its stock released. The customer has not been refunded yet.' : 'Order cancelled and its stock released.' };
   } catch (e) { return fail(e); }
 }
@@ -353,13 +353,93 @@ export async function addOrderNote(x: Exec, orderId: string, note: string): Prom
   } catch (e) { return fail(e); }
 }
 export async function refundOrder(x: Exec, i: RefundInput): Promise<MutationResult> {
-  try { const o = (await x(`query($id:ID!){ order(id:$id){ payments{ id state amount refunds{ total state } } } }`, { id: i.orderId })).order; if (!o) return { ok: false, message: 'Order not found.' };
+  try { const o = (await x(`query($id:ID!){ order(id:$id){ code lines{ id quantity productVariant{ id } } payments{ id state amount refunds{ total state } } } }`, { id: i.orderId })).order; if (!o) return { ok: false, message: 'Order not found.' };
     const pay = (o.payments as any[]).find(p => p.state === 'Settled'); if (!pay) return { ok: false, message: 'There is no settled payment on this order to refund.' };
     const already = (pay.refunds as any[]).filter(r => r.state !== 'Failed').reduce((s, r) => s + r.total, 0); if (i.amountMinor <= 0 || i.amountMinor > pay.amount - already) return { ok: false, message: `You can refund up to ${((pay.amount - already) / 100).toFixed(2)} on this order.` };
-    const r = (await x(`mutation($i: RefundOrderInput!){ refundOrder(input:$i){ __typename ... on Refund { id state } ... on ErrorResult { message } } }`, { i: { lines: [], shipping: 0, adjustment: 0, amount: i.amountMinor, paymentId: pay.id, reason: i.reason || 'Refund' } })).refundOrder;
+    const lines = (i.lines ?? []).filter(l => l.qty > 0); const known = new Map((o.lines as { id: string; quantity: number; productVariant: { id: string } }[]).map(l => [l.id, l]));
+    for (const l of lines) { const k = known.get(l.lineId); if (!k) return { ok: false, message: 'One of the returned items is not on this order.' }; if (!Number.isInteger(l.qty) || l.qty > k.quantity) return { ok: false, message: 'You cannot return more of an item than the order holds.' }; }
+    const r = (await x(`mutation($i: RefundOrderInput!){ refundOrder(input:$i){ __typename ... on Refund { id state } ... on ErrorResult { message } } }`, { i: { lines: lines.map(l => ({ orderLineId: l.lineId, quantity: l.qty })), shipping: 0, adjustment: 0, amount: i.amountMinor, paymentId: pay.id, reason: i.reason || 'Refund' } })).refundOrder;
     if (r.__typename !== 'Refund') return { ok: false, message: r.message ?? 'The refund could not be made.' }; if (r.state === 'Failed') return { ok: false, message: 'The payment provider declined the refund. Nothing was refunded.' };
-    return { ok: true, message: `Refunded ${(i.amountMinor / 100).toFixed(2)} to the customer's original payment method.` };
+    // The money is back with the customer. Putting the goods back on the shelf is a separate, honest step: only when asked, only for the lines named.
+    let back = 0; if (i.restock) for (const l of lines) { const v = known.get(l.lineId)!.productVariant.id; const res = await adjustVariantStock(x, { variantId: v, mode: 'add', qty: l.qty, reason: 'returned', note: `Returned from order ${o.code}` }); if (res.ok) back += l.qty; }
+    return { ok: true, message: `Refunded ${(i.amountMinor / 100).toFixed(2)} to the customer's original payment method.${back ? ` ${back} item${back > 1 ? 's' : ''} put back in stock.` : ''}` };
   } catch (e) { return fail(e); }
+}
+
+// ---- Editing an order after it was placed ----
+const EDITABLE = new Set(['PaymentAuthorized', 'PaymentSettled', 'PartiallyShipped', 'Shipped', 'PartiallyDelivered']);
+const MODIFY_FIELDS = `id state totalWithTax shippingWithTax lines{ id quantity unitPriceWithTax linePriceWithTax productVariant{ id name product{ name } } } payments{ id state amount refunds{ total state } } fulfillments{ state lines{ orderLineId quantity } }`;
+type ModOrder = { id: string; state: string; totalWithTax: number; shippingWithTax: number; lines: { id: string; quantity: number; unitPriceWithTax: number; linePriceWithTax: number; productVariant: { id: string; name: string; product: { name: string } } }[]; payments: { id: string; state: string; amount: number; refunds: { total: number; state: string }[] }[]; fulfillments: { state: string; lines: { orderLineId: string; quantity: number }[] }[] };
+async function stateOf(x: Exec, id: string) { const o = (await x(`query($id:ID!){ order(id:$id){ ${MODIFY_FIELDS} } }`, { id })).order as ModOrder | null; return o; }
+async function transition(x: Exec, id: string, state: string) { const r = (await x(`mutation($id:ID!,$s:String!){ transitionOrderToState(id:$id, state:$s){ __typename ... on Order{ state } ... on OrderStateTransitionError{ message transitionError } } }`, { id, s: state })).transitionOrderToState; if (r.__typename !== 'Order') throw new Error(r.transitionError ?? r.message ?? 'The order could not change state.'); return r.state as string; }
+const PENDING_REFUND = 'A refund on this order is still pending with the payment provider. Try again once it shows as refunded, so the amounts add up.';
+const pendingRefund = (o: ModOrder) => o.payments.some(p => p.refunds.some(r => r.state === 'Pending'));
+function modifyInput(o: ModOrder, i: OrderEditInput, dryRun: boolean) {
+  const cur = new Map(o.lines.map(l => [l.id, l.quantity])); const adjust = i.lines.filter(l => cur.has(l.lineId) && cur.get(l.lineId) !== l.qty).map(l => ({ orderLineId: l.lineId, quantity: l.qty }));
+  const add = i.add.filter(a => a.qty > 0).map(a => ({ productVariantId: a.variantId, quantity: a.qty }));
+  const input: Record<string, unknown> = { dryRun, orderId: o.id, ...(adjust.length ? { adjustOrderLines: adjust } : {}), ...(add.length ? { addItems: add } : {}), options: { recalculateShipping: false } };
+  if (i.surcharge && i.surcharge.amountMinor !== 0) input.surcharges = [{ description: i.surcharge.label.trim() || 'Adjustment', price: i.surcharge.amountMinor, priceIncludesTax: true, taxRate: 0 }];
+  if (i.address) input.updateShippingAddress = { fullName: i.address.fullName, streetLine1: i.address.line1, streetLine2: i.address.line2 || undefined, city: i.address.city, postalCode: i.address.postcode, countryCode: 'GB' };
+  return input;
+}
+function checkEdit(o: ModOrder, i: OrderEditInput): string | null {
+  if (!EDITABLE.has(o.state)) return o.state === 'Delivered' ? 'This order is marked delivered, so it cannot be edited. Use Refund for money back.' : 'This order cannot be edited in its current state.';
+  const ids = new Set(o.lines.map(l => l.id)); for (const l of i.lines) { if (!ids.has(l.lineId)) return 'One of the lines is not on this order.'; if (!Number.isInteger(l.qty) || l.qty < 0 || l.qty > 999) return 'Quantities must be whole numbers from 0 to 999.'; }
+  for (const a of i.add) if (!Number.isInteger(a.qty) || a.qty < 0 || a.qty > 999) return 'Quantities must be whole numbers from 0 to 999.';
+  const sent = new Map<string, number>(); for (const f of o.fulfillments.filter(f => f.state !== 'Cancelled')) for (const l of f.lines) sent.set(l.orderLineId, (sent.get(l.orderLineId) ?? 0) + l.quantity);
+  for (const l of i.lines) { const s = sent.get(l.lineId) ?? 0; if (l.qty < s) { const n = o.lines.find(q => q.id === l.lineId)?.productVariant.product.name ?? 'That item'; return `${n} has ${s} already sent, so it cannot go below that.`; } }
+  const next = new Map(i.lines.map(l => [l.lineId, l.qty])); const remaining = o.lines.reduce((n, l) => n + (next.get(l.id) ?? l.quantity), 0) + i.add.reduce((n, a) => n + a.qty, 0); if (remaining <= 0) return 'An order needs at least one item. To cancel the whole order, use Cancel order.';
+  if (i.surcharge && (!Number.isInteger(i.surcharge.amountMinor) || Math.abs(i.surcharge.amountMinor) > 10_000_00)) return 'An adjustment must be a whole number of pence, up to £10,000.';
+  return null;
+}
+const MODIFY = `mutation($i: ModifyOrderInput!){ modifyOrder(input:$i){ __typename ... on Order{ ${MODIFY_FIELDS} } ... on ErrorResult{ message } } }`;
+/** What would the order look like after this change? Asks the engine to work it out (promotions, tax, shipping) without saving, then puts the order back as it was. */
+export async function previewOrderEdit(x: Exec, i: OrderEditInput): Promise<OrderEditPreview> {
+  const none = { ok: false, newTotalMinor: 0, changeMinor: 0, shippingMinor: 0, lines: [] as OrderEditPreview['lines'] };
+  let o: ModOrder | null = null; let prev = ''; let flipped = false;
+  try {
+    o = await stateOf(x, i.orderId); if (!o) return { ...none, message: 'Order not found.' }; const bad = checkEdit(o, i); if (bad) return { ...none, message: bad };
+    prev = o.state; await transition(x, o.id, 'Modifying'); flipped = true;
+    const r = (await x(MODIFY, { i: modifyInput(o, i, true) })).modifyOrder;
+    if (r.__typename === 'NoChangesSpecifiedError') return { ...none, message: 'Nothing has changed yet.' };
+    if (r.__typename !== 'Order') return { ...none, message: r.message ?? 'That change cannot be made.' };
+    const n = r as ModOrder; if (n.totalWithTax > o.totalWithTax && pendingRefund(o)) return { ...none, message: PENDING_REFUND };
+    return { ok: true, message: '', newTotalMinor: n.totalWithTax, changeMinor: n.totalWithTax - o.totalWithTax, shippingMinor: n.shippingWithTax, lines: n.lines.filter(l => l.quantity > 0).map(l => ({ title: l.productVariant.product.name, variant: l.productVariant.name.startsWith(l.productVariant.product.name) ? l.productVariant.name.slice(l.productVariant.product.name.length).trim() || undefined : l.productVariant.name, qty: l.quantity, unitMinor: l.unitPriceWithTax, lineMinor: l.linePriceWithTax })) };
+  } catch (e) { return { ...none, message: fail(e).message }; }
+  finally { if (flipped && prev) { try { await transition(x, i.orderId, prev); } catch { /* the order stays in editing mode; the next edit or a retry puts it right */ } } }
+}
+const EXTRA_PAYMENT = { cash: 'Cash', card_in_person: 'Card, in person', bank_transfer: 'Bank transfer', other: 'Paid another way' } as const;
+export async function applyOrderEdit(x: Exec, i: OrderEditApply): Promise<MutationResult> {
+  let o: ModOrder | null = null; let prev = ''; let flipped = false; let applied = false;
+  try {
+    o = await stateOf(x, i.orderId); if (!o) return { ok: false, message: 'Order not found.' }; const bad = checkEdit(o, i); if (bad) return { ok: false, message: bad };
+    prev = o.state; await transition(x, o.id, 'Modifying'); flipped = true;
+    const dry = (await x(MODIFY, { i: modifyInput(o, i, true) })).modifyOrder; if (dry.__typename === 'NoChangesSpecifiedError') return { ok: false, message: 'Nothing has changed.' }; if (dry.__typename !== 'Order') return { ok: false, message: dry.message ?? 'That change cannot be made.' };
+    const delta = (dry as ModOrder).totalWithTax - o.totalWithTax;
+    if (delta > 0 && pendingRefund(o)) return { ok: false, message: PENDING_REFUND };
+    if (delta > 0 && !i.payment) return { ok: false, message: `The new total is ${(delta / 100).toFixed(2)} more. Choose how the extra amount was paid.` };
+    const input: Record<string, unknown> = modifyInput(o, i, false);
+    if (delta < 0) {
+      const pay = o.payments.find(p => p.state === 'Settled' && p.amount - p.refunds.filter(r => r.state !== 'Failed').reduce((s, r) => s + r.total, 0) >= -delta);
+      if (!pay) return { ok: false, message: 'The original payment cannot cover this refund. Refund part of it first, or reduce the change.' };
+      input.refunds = [{ paymentId: pay.id, amount: -delta, reason: i.reason?.trim() || 'Order changed' }];
+    }
+    const r = (await x(MODIFY, { i: input })).modifyOrder; if (r.__typename !== 'Order') return { ok: false, message: r.message ?? 'The change could not be saved.' };
+    applied = true;
+    if (delta > 0) {
+      await transition(x, o.id, 'ArrangingAdditionalPayment');
+      const p = (await x(`mutation($i:ManualPaymentInput!){ addManualPaymentToOrder(input:$i){ __typename ... on Order{ id state } ... on ErrorResult{ message } } }`, { i: { orderId: o.id, method: EXTRA_PAYMENT[i.payment!], transactionId: `edit-${Date.now().toString(36)}`, metadata: {} } })).addManualPaymentToOrder;
+      if (p.__typename !== 'Order') throw new Error(p.message ?? 'The extra payment could not be recorded.');
+    }
+    if (i.note?.trim()) { try { await x(`mutation($i: AddNoteToOrderInput!){ addNoteToOrder(input:$i){ id } }`, { i: { id: o.id, note: i.note.trim().slice(0, 2000), isPublic: false } }); } catch { /* the edit is saved; only the note failed */ } }
+    const now = (await stateOf(x, o.id))?.state; if (now && now !== prev) { if (now === 'PaymentSettled' || now === 'PaymentAuthorized' || now === 'Modifying' || now === 'ArrangingAdditionalPayment') await transition(x, o.id, prev); }
+    flipped = false;
+    const msg = delta > 0 ? `Order updated. The extra ${(delta / 100).toFixed(2)} is recorded as paid (${EXTRA_PAYMENT[i.payment!].toLowerCase()}).` : delta < 0 ? `Order updated. ${(-delta / 100).toFixed(2)} refunded to the customer's original payment method.` : 'Order updated. The total is unchanged.';
+    return { ok: true, message: msg };
+  } catch (e) {
+    // If the change was already saved, say so plainly instead of pretending nothing happened.
+    return { ok: false, message: applied ? `The order was changed, but a later step failed: ${fail(e).message} Open the order to check it before trying again.` : fail(e).message };
+  } finally { if (flipped && prev && !applied) { try { await transition(x, i.orderId, prev); } catch { /* left in editing mode; the next edit puts it right */ } } }
 }
 
 // ---- Collections ----

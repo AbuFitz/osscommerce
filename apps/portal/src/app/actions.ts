@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { StockSettings, VariantStockAdjust, ManualOrderInput, CustomerProfile, CollectionInput, DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
+import type { OrderEditApply, OrderEditInput, StockSettings, VariantStockAdjust, ManualOrderInput, CustomerProfile, CollectionInput, DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -11,7 +11,10 @@ async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<
 export async function fulfilOrder(id: string, tracking?: string, lines?: { sku: string; qty: number }[]) { return run(() => gateway().fulfilOrder(id, tracking?.trim().slice(0, 120) || undefined, lines), ['/orders', `/orders/${id}`, '/']); }
 export async function cancelOrder(i: { orderId: string; reason: string; refund: boolean }) { return run(() => gateway().cancelOrder({ ...i, reason: i.reason.trim().slice(0, 200) }), ['/orders', `/orders/${i.orderId}`, '/', '/inventory']); }
 export async function addOrderNote(orderId: string, note: string) { return run(() => gateway().addOrderNote(orderId, note), [`/orders/${orderId}`]); }
-export async function refundOrder(i: RefundInput) { return run(() => gateway().refundOrder(i), ['/orders', '/']); }
+export async function refundOrder(i: RefundInput) { return run(() => gateway().refundOrder(i), ['/orders', '/', '/inventory']); }
+export async function orderableItemsAction() { return gateway().orderableItems(); }
+export async function previewOrderEdit(i: OrderEditInput) { return gateway().previewOrderEdit(i); }
+export async function applyOrderEdit(i: OrderEditApply) { return run(() => gateway().applyOrderEdit(i), ['/orders', '/', '/inventory', '/analytics']); }
 export async function inviteMember(email: string, role: Member['role']) { return run(() => gateway().inviteMember(email, role), ['/settings/team']); }
 export async function rollbackTheme(v: string) { return run(() => gateway().rollbackTheme(v), ['/storefront']); }
 export async function decideGrant(id: string, d: 'approve' | 'decline' | 'revoke') {

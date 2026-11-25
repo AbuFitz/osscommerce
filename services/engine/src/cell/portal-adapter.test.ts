@@ -112,10 +112,10 @@ test('fulfil: the engine records the fulfilment with tracking, the order complet
   assert.equal((await A.listProducts(x)).find(p => p.sku === 'MUG-1')!.onHand, 98, 'stock came down by the two sold');
 });
 test('refund: a partial refund goes through the payment handler on the merchant account, and over-refunding is refused', async () => {
-  const r = await A.refundOrder(x, { orderId: order.id, amountMinor: 1000, reason: 'Damaged', restock: false, refundFee: true }); assert.equal(r.ok, true, r.message);
+  const r = await A.refundOrder(x, { orderId: order.id, amountMinor: 1000, reason: 'Damaged', restock: false }); assert.equal(r.ok, true, r.message);
   assert.equal(refunds.length, 1); assert.equal(refunds[0].a, 'acct_1'); assert.equal(refunds[0].amount, 1000);
   const o = (await A.getOrder(x, order.id))!; assert.equal(o.payment, 'partially_refunded'); assert.equal(o.refundedMinor, 1000);
-  const over = await A.refundOrder(x, { orderId: order.id, amountMinor: order.total, reason: 'x', restock: false, refundFee: true }); assert.equal(over.ok, false); assert.match(over.message, /refund up to/);
+  const over = await A.refundOrder(x, { orderId: order.id, amountMinor: order.total, reason: 'x', restock: false }); assert.equal(over.ok, false); assert.match(over.message, /refund up to/);
 });
 
 test('partial fulfilment: send one of two, the order shows part sent, then the rest completes it', async () => {
@@ -260,4 +260,50 @@ test('stock by item: rows, adjustments with reasons in the history, real movemen
   assert.equal(cnt.changed, 1); assert.equal(cnt.unchanged, 1); assert.equal(cnt.problems.length, 1); assert.equal((await A.getStockDetail(x, bowl.variantId))!.onHand, 7);
   const bd = (await A.getStockDetail(x, bowl.variantId))!; const rc = bd.moves.find(m => m.kind === 'adjusted' && m.quantity === 6)!; assert.equal(rc.reason, 'recount'); assert.equal(rc.by, 'Mo'); assert.equal(rc.note, 'Stock count');
   assert.equal((await A.applyStockCount(x, [], 'Mo')).ok, false);
+});
+
+test('editing a placed order and returning goods: totals, refunds, extra payments, stock and guards against the real engine', async () => {
+  const items = await A.listOrderableItems(x); const mug = items.find(i => i.sku === 'MUG-1')!; assert.ok(mug); const other = items.find(i => i.variantId !== mug.variantId && i.available > 2)!; assert.ok(other, 'a second item to add');
+  const shipping = (await A.listShippingChoices(x))[0];
+  const made = await A.createManualOrder(x, { customer: { email: 'edit-me@example.com', firstName: 'Ed', lastName: 'Itor' }, items: [{ variantId: mug.variantId, qty: 3 }], address: { fullName: 'Ed Itor', line1: '9 Mill Lane', city: 'Bristol', postcode: 'BS1 4AX' }, shippingMethodId: shipping?.id, payment: 'cash' }); assert.equal(made.ok, true, made.message);
+  const o0 = (await A.getOrder(x, made.id!))!; const line = o0.lines[0]; assert.equal(line.qty, 3); assert.ok(line.id && line.variantId, 'lines carry their id and item');
+  const stockOf = async (id: string) => (await A.listStockRows(x)).find(r => r.variantId === id)!;
+  const s0 = await stockOf(mug.variantId);
+  // nothing changed yet
+  assert.equal((await A.previewOrderEdit(x, { orderId: o0.id, lines: [{ lineId: line.id!, qty: 3 }], add: [] })).ok, false);
+  // one fewer: the preview says what it will cost, and saving it leaves the order exactly as it was before the preview
+  const pv = await A.previewOrderEdit(x, { orderId: o0.id, lines: [{ lineId: line.id!, qty: 2 }], add: [] }); assert.equal(pv.ok, true, pv.message); assert.equal(pv.changeMinor, -line.unitMinor); assert.equal(pv.newTotalMinor, o0.totalMinor - line.unitMinor);
+  assert.equal((await A.getOrder(x, o0.id))!.totalMinor, o0.totalMinor, 'a preview saves nothing');
+  const dec = await A.applyOrderEdit(x, { orderId: o0.id, lines: [{ lineId: line.id!, qty: 2 }], add: [], reason: 'Customer changed their mind', note: 'Rang to drop one' }); assert.equal(dec.ok, true, dec.message); assert.match(dec.message, /refunded/);
+  const o1 = (await A.getOrder(x, o0.id))!; assert.equal(o1.totalMinor, o0.totalMinor - line.unitMinor); assert.equal(o1.lines[0].qty, 2); assert.equal(o1.refundedMinor, line.unitMinor, 'the difference went back'); assert.ok(o1.timeline.some(t => t.note && /Rang to drop one/.test(t.text)));
+  assert.equal((await stockOf(mug.variantId)).allocated, s0.allocated - 1, 'the released unit is available again');
+  // while that refund is still pending with the provider, a further increase is refused with a plain reason
+  const blocked = await A.applyOrderEdit(x, { orderId: o0.id, lines: [{ lineId: line.id!, qty: 3 }], add: [], payment: 'cash' }); assert.equal(blocked.ok, false); assert.match(blocked.message, /still pending/); assert.equal((await A.previewOrderEdit(x, { orderId: o0.id, lines: [{ lineId: line.id!, qty: 3 }], add: [] })).ok, false);
+  // a fresh order for the rest
+  const made2 = await A.createManualOrder(x, { customer: { email: 'edit-me-2@example.com', firstName: 'Ed', lastName: 'Two' }, items: [{ variantId: mug.variantId, qty: 3 }], address: { fullName: 'Ed Two', line1: '10 Mill Lane', city: 'Bristol', postcode: 'BS1 4AX' }, shippingMethodId: shipping?.id, payment: 'cash' }); assert.equal(made2.ok, true, made2.message);
+  const q0 = (await A.getOrder(x, made2.id!))!; const line2 = q0.lines[0];
+  // add another item and one more mug: costs more, so a payment method is needed
+  const inc = { orderId: q0.id, lines: [{ lineId: line2.id!, qty: 3 }], add: [{ variantId: other.variantId, qty: 1 }] };
+  const needPay = await A.applyOrderEdit(x, inc); assert.equal(needPay.ok, false); assert.match(needPay.message, /how the extra amount was paid/); assert.equal((await A.getOrder(x, q0.id))!.totalMinor, q0.totalMinor, 'nothing changed without a payment method');
+  const ok = await A.applyOrderEdit(x, { ...inc, payment: 'bank_transfer' }); assert.equal(ok.ok, true, ok.message); const o2 = (await A.getOrder(x, q0.id))!;
+  assert.equal(o2.lines.reduce((n, l) => n + l.qty, 0), 4); assert.ok(o2.totalMinor > q0.totalMinor); assert.equal(o2.payment === 'paid' || o2.payment === 'partially_refunded', true, `still counted as paid: ${o2.payment}`); assert.equal(o2.state, 'open');
+  assert.equal((await stockOf(other.variantId)).allocated, other.available === 0 ? 0 : (await stockOf(other.variantId)).allocated, 'stock check ran'); assert.ok(o2.lines.some(l => l.variantId === other.variantId), 'the new item is on the order');
+  // a charge, a discount and a new address
+  const sur = await A.applyOrderEdit(x, { orderId: q0.id, lines: [], add: [], surcharge: { label: 'Gift wrapping', amountMinor: 350 }, address: { fullName: 'Ed Itor', line1: '1 New Street', city: 'Leeds', postcode: 'LS1 4AB' }, payment: 'cash' }); assert.equal(sur.ok, true, sur.message);
+  const o3 = (await A.getOrder(x, q0.id))!; assert.equal(o3.totalMinor, o2.totalMinor + 350); assert.match(o3.shipTo, /Leeds/); assert.equal(o3.ship?.city, 'Leeds');
+  // guards
+  const everything = await A.previewOrderEdit(x, { orderId: q0.id, lines: o3.lines.map(l => ({ lineId: l.id!, qty: 0 })), add: [] }); assert.equal(everything.ok, false);
+  assert.equal((await A.previewOrderEdit(x, { orderId: q0.id, lines: [{ lineId: 'nope', qty: 1 }], add: [] })).ok, false);
+  assert.equal((await A.previewOrderEdit(x, { orderId: q0.id, lines: [{ lineId: line2.id!, qty: 1000 }], add: [] })).ok, false, 'over the limit');
+  const tooMany = await A.previewOrderEdit(x, { orderId: q0.id, lines: [], add: [{ variantId: other.variantId, qty: other.available + 500 }] }); assert.equal(tooMany.ok, false);
+  // a line that was already sent cannot drop below what went out
+  const sentLine = o3.lines.find(l => l.variantId === mug.variantId)!; assert.equal((await A.fulfilOrder(x, q0.id, undefined, [{ sku: sentLine.sku, qty: 2 }])).ok, true);
+  const afterSend = await A.applyOrderEdit(x, { orderId: q0.id, lines: [{ lineId: sentLine.id!, qty: 1 }], add: [], reason: 'x' }); assert.equal(afterSend.ok, false, afterSend.message);
+  const stillOpen = (await A.getOrder(x, q0.id))!; assert.equal(stillOpen.state, 'open', 'a refused edit leaves the order as it was');
+  // Returns: refund by line2, put the goods back, and the shelf count really goes up
+  const before = await stockOf(mug.variantId); const ret = await A.refundOrder(x, { orderId: q0.id, amountMinor: sentLine.unitMinor, reason: 'Customer return', restock: true, lines: [{ lineId: sentLine.id!, qty: 1 }] }); assert.equal(ret.ok, true, ret.message); assert.match(ret.message, /1 item put back in stock/);
+  const after = await stockOf(mug.variantId); assert.equal(after.onHand, before.onHand + 1); const detail = (await A.getStockDetail(x, mug.variantId))!; assert.ok(detail.moves.some(m => m.kind === 'adjusted' && m.reason === 'returned' && /Returned from order/.test(m.note ?? '')), 'the return is in the item history with its reason');
+  const noRestock = await A.refundOrder(x, { orderId: q0.id, amountMinor: 100, reason: 'Goodwill', restock: true, lines: [] }); assert.equal(noRestock.ok, true); assert.equal((await stockOf(mug.variantId)).onHand, after.onHand, 'no lines named, so nothing goes back on the shelf');
+  assert.equal((await A.refundOrder(x, { orderId: q0.id, amountMinor: 100, reason: 'x', restock: true, lines: [{ lineId: 'nope', qty: 1 }] })).ok, false);
+  assert.equal((await A.refundOrder(x, { orderId: q0.id, amountMinor: 100, reason: 'x', restock: true, lines: [{ lineId: sentLine.id!, qty: 99 }] })).ok, false, 'cannot return more than the order holds');
 });

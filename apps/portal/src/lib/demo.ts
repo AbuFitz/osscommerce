@@ -124,10 +124,38 @@ async function S(): Promise<Scratch> {
   const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
   const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
   if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, vstock: {}, custNotes: { c0: [{ id: 'n1', text: 'Prefers weekday delivery. Asked about a custom glaze.', at: '2026-11-02T10:30:00Z', by: 'Mo' }] }, custProfile: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  tagLines(x);
   return x;
+}
+/** Gives every order line an id and the item it is, as the live engine does, so line-level actions work the same in the demo. */
+function tagLines(x: Scratch) {
+  for (const o of x.orders) o.lines.forEach((l, i) => { l.id ??= `${o.id}-${i}`; if (!l.variantId) { const p = x.products.find(q => q.sku === l.sku); const v = p ? detail(x, p).list[0] : undefined; if (v) l.variantId = v.id; } });
 }
 /** Every product has at least one variant. The mug is seeded with two option groups so the editor has something real to show. */
 function metaOf(x: Scratch, p: Product) { return (x.meta[p.id] ??= { description: `${p.title}. Made in small batches and finished by hand.`, handle: p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), seoTitle: '', seoDescription: '', images: [] }); }
+/** Works out an edit to an order and, when asked, saves it. Same rules as the live engine: only open, paid orders; nothing below what was already sent; more money needs a payment method. */
+function editOrder(x: Scratch, i: import('./gateway').OrderEditApply | import('./gateway').OrderEditInput, save: boolean): import('./gateway').OrderEditPreview {
+  const none = { ok: false, message: '', newTotalMinor: 0, changeMinor: 0, shippingMinor: 0, lines: [] as import('./gateway').OrderEditPreview['lines'] };
+  const o = x.orders.find(q => q.id === i.orderId); if (!o) return { ...none, message: 'Order not found.' };
+  if (o.state !== 'open' || !(o.payment === 'paid' || o.payment === 'partially_refunded')) return { ...none, message: o.state === 'completed' ? 'This order is complete, so it cannot be edited. Use Refund for money back.' : 'Only open, paid orders can be edited.' };
+  const next: { line: Order['lines'][number]; qty: number }[] = []; for (const l of o.lines) { const c = i.lines.find(q => q.lineId === l.id); const qty = c ? c.qty : l.qty; if (!Number.isInteger(qty) || qty < 0 || qty > 999) return { ...none, message: 'Quantities must be whole numbers from 0 to 999.' }; if (qty < (l.sent ?? 0)) return { ...none, message: `${l.title} has ${l.sent} already sent, so it cannot go below that.` }; next.push({ line: l, qty }); }
+  const adds: { variantId: string; qty: number; title: string; variant?: string; sku: string; unit: number; p: Product }[] = [];
+  for (const a of i.add.filter(q => q.qty > 0)) { const f = findVariant(x, a.variantId); if (!f) return { ...none, message: 'One of the items is not available to sell.' }; if (a.qty > Math.max(f.v.onHand - f.v.allocated, 0)) return { ...none, message: `Only ${Math.max(f.v.onHand - f.v.allocated, 0)} of ${f.p.title} left.` }; adds.push({ variantId: a.variantId, qty: a.qty, title: f.p.title, variant: f.v.options.join(' · ') || undefined, sku: f.v.sku, unit: f.v.priceMinor, p: f.p }); }
+  const sur = i.surcharge && i.surcharge.amountMinor !== 0 ? i.surcharge.amountMinor : 0; const changed = adds.length > 0 || sur !== 0 || !!i.address || next.some(n => n.qty !== n.line.qty); if (!changed) return { ...none, message: 'Nothing has changed yet.' };
+  const lines = [...next.filter(n => n.qty > 0).map(n => ({ title: n.line.title, variant: n.line.variant, qty: n.qty, unitMinor: n.line.unitMinor, lineMinor: n.qty * n.line.unitMinor })), ...adds.map(a => ({ title: a.title, variant: a.variant, qty: a.qty, unitMinor: a.unit, lineMinor: a.qty * a.unit }))];
+  if (!lines.length) return { ...none, message: 'An order needs at least one item. To cancel the whole order, use Cancel order.' };
+  const newTotal = Math.max(lines.reduce((n, l) => n + l.lineMinor, 0) + o.shippingMinor - o.discountMinor + sur, 0); const change = newTotal - o.totalMinor;
+  const pay = (i as import('./gateway').OrderEditApply).payment;
+  if (save) {
+    if (change > 0 && !pay) return { ...none, message: `The new total is £${(change / 100).toFixed(2)} more. Choose how the extra amount was paid.` };
+    for (const n of next) { const d = n.qty - n.line.qty; if (d) { const p = x.products.find(q => q.sku === n.line.sku); if (p) p.allocated = Math.max(p.allocated + d, 0); } n.line.qty = n.qty; }
+    o.lines = o.lines.filter(l => l.qty > 0); for (const a of adds) { o.lines.push({ id: `${o.id}-e${o.lines.length}-${Date.now() % 1e6}`, variantId: a.variantId, sku: a.sku, title: a.title, variant: a.variant, qty: a.qty, unitMinor: a.unit }); a.p.allocated += a.qty; }
+    o.totalMinor = newTotal; o.taxMinor = Math.round(newTotal / 6); if (change < 0) o.refundedMinor += -change;
+    o.shipTo = i.address ? `${i.address.fullName}, ${i.address.line1}, ${i.address.city}, ${i.address.postcode}` : o.shipTo; if (i.address) o.ship = { city: i.address.city, country: 'GB' };
+    const at = new Date().toISOString(); o.timeline.push({ at, text: `Order edited: new total £${(newTotal / 100).toFixed(2)}${change > 0 ? `, extra £${(change / 100).toFixed(2)} paid (${pay})` : change < 0 ? `, £${(-change / 100).toFixed(2)} refunded` : ''}.` }); if (i.note?.trim()) o.timeline.push({ at, text: i.note.trim(), note: true, by: 'Mo' });
+  }
+  return { ok: true, message: '', newTotalMinor: newTotal, changeMinor: change, shippingMinor: o.shippingMinor, lines };
+}
 function findVariant(x: Scratch, variantId: string) { for (const p of x.products) { const v = detail(x, p).list.find(q => q.id === variantId); if (v) return { p, v }; } return null; }
 /** Keeps a product's totals equal to the sum of its items after an item changes. */
 function syncProduct(x: Scratch, p: Product) { const l = detail(x, p).list; p.onHand = l.reduce((n, v) => n + v.onHand, 0); p.allocated = l.reduce((n, v) => n + v.allocated, 0); }
@@ -395,11 +423,18 @@ export const demoGateway: CommerceGateway = {
     const x = await S(); const o = x.orders.find(q => q.id === i.orderId); if (!o) return { ok: false, message: 'Order not found.' };
     const left = o.totalMinor - o.refundedMinor; if (o.payment === 'failed') return { ok: false, message: 'Nothing was charged, so there is nothing to refund.' };
     if (i.amountMinor <= 0) return { ok: false, message: 'Enter an amount to refund.' }; if (i.amountMinor > left) return { ok: false, message: `You can refund up to £${(left / 100).toFixed(2)} on this order.` };
+    const lines = (i.lines ?? []).filter(l => l.qty > 0); for (const l of lines) { const k = o.lines.find(q => q.id === l.lineId); if (!k) return { ok: false, message: 'One of the returned items is not on this order.' }; if (l.qty > k.qty) return { ok: false, message: 'You cannot return more of an item than the order holds.' }; }
     o.refundedMinor += i.amountMinor; const full = o.refundedMinor >= o.totalMinor; o.payment = full ? 'refunded' : 'partially_refunded'; if (full) o.state = 'cancelled';
-    const fee = i.refundFee ? feeRefundMinor({ chargeMinor: o.totalMinor, feeMinor: feeMinor(o.totalMinor, 50), refundMinor: i.amountMinor, refundsReturnFee: true }) : 0;
-    if (i.restock && full) for (const l of o.lines) { const p = x.products.find(q => q.sku === l.sku); if (p) p.onHand += l.qty; }
-    o.timeline.push({ at: new Date().toISOString(), text: `Refund of £${(i.amountMinor / 100).toFixed(2)} confirmed${i.reason ? ` (${i.reason})` : ''}.` });
-    return { ok: true, message: `Refunded £${(i.amountMinor / 100).toFixed(2)} to ${o.customer.split(' ')[0]}.${i.refundFee ? ` Our fee on it (£${(fee / 100).toFixed(2)}) is returned to you.` : ''}${i.restock && full ? ' Items are back in stock.' : ''}` };
+    // Our fee on the refunded part always goes back (platform policy), so it is stated, not offered as a choice.
+    const fee = feeRefundMinor({ chargeMinor: o.totalMinor, feeMinor: feeMinor(o.totalMinor, 50), refundMinor: i.amountMinor, refundsReturnFee: true });
+    let back = 0; if (i.restock) for (const l of lines) { const k = o.lines.find(q => q.id === l.lineId)!; const p = x.products.find(q => q.sku === k.sku); if (p) { p.onHand += l.qty; back += l.qty; const v = k.variantId ? findVariant(x, k.variantId) : null; if (v) { v.v.onHand += l.qty; syncProduct(x, v.p); } } }
+    o.timeline.push({ at: new Date().toISOString(), text: `Refund of £${(i.amountMinor / 100).toFixed(2)} confirmed${i.reason ? ` (${i.reason})` : ''}.${back ? ` ${back} item${back > 1 ? 's' : ''} put back in stock.` : ''}` });
+    return { ok: true, message: `Refunded £${(i.amountMinor / 100).toFixed(2)} to ${o.customer.split(' ')[0]}. Our fee on it (£${(fee / 100).toFixed(2)}) is returned to you.${back ? ` ${back} item${back > 1 ? 's' : ''} back in stock.` : ''}` };
+  },
+  async previewOrderEdit(i) { return editOrder(await S(), i, false); },
+  async applyOrderEdit(i) {
+    const x = await S(); const p = await editOrder(x, i, true); if (!p.ok) return { ok: false, message: p.message };
+    return { ok: true, message: p.changeMinor > 0 ? `Order updated. The extra £${(p.changeMinor / 100).toFixed(2)} is recorded as paid.` : p.changeMinor < 0 ? `Order updated. £${(-p.changeMinor / 100).toFixed(2)} refunded to the customer's original payment method.` : 'Order updated. The total is unchanged.' };
   },
   async inviteMember(email, role) {
     const x = await S(); if (x.members.some(m => m.email.toLowerCase() === email.toLowerCase())) return { ok: false, message: `${email} is already on your team.` };
