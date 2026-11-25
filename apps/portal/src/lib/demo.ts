@@ -4,6 +4,7 @@ import { LAUNCH_PLAN } from '@oss-commerce/contracts';
 import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from './discounts';
+import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus, type LogEntry } from './stock';
 
 /**
  * Deterministic synthetic fixtures (no real merchant data). Swap for HttpGateway
@@ -113,16 +114,23 @@ async function state(): Promise<DemoState> {
   try { const v = (await cookies()).get('oss_demo')?.value; return v === 'new' || v === 'live' ? v : 'setup'; } catch { return 'setup'; }
 }
 /** Per-browser scratch copy of the demo data (keyed by the oss_sid cookie). Actions really change it, so every page reflects what you did. */
-interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; custNotes: Record<string, { id: string; text: string; at: string; by?: string }[]>; custProfile: Record<string, { firstName: string; lastName: string; phone: string }>; meta: Record<string, { description: string; handle: string; seoTitle: string; seoDescription: string; images: { id: string; url: string; name?: string }[] }>; collections: { id: string; name: string; contains: string; productIds?: string[] }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
+interface Scratch { orders: Order[]; products: Product[]; discounts: Discount[]; zones: ShippingZone[]; members: Member[]; grants: AccessGrant[]; automationOn: Record<string, boolean>; read: Set<string>; variants: Record<string, { groups: OptionGroup[]; list: Variant[] }>; vstock: Record<string, { tracked: boolean; backorder: boolean; lowAt: number; log: string }>; custNotes: Record<string, { id: string; text: string; at: string; by?: string }[]>; custProfile: Record<string, { firstName: string; lastName: string; phone: string }>; meta: Record<string, { description: string; handle: string; seoTitle: string; seoDescription: string; images: { id: string; url: string; name?: string }[] }>; collections: { id: string; name: string; contains: string; productIds?: string[] }[]; requests: ServiceRequest[]; domainChecks: number; launchRequested: boolean; stockLog: { at: string; product: string; from: number; to: number; reason: string }[]; touched: number }
 const G = globalThis as unknown as { __oss_demo?: Map<string, Scratch> };
 async function S(): Promise<Scratch> {
   const sid = await (async () => { try { return (await cookies()).get('oss_sid')?.value ?? 'shared'; } catch { return 'shared'; } })();
   const m = (G.__oss_demo ??= new Map()); let x = m.get(sid);
-  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, custNotes: { c0: [{ id: 'n1', text: 'Prefers weekday delivery. Asked about a custom glaze.', at: '2026-11-02T10:30:00Z', by: 'Mo' }] }, custProfile: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
+  if (!x) { x = { orders: structuredClone(ORDERS), products: structuredClone(P), discounts: structuredClone(DISCOUNTS), zones: structuredClone(ZONES), members: structuredClone(MEMBERS), grants: structuredClone(GRANTS), automationOn: {}, read: new Set<string>(), variants: {}, meta: {}, vstock: {}, custNotes: { c0: [{ id: 'n1', text: 'Prefers weekday delivery. Asked about a custom glaze.', at: '2026-11-02T10:30:00Z', by: 'Mo' }] }, custProfile: {}, collections: [{ id: 'c1', name: 'Kitchen and table', contains: 'mug' }, { id: 'c2', name: 'Linen', contains: 'linen' }], requests: structuredClone(REQUESTS), domainChecks: 0, launchRequested: false, stockLog: [], touched: 0 }; m.set(sid, x); if (m.size > 60) m.delete(m.keys().next().value!); }
   return x;
 }
 /** Every product has at least one variant. The mug is seeded with two option groups so the editor has something real to show. */
 function metaOf(x: Scratch, p: Product) { return (x.meta[p.id] ??= { description: `${p.title}. Made in small batches and finished by hand.`, handle: p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), seoTitle: '', seoDescription: '', images: [] }); }
+function findVariant(x: Scratch, variantId: string) { for (const p of x.products) { const v = detail(x, p).list.find(q => q.id === variantId); if (v) return { p, v }; } return null; }
+/** Keeps a product's totals equal to the sum of its items after an item changes. */
+function syncProduct(x: Scratch, p: Product) { const l = detail(x, p).list; p.onHand = l.reduce((n, v) => n + v.onHand, 0); p.allocated = l.reduce((n, v) => n + v.allocated, 0); }
+function stockRowsOf(x: Scratch): import('./gateway').StockRow[] {
+  return x.products.filter(p => p.status !== 'archived').flatMap(p => detail(x, p).list.map(v => { const st = x.vstock[v.id]; const base = { onHand: v.onHand, allocated: v.allocated, lowAt: st?.lowAt ?? p.threshold ?? DEFAULT_LOW_AT, tracked: st?.tracked ?? true, backorder: st?.backorder ?? false };
+    return { variantId: v.id, productId: p.id, title: p.title, variant: v.options.join(' · ') || undefined, sku: v.sku, imageUrl: x.meta[p.id]?.images[0]?.url ?? p.imageUrl, ...base, available: Math.max(v.onHand - v.allocated, 0), status: stockStatus(base), published: p.status === 'published' && v.enabled }; }));
+}
 function detail(x: Scratch, p: Product): { groups: OptionGroup[]; list: Variant[] } {
   if (!x.variants[p.id]) {
     if (p.id === 'p1') { const groups = [{ name: 'Size', options: ['Small', 'Large'] }, { name: 'Glaze', options: ['Speckled', 'Ocean'] }]; const stock = [12, 10, 11, 9], alloc = [1, 1, 1, 0];
@@ -216,6 +224,33 @@ export const demoGateway: CommerceGateway = {
       timeline: [{ at, text: 'Order placed by hand.' }, { at, text: `Payment received (${label}).` }, ...(i.note?.trim() ? [{ at, text: i.note.trim(), note: true, by: 'Mo' }] : [])] });
     for (const l of lines) for (const p of x.products) { const d = detail(x, p); const v = d.list.find(q => q.sku === l.sku); if (v) { v.allocated += l.qty; if (p.sku === l.sku) p.allocated += l.qty; } }
     return { ok: true, id: `o${number}`, message: `Order placed and marked as paid (${label}). Stock is reserved.` };
+  },
+  async stockRows() { const x = await S(); return stockRowsOf(x); },
+  async stockDetail(id) {
+    const x = await S(); const row = stockRowsOf(x).find(r => r.variantId === id); if (!row) return null; const set = x.vstock[id]; const moves: import('./gateway').StockMove[] = [];
+    for (const o of x.orders) { if (o.payment === 'failed') continue; for (const l of o.lines) if (l.sku === row.sku) {
+      moves.push({ id: `${o.id}-r`, at: o.placedAt, kind: 'reserved', quantity: l.qty });
+      if (o.state === 'cancelled') moves.push({ id: `${o.id}-x`, at: o.placedAt, kind: 'released', quantity: l.qty }); else if ((l.sent ?? (o.fulfilment === 'fulfilled' ? l.qty : 0)) > 0) moves.push({ id: `${o.id}-s`, at: o.placedAt, kind: 'sale', quantity: l.sent ?? l.qty }); } }
+    const log = parseLog(set?.log); log.forEach((e, i) => moves.push({ id: `a${i}`, at: e.at, kind: 'adjusted', quantity: e.to - e.from, reason: e.reason, by: e.by, note: e.note }));
+    return { ...row, moves: moves.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100) };
+  },
+  async adjustVariantStock(a) {
+    const x = await S(); const hit = findVariant(x, a.variantId); if (!hit) return { ok: false, message: 'That item no longer exists.' }; const { p, v } = hit;
+    const plan = planAdjust({ onHand: v.onHand, allocated: v.allocated }, a); if (!plan.ok) return { ok: false, message: plan.error }; if (plan.delta === 0) return { ok: true, message: `No change: ${p.title} already has ${v.onHand}.` };
+    const from = v.onHand; v.onHand = plan.to; syncProduct(x, p); const st = (x.vstock[v.id] ??= { tracked: true, backorder: false, lowAt: p.threshold ?? DEFAULT_LOW_AT, log: '[]' }); st.log = appendLog(st.log, { at: new Date(AS_OF).toISOString(), from, to: plan.to, reason: a.reason, by: a.by, note: a.note });
+    x.stockLog.unshift({ at: new Date().toISOString(), product: p.title, from, to: plan.to, reason: a.reason }); return { ok: true, message: `${p.title} (${v.sku}): ${from} to ${plan.to} on hand.` };
+  },
+  async saveStockSettings(id, s) {
+    const x = await S(); const hit = findVariant(x, id); if (!hit) return { ok: false, message: 'That item no longer exists.' }; if (!Number.isInteger(s.lowAt) || s.lowAt < 0 || s.lowAt > 100_000) return { ok: false, message: 'The low stock level must be a whole number from 0 to 100,000.' };
+    const st = (x.vstock[id] ??= { tracked: true, backorder: false, lowAt: hit.p.threshold ?? DEFAULT_LOW_AT, log: '[]' }); Object.assign(st, { tracked: s.tracked, backorder: s.backorder, lowAt: s.lowAt });
+    return { ok: true, message: !s.tracked ? 'Stock is no longer counted for this item. It can always be bought.' : s.backorder ? 'Saved. Customers can keep buying this when it runs out.' : 'Saved.' };
+  },
+  async applyStockCount(lines, by, note) {
+    const x = await S(); const none = { changed: 0, unchanged: 0, problems: [] as { variantId: string; error: string }[] }; if (!lines.length) return { ok: false, message: 'Count at least one item.', ...none };
+    const rows = x.products.flatMap(p => detail(x, p).list.map(v => ({ variantId: v.id, onHand: v.onHand, allocated: v.allocated }))); const plan = planCount(rows, lines);
+    for (const c of plan.changes) { const hit = findVariant(x, c.variantId)!; hit.v.onHand = c.to; syncProduct(x, hit.p); const st = (x.vstock[c.variantId] ??= { tracked: true, backorder: false, lowAt: hit.p.threshold ?? DEFAULT_LOW_AT, log: '[]' }); st.log = appendLog(st.log, { at: new Date(AS_OF).toISOString(), from: c.from, to: c.to, reason: 'recount', by, note: note ?? 'Stock count' }); }
+    const msg = plan.changes.length ? `Stock count saved: ${plan.changes.length} item${plan.changes.length > 1 ? 's' : ''} changed, ${plan.unchanged} already right.` : `Nothing to change: ${plan.unchanged} item${plan.unchanged === 1 ? '' : 's'} already matched.`;
+    return { ok: plan.changes.length > 0 || plan.problems.length === 0, message: plan.problems.length ? `${msg} ${plan.problems.length} could not be applied.` : msg, changed: plan.changes.length, unchanged: plan.unchanged, problems: plan.problems };
   },
   async customer(id) {
     if ((await state()) === 'new') return null; const x = await S(); const base = (await demoGateway.customers()).find(c => c.id === id); if (!base) return null;

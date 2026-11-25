@@ -148,3 +148,5 @@ Not done in Phase 1: rich-text descriptions, product tags and duplicate, phone p
 - **Merchant roles now sync at every start**, so new permissions reach existing stores without re-provisioning.
 
 Next in Phase 2: edit an order after it is placed, stock locations and stock history, returns, delivery rules by weight/value/postcode, abandoned checkouts, staff roles.
+
+- **Stock by item**: every variant in one table (search, filters for low, out, back order and not counted), quick adjust with a live preview and a required reason, an item page with real history (sales, reservations, releases, changes by hand with who and why) and per-item settings (count or not, keep selling when out, low-stock level), and a stock count sheet that changes only what differs and refuses impossible counts. Reasons are kept in a small history field on the variant; Vendure does not store them. Vendure's schema links only some movements to orders and cannot sort them, so history reads the newest 100 and does not link sales to orders. Not built: multiple stock locations and transfers, purchase orders.

@@ -31,6 +31,13 @@ export interface ManualOrderInput {
   coupon?: string; note?: string; payment: 'cash' | 'card_in_person' | 'bank_transfer' | 'other';
 }
 export interface ShippingChoice { id: string; name: string }
+/** One sellable item's stock. `available` is what can still be sold (on hand minus reserved for open orders). */
+export interface StockRow { variantId: string; productId: string; title: string; variant?: string; sku: string; imageUrl?: string; onHand: number; allocated: number; available: number; lowAt: number; tracked: boolean; backorder: boolean; status: 'ok' | 'low' | 'out' | 'backorder' | 'untracked'; published: boolean }
+export interface StockMove { id: string; at: string; /** What happened: a sale, stock set aside for an order, released back, a return, or a change by hand. */ kind: 'sale' | 'reserved' | 'released' | 'returned' | 'adjusted'; quantity: number; orderId?: string; orderCode?: string; reason?: string; by?: string; note?: string }
+export interface StockDetail extends StockRow { moves: StockMove[] }
+export interface VariantStockAdjust { variantId: string; mode: 'set' | 'add'; qty: number; reason: 'recount' | 'received' | 'damaged' | 'returned' | 'other'; note?: string; by?: string }
+export interface StockSettings { tracked: boolean; backorder: boolean; lowAt: number }
+export interface StockCountResult extends MutationResult { changed: number; unchanged: number; problems: { variantId: string; error: string }[] }
 export interface CustomerProfile { firstName: string; lastName: string; phone: string }
 export interface SalesPoint { day: string; netMinor: number; grossMinor: number }
 export interface Summary { netMinor: number; grossMinor: number; orders: number; aovMinor: number; refundedMinor: number; toFulfil: number; lowStock: number; fulfilled: number; paidOrders: number; series: SalesPoint[]; topProducts: { title: string; netMinor: number }[]; statusMix: { label: string; count: number }[]; asOf: string }
@@ -120,6 +127,12 @@ export interface CommerceGateway {
   customers(): Promise<Customer[]>;
   customer(id: string): Promise<CustomerDetail | null>;
   addCustomerNote(customerId: string, text: string): Promise<MutationResult>;
+  stockRows(): Promise<StockRow[]>;
+  stockDetail(variantId: string): Promise<StockDetail | null>;
+  adjustVariantStock(a: VariantStockAdjust): Promise<MutationResult>;
+  saveStockSettings(variantId: string, s: StockSettings): Promise<MutationResult>;
+  /** Applies a shelf count: sets each counted item to what was counted, changes only what differs, and records it as a stock count. */
+  applyStockCount(lines: { variantId: string; counted: number }[], by?: string, note?: string): Promise<StockCountResult>;
   /** Everything you can put on a hand-made order, with its price and what is in stock. */
   orderableItems(): Promise<OrderableItem[]>;
   shippingChoices(): Promise<ShippingChoice[]>;

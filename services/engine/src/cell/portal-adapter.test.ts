@@ -231,3 +231,30 @@ test('orders by hand: created, filled, paid and placed in one step, with stock r
   const badCoupon = await A.createManualOrder(x, { customer: { id: maya.id }, items: [{ variantId: mug.variantId, qty: 1 }], coupon: 'NOSUCHCODE', shippingMethodId: shipping.id, payment: 'cash' }); assert.equal(badCoupon.ok, false);
   assert.equal(await drafts(), startDrafts, 'a failed order leaves no half-made draft behind');
 });
+
+test('stock by item: rows, adjustments with reasons in the history, real movements, settings, back orders and counts against the real engine', async () => {
+  const rows = await A.listStockRows(x); const mug = rows.find(r => r.sku === 'MUG-1')!; const bowl = rows.find(r => r.sku === 'BOWL-1')!; assert.ok(mug && bowl);
+  assert.equal(mug.available, mug.onHand - mug.allocated); assert.equal(mug.status === 'ok' || mug.status === 'low', true);
+  // adjust with a reason and a name
+  const add = await A.adjustVariantStock(x, { variantId: mug.variantId, mode: 'add', qty: 10, reason: 'received', note: 'Pallet from the kiln', by: 'Mo' }); assert.equal(add.ok, true, add.message);
+  let d = (await A.getStockDetail(x, mug.variantId))!; assert.equal(d.onHand, mug.onHand + 10);
+  const adj = d.moves.find(m => m.kind === 'adjusted' && m.quantity === 10)!; assert.ok(adj, 'the adjustment is in the history'); assert.equal(adj.reason, 'received'); assert.equal(adj.by, 'Mo'); assert.equal(adj.note, 'Pallet from the kiln');
+  // real movements from orders carry the order
+  assert.ok(d.moves.some(m => m.kind === 'reserved'), 'stock set aside for an order'); assert.ok(d.moves.some(m => m.kind === 'sale'), 'a sale from a fulfilled order');
+  // refusals
+  assert.equal((await A.adjustVariantStock(x, { variantId: mug.variantId, mode: 'add', qty: -(d.onHand + 1), reason: 'damaged' })).ok, false); assert.match((await A.adjustVariantStock(x, { variantId: mug.variantId, mode: 'set', qty: d.allocated > 0 ? d.allocated - 1 : -1, reason: 'recount' })).message, /reserved|below zero/);
+  assert.equal((await A.adjustVariantStock(x, { variantId: mug.variantId, mode: 'add', qty: 1.5, reason: 'other' })).ok, false); assert.equal((await A.adjustVariantStock(x, { variantId: '999999', mode: 'add', qty: 1, reason: 'other' })).ok, false);
+  const same = await A.adjustVariantStock(x, { variantId: mug.variantId, mode: 'set', qty: d.onHand, reason: 'recount' }); assert.match(same.message, /No change/);
+  // settings: low-stock level changes the status; not counting stock; back orders
+  assert.equal((await A.saveStockSettings(x, bowl.variantId, { tracked: true, backorder: false, lowAt: 1000 })).ok, true); assert.equal((await A.getStockDetail(x, bowl.variantId))!.status, 'low'); assert.equal((await A.listProducts(x)).find(p => p.sku === 'BOWL-1')!.threshold, 1000, 'the product list uses the item\'s own level');
+  assert.equal((await A.saveStockSettings(x, bowl.variantId, { tracked: true, backorder: false, lowAt: -1 })).ok, false);
+  assert.equal((await A.saveStockSettings(x, bowl.variantId, { tracked: false, backorder: false, lowAt: 5 })).ok, true); assert.equal((await A.getStockDetail(x, bowl.variantId))!.status, 'untracked');
+  await A.saveStockSettings(x, bowl.variantId, { tracked: true, backorder: true, lowAt: 5 }); await A.adjustVariantStock(x, { variantId: bowl.variantId, mode: 'set', qty: 1, reason: 'recount' });
+  await shopClient.asAnonymousUser(); const over = await shopClient.query(parse(`mutation($id:ID!){ addItemToOrder(productVariantId:$id, quantity:3){ __typename ... on InsufficientStockError { message } } }`), { id: bowl.variantId }); assert.equal(over.addItemToOrder.__typename, 'Order', 'with back orders on, a shopper can buy more than is in stock');
+  await A.saveStockSettings(x, bowl.variantId, { tracked: true, backorder: false, lowAt: 5 }); await shopClient.asAnonymousUser(); const refused = await shopClient.query(parse(`mutation($id:ID!){ addItemToOrder(productVariantId:$id, quantity:3){ __typename } }`), { id: bowl.variantId }); assert.equal(refused.addItemToOrder.__typename, 'InsufficientStockError', 'with back orders off it is refused again');
+  // a count
+  const cur = (await A.getStockDetail(x, mug.variantId))!; const cnt = await A.applyStockCount(x, [{ variantId: mug.variantId, counted: cur.onHand }, { variantId: bowl.variantId, counted: 7 }, { variantId: '424242', counted: 1 }], 'Mo');
+  assert.equal(cnt.changed, 1); assert.equal(cnt.unchanged, 1); assert.equal(cnt.problems.length, 1); assert.equal((await A.getStockDetail(x, bowl.variantId))!.onHand, 7);
+  const bd = (await A.getStockDetail(x, bowl.variantId))!; const rc = bd.moves.find(m => m.kind === 'adjusted' && m.quantity === 6)!; assert.equal(rc.reason, 'recount'); assert.equal(rc.by, 'Mo'); assert.equal(rc.note, 'Stock count');
+  assert.equal((await A.applyStockCount(x, [], 'Mo')).ok, false);
+});

@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice } from '../gateway';
+import type { Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice, StockRow, StockDetail, StockMove, VariantStockAdjust, StockSettings, StockCountResult } from '../gateway';
 import { createProductWithVariants, findTaxCategories, previewCollection, type Exec } from './catalogue';
 import { slugify } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from '../discounts';
+import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus } from '../stock';
 
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
@@ -59,14 +60,14 @@ const ORDER_DETAIL = `${ORDER} history(options:{ take: 100, sort:{ createdAt: AS
 export async function getOrder(x: Exec, id: string): Promise<Order | null> { const r = await x(`query($id:ID!){ order(id:$id){ ${ORDER_DETAIL} } }`, { id }); return r.order?.orderPlacedAt ? mapOrder(r.order) : null; }
 
 const PRODUCT = `id name slug description enabled featuredAsset{ id preview } assets{ id name preview } optionGroups{ name options{ name } } customFields{ seoTitle seoDescription }
-  variants{ id sku enabled priceWithTax stockOnHand stockAllocated outOfStockThreshold options{ name group{ name } } taxCategory{ name } customFields{ weightGrams compareAtPrice barcode } }`;
-type RawVariant = { id: string; sku: string; enabled: boolean; priceWithTax: number; stockOnHand: number; stockAllocated: number; outOfStockThreshold: number; options: { name: string; group: { name: string } }[]; taxCategory: { name: string } | null; customFields: { weightGrams?: number; compareAtPrice?: number | null; barcode?: string | null } | null };
+  variants{ id sku enabled priceWithTax stockOnHand stockAllocated outOfStockThreshold options{ name group{ name } } taxCategory{ name } customFields{ weightGrams compareAtPrice barcode lowStockAt } }`;
+type RawVariant = { id: string; sku: string; enabled: boolean; priceWithTax: number; stockOnHand: number; stockAllocated: number; outOfStockThreshold: number; options: { name: string; group: { name: string } }[]; taxCategory: { name: string } | null; customFields: { weightGrams?: number; compareAtPrice?: number | null; barcode?: string | null; lowStockAt?: number | null } | null };
 type RawProduct = { id: string; name: string; slug?: string; description?: string; enabled: boolean; featuredAsset: { id?: string; preview: string } | null; assets?: { id: string; name?: string; preview: string }[]; customFields?: { seoTitle?: string | null; seoDescription?: string | null } | null; optionGroups: { name: string; options: { name: string }[] }[]; variants: RawVariant[] };
 const taxOf = (n?: string): TaxClass => (/zero/i.test(n ?? '') ? 'zero' : /reduced/i.test(n ?? '') ? 'reduced' : 'standard');
 export function mapProduct(p: RawProduct, lowStockAt = 5): Product {
   const vs = p.variants; const first = vs[0];
   return { id: p.id, title: p.name, imageUrl: p.featuredAsset?.preview, status: p.enabled ? 'published' : 'draft', sku: first?.sku ?? '', priceMinor: vs.length ? Math.min(...vs.map(v => v.priceWithTax)) : 0,
-    onHand: vs.reduce((s, v) => s + v.stockOnHand, 0), allocated: vs.reduce((s, v) => s + v.stockAllocated, 0), threshold: lowStockAt, variants: vs.length };
+    onHand: vs.reduce((s, v) => s + v.stockOnHand, 0), allocated: vs.reduce((s, v) => s + v.stockAllocated, 0), threshold: vs.length ? Math.max(...vs.map(v => v.customFields?.lowStockAt ?? lowStockAt)) : lowStockAt, variants: vs.length };
 }
 export async function listProducts(x: Exec): Promise<Product[]> { const r = await x(`query{ products(options:{ take: 200, sort: { createdAt: DESC } }){ items{ ${PRODUCT} } } }`); return (r.products.items as RawProduct[]).map(p => mapProduct(p)); }
 export async function getProduct(x: Exec, id: string): Promise<ProductDetail | null> {
@@ -459,4 +460,54 @@ export async function createManualOrder(x: Exec, i: ManualOrderInput): Promise<M
     if (draft) { try { await x(`mutation($id:ID!){ deleteDraftOrder(orderId:$id){ result } }`, { id: draft }); } catch { /* the draft can be removed later; nothing was charged */ } }
     return fail(e);
   }
+}
+
+// ---- Stock by item ----
+const STOCK_FIELDS = `id sku name enabled trackInventory outOfStockThreshold useGlobalOutOfStockThreshold stockOnHand stockAllocated customFields{ lowStockAt stockLog } product{ id name enabled featuredAsset{ preview } }`;
+type RawStock = { id: string; sku: string; name: string; enabled: boolean; trackInventory: string; outOfStockThreshold: number; useGlobalOutOfStockThreshold: boolean; stockOnHand: number; stockAllocated: number; customFields: { lowStockAt?: number | null; stockLog?: string | null } | null; product: { id: string; name: string; enabled: boolean; featuredAsset: { preview: string } | null } };
+export function mapStockRow(v: RawStock): StockRow {
+  const tracked = v.trackInventory !== 'FALSE'; const backorder = !v.useGlobalOutOfStockThreshold && v.outOfStockThreshold < 0; const lowAt = v.customFields?.lowStockAt ?? DEFAULT_LOW_AT;
+  const base = { onHand: v.stockOnHand, allocated: v.stockAllocated, lowAt, tracked, backorder };
+  return { variantId: v.id, productId: v.product.id, title: v.product.name, variant: v.name.startsWith(v.product.name) ? v.name.slice(v.product.name.length).trim() || undefined : v.name, sku: v.sku, imageUrl: v.product.featuredAsset?.preview, ...base, available: Math.max(v.stockOnHand - v.stockAllocated, 0), status: stockStatus(base), published: v.product.enabled && v.enabled };
+}
+export async function listStockRows(x: Exec): Promise<StockRow[]> { return ((await x(`query{ productVariants(options:{ take: 500, sort:{ sku: ASC } }){ items{ ${STOCK_FIELDS} } } }`)).productVariants.items as RawStock[]).map(mapStockRow); }
+const KINDS: Record<string, StockMove['kind']> = { ALLOCATION: 'reserved', SALE: 'sale', RELEASE: 'released', CANCELLATION: 'returned', ADJUSTMENT: 'adjusted', RETURN: 'returned' };
+export async function getStockDetail(x: Exec, id: string): Promise<StockDetail | null> {
+  // The engine cannot sort movements, so ask how many there are and read the last 100.
+  const total = ((await x(`query($id:ID!){ productVariant(id:$id){ stockMovements(options:{ take: 1 }){ totalItems } } }`, { id })).productVariant?.stockMovements.totalItems ?? 0) as number;
+  const v = (await x(`query($id:ID!,$skip:Int!){ productVariant(id:$id){ ${STOCK_FIELDS} stockMovements(options:{ take: 100, skip: $skip }){ items{ ... on StockMovement { id type createdAt quantity } } } } }`, { id, skip: Math.max(0, total - 100) })).productVariant as (RawStock & { stockMovements: { items: { id: string; type: string; createdAt: string; quantity: number; orderLine?: { order: { id: string; code: string } } }[] } }) | null;
+  if (!v) return null; const log = parseLog(v.customFields?.stockLog).reverse(); const used = new Set<number>();
+  const moves: StockMove[] = [...v.stockMovements.items].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || Number(b.id) - Number(a.id)).map(m => {
+    const kind = KINDS[m.type] ?? 'adjusted'; const mv: StockMove = { id: m.id, at: m.createdAt, kind, quantity: kind === 'adjusted' ? m.quantity : Math.abs(m.quantity), orderId: m.orderLine?.order.id, orderCode: m.orderLine?.order.code };
+    if (kind === 'adjusted') { const i = log.findIndex((e, n) => !used.has(n) && e.to - e.from === m.quantity && Math.abs(Date.parse(e.at) - Date.parse(m.createdAt)) < 120_000); if (i >= 0) { used.add(i); mv.reason = log[i].reason; mv.by = log[i].by; mv.note = log[i].note; } }
+    return mv;
+  });
+  return { ...mapStockRow(v), moves };
+}
+const todayIso = () => new Date().toISOString();
+export async function adjustVariantStock(x: Exec, a: VariantStockAdjust): Promise<MutationResult> {
+  try {
+    const v = (await x(`query($id:ID!){ productVariant(id:$id){ id sku stockOnHand stockAllocated customFields{ stockLog } product{ name } } }`, { id: a.variantId })).productVariant as { sku: string; stockOnHand: number; stockAllocated: number; customFields: { stockLog?: string | null } | null; product: { name: string } } | null; if (!v) return { ok: false, message: 'That item no longer exists.' };
+    const p = planAdjust({ onHand: v.stockOnHand, allocated: v.stockAllocated }, a); if (!p.ok) return { ok: false, message: p.error }; if (p.delta === 0) return { ok: true, message: `No change: ${v.product.name} already has ${v.stockOnHand}.` };
+    await x(`mutation($i:[UpdateProductVariantInput!]!){ updateProductVariants(input:$i){ id } }`, { i: [{ id: a.variantId, stockOnHand: p.to, customFields: { stockLog: appendLog(v.customFields?.stockLog, { at: todayIso(), from: v.stockOnHand, to: p.to, reason: a.reason, by: a.by, note: a.note }) } }] });
+    return { ok: true, message: `${v.product.name} (${v.sku}): ${v.stockOnHand} to ${p.to} on hand.` };
+  } catch (e) { return fail(e); }
+}
+export async function saveStockSettings(x: Exec, id: string, s: StockSettings): Promise<MutationResult> {
+  try {
+    if (!Number.isInteger(s.lowAt) || s.lowAt < 0 || s.lowAt > 100_000) return { ok: false, message: 'The low stock level must be a whole number from 0 to 100,000.' };
+    await x(`mutation($i:[UpdateProductVariantInput!]!){ updateProductVariants(input:$i){ id } }`, { i: [{ id, trackInventory: s.tracked ? 'TRUE' : 'FALSE', useGlobalOutOfStockThreshold: false, outOfStockThreshold: s.backorder ? -1_000_000 : 0, customFields: { lowStockAt: s.lowAt } }] });
+    return { ok: true, message: !s.tracked ? 'Stock is no longer counted for this item. It can always be bought.' : s.backorder ? 'Saved. Customers can keep buying this when it runs out.' : 'Saved.' };
+  } catch (e) { return fail(e); }
+}
+export async function applyStockCount(x: Exec, lines: { variantId: string; counted: number }[], by?: string, note?: string): Promise<StockCountResult> {
+  const none = { changed: 0, unchanged: 0, problems: [] as StockCountResult['problems'] };
+  try {
+    if (!lines.length) return { ok: false, message: 'Count at least one item.', ...none };
+    const raw = (await x(`query{ productVariants(options:{ take: 500 }){ items{ id stockOnHand stockAllocated customFields{ stockLog } } } }`)).productVariants.items as { id: string; stockOnHand: number; stockAllocated: number; customFields: { stockLog?: string | null } | null }[];
+    const plan = planCount(raw.map(r => ({ variantId: r.id, onHand: r.stockOnHand, allocated: r.stockAllocated })), lines); const byId = new Map(raw.map(r => [r.id, r]));
+    if (plan.changes.length) await x(`mutation($i:[UpdateProductVariantInput!]!){ updateProductVariants(input:$i){ id } }`, { i: plan.changes.map(c => ({ id: c.variantId, stockOnHand: c.to, customFields: { stockLog: appendLog(byId.get(c.variantId)!.customFields?.stockLog, { at: todayIso(), from: c.from, to: c.to, reason: 'recount', by, note: note ?? 'Stock count' }) } })) });
+    const msg = plan.changes.length ? `Stock count saved: ${plan.changes.length} item${plan.changes.length > 1 ? 's' : ''} changed, ${plan.unchanged} already right.` : `Nothing to change: ${plan.unchanged} item${plan.unchanged === 1 ? '' : 's'} already matched.`;
+    return { ok: plan.changes.length > 0 || plan.problems.length === 0, message: plan.problems.length ? `${msg} ${plan.problems.length} could not be applied.` : msg, changed: plan.changes.length, unchanged: plan.unchanged, problems: plan.problems };
+  } catch (e) { return { ...fail(e), ...none }; }
 }

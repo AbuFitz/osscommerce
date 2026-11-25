@@ -1,7 +1,7 @@
 'use server';
 import { revalidatePath } from 'next/cache';
 import { gateway } from '@/lib/gateway-instance';
-import type { ManualOrderInput, CustomerProfile, CollectionInput, DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
+import type { StockSettings, VariantStockAdjust, ManualOrderInput, CustomerProfile, CollectionInput, DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
 /** Every mutation passes through here: one place to add session, membership, operation and audit checks. */
 async function run(fn: () => Promise<MutationResult>, paths: string[]): Promise<MutationResult> {
@@ -173,3 +173,11 @@ export async function updateCustomerProfileAction(id: string, p: CustomerProfile
 // ---- Orders taken by hand ----
 export async function orderFormDataAction() { const g = gateway(); const [items, shipping, customers] = await Promise.all([g.orderableItems(), g.shippingChoices(), g.customers()]); return { items, shipping, customers }; }
 export async function createManualOrderAction(i: ManualOrderInput) { return run(() => gateway().createManualOrder(i), ['/orders', '/', '/inventory', '/customers']); }
+
+// ---- Stock by item ----
+const who = async () => { try { return (await gateway().viewer()).name; } catch { return undefined; } };
+export async function adjustVariantStockAction(a: VariantStockAdjust) { const by = await who(); return run(() => gateway().adjustVariantStock({ ...a, by, note: a.note?.trim().slice(0, 200) || undefined }), ['/inventory', `/inventory/${a.variantId}`, '/products', '/']); }
+export async function saveStockSettingsAction(id: string, s: StockSettings) { return run(() => gateway().saveStockSettings(id, s), ['/inventory', `/inventory/${id}`, '/products', '/']); }
+export async function applyStockCountAction(lines: { variantId: string; counted: number }[], note?: string) {
+  const by = await who(); try { const r = await gateway().applyStockCount(lines, by, note?.trim().slice(0, 200) || undefined); if (r.changed) ['/inventory', '/products', '/'].forEach(p => revalidatePath(p)); return r; } catch { return { ok: false, message: 'That did not go through. Nothing was changed.', changed: 0, unchanged: 0, problems: [] }; }
+}
