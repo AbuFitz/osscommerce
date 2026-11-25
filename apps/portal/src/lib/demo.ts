@@ -1,6 +1,7 @@
 import 'server-only';
 import { cookies } from 'next/headers';
 import { LAUNCH_PLAN } from '@oss-commerce/contracts';
+import { orderPoints, recentOrders } from './geo/points';
 import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from './discounts';
@@ -21,6 +22,9 @@ const P: Product[] = [
   { id: 'p7', title: 'Gift card', status: 'archived', sku: 'GFT-000', priceMinor: 5000, onHand: 0, allocated: 0, threshold: 0, variants: 1 },
 ];
 const names = ['Maya Okafor', 'Tom Hendry', 'Priya Nair', 'Callum Reid', 'Elena Rossi', 'Sam Whitlock', 'Aisha Khan', 'Jonah Pike', 'Freya Lund', 'Noor Haddad', 'Ben Archer', 'Isla Murray'];
+/** Where demo customers live: mostly the UK, some further afield, so the live map has something to show. */
+const WHERE: [string, string][] = [['Bristol','GB'],['London','GB'],['London','GB'],['Bath','GB'],['Glasgow','GB'],['Cardiff','GB'],['Manchester','GB'],['Leeds','GB'],['Edinburgh','GB'],['Brighton','GB'],['Dublin','IE'],['Paris','FR'],['Berlin','DE'],['Amsterdam','NL'],['New York City','US'],['Toronto','CA'],['Sydney','AU'],['Tokyo','JP']];
+const whereOf = (i: number) => { const [city, country] = WHERE[(i * 5 + 3) % WHERE.length]; return { city, country }; };
 const mk = (i: number): Order => {
   const n = 1042 - i;
   const prod = P[i % 4];
@@ -42,7 +46,7 @@ const mk = (i: number): Order => {
     payment: failed ? 'failed' : refunded === total ? 'refunded' : refunded ? 'partially_refunded' : 'paid',
     fulfilment: failed ? 'unfulfilled' : fulfilment, state: failed || refunded === total ? 'cancelled' : fulfilment === 'fulfilled' ? 'completed' : 'open',
     method: ([{ brand: 'visa', last4: '4242' }, { brand: 'mastercard', last4: '4444', wallet: 'applepay' }, { brand: 'visa', last4: '0005', wallet: 'googlepay' }, { brand: 'amex', last4: '1005' }, { brand: 'mastercard', last4: '5100' }] as const)[i % 5],
-    refundedMinor: refunded, shipTo: `${12 + i} Mill Lane, Bristol BS${1 + (i % 9)} 4${'ABCDEFG'[i % 7]}${'XYZ'[i % 3]}`,
+    refundedMinor: refunded, shipTo: `${12 + i} Mill Lane, ${whereOf(i).city}`, ship: whereOf(i),
     timeline: [
       { at: iso, text: 'Order placed.' },
       { at: iso, text: failed ? 'Payment failed. No charge was made.' : 'Payment received.' },
@@ -63,7 +67,7 @@ const HISTORY: Order[] = (() => {
       const i = back * 5 + k; const prod = P[i % 4]; const qty = 1 + (i % 3); const sub = prod.priceMinor * qty; const ship = sub >= 5000 ? 0 : 495; const disc = i % 7 === 0 ? Math.round(sub * 0.1) : 0; const total = sub + ship - disc;
       const iso = new Date(d.getTime() + (8 + ((i * 3) % 12)) * 3600_000).toISOString(); const who = names[(i * 7) % names.length]; const refunded = i % 23 === 0 ? Math.round(total / 2) : 0;
       out.push({ id: `h${n}`, number: n--, placedAt: iso, customer: who, email: `${who.split(' ')[0].toLowerCase()}@example.com`, lines: [{ sku: prod.sku, title: prod.title, qty, unitMinor: prod.priceMinor }], shippingMinor: ship, discountMinor: disc, taxMinor: Math.round(total / 6), totalMinor: total,
-        payment: refunded ? 'partially_refunded' : 'paid', fulfilment: 'fulfilled', state: 'completed', refundedMinor: refunded, shipTo: '', timeline: [{ at: iso, text: 'Order placed.' }],
+        payment: refunded ? 'partially_refunded' : 'paid', fulfilment: 'fulfilled', state: 'completed', refundedMinor: refunded, shipTo: '', ship: whereOf(i), timeline: [{ at: iso, text: 'Order placed.' }],
         method: ([{ brand: 'visa', last4: '4242' }, { brand: 'mastercard', last4: '4444', wallet: 'applepay' }, { brand: 'visa', last4: '0005', wallet: 'googlepay' }, { brand: 'amex', last4: '1005' }] as const)[i % 4] });
     }
   }
@@ -164,8 +168,9 @@ export const demoGateway: CommerceGateway = {
   },
   async startBillingPortal(): Promise<StartPaymentSetup> { return { ok: false, message: 'Billing management opens in Stripe once the store is connected to the live platform. This is a demo.' }; },
   async live(): Promise<LiveView> {
-    const st = await state(); if (st === 'new') return { demo: true, asOf: AS_OF, visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } };
-    return { demo: true, asOf: AS_OF, visitorsNow: 3, sessions: { value: 76, vsPrev: 62 }, salesMinor: { value: 14000, vsPrev: 1300 }, orders: { value: 8, vsPrev: 300 }, behaviour: { activeCarts: 2, checkingOut: 1, purchased: 1 }, locations: [{ place: 'United Kingdom · England · Bristol', sessions: 31 }, { place: 'United Kingdom · England · London', sessions: 24 }, { place: 'United Kingdom · Scotland · Glasgow', sessions: 9 }, { place: 'United Kingdom · Wales · Cardiff', sessions: 7 }, { place: 'Ireland · Dublin', sessions: 5 }], returning: { newCustomers: 5, returning: 3 } };
+    const st = await state(); if (st === 'new') return { demo: true, tracked: true, points: [], recent: [], asOf: AS_OF, visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } };
+    const all = await ordersFor(st); const since = new Date(Date.parse(AS_OF) - 30 * 86400_000).toISOString(); const points = orderPoints(all, since).map((p, k) => ({ ...p, sessions: p.orders * 6 + (k % 4) }));
+    return { demo: true, tracked: true, asOf: AS_OF, visitorsNow: 3, sessions: { value: 76, vsPrev: 62 }, salesMinor: { value: 14000, vsPrev: 1300 }, orders: { value: 8, vsPrev: 300 }, behaviour: { activeCarts: 2, checkingOut: 1, purchased: 1 }, locations: points.slice(0, 6).map(p => ({ place: p.place, sessions: p.sessions ?? 0 })), points, recent: recentOrders(all, 8), returning: { newCustomers: 5, returning: 3 } };
   },
   async summary(): Promise<Summary> {
     const st = await state(); const ALL = await ordersFor(st);
@@ -220,7 +225,7 @@ export const demoGateway: CommerceGateway = {
     const cust = 'id' in i.customer ? (await demoGateway.customers()).find(c => c.id === (i.customer as { id: string }).id) : null; if ('id' in i.customer && !cust) return { ok: false, message: 'That customer no longer exists.' };
     const name = cust ? cust.name : `${(i.customer as { firstName: string }).firstName} ${(i.customer as { lastName: string }).lastName}`.trim(); const email = cust ? cust.email : (i.customer as { email: string }).email; const number = Math.max(...x.orders.map(o => o.number)) + 1; const at = new Date(AS_OF).toISOString();
     const label = { cash: 'cash', card_in_person: 'card, in person', bank_transfer: 'bank transfer', other: 'another way' }[i.payment];
-    x.orders.unshift({ id: `o${number}`, number, placedAt: at, customer: name, email, lines, shippingMinor: ship, discountMinor: discount, taxMinor: Math.round(total / 6), totalMinor: total, payment: 'paid', fulfilment: 'unfulfilled', state: 'open', refundedMinor: 0, shipTo: i.address ? `${i.address.fullName}, ${i.address.line1}, ${i.address.city}, ${i.address.postcode}` : '',
+    x.orders.unshift({ id: `o${number}`, number, placedAt: at, customer: name, email, lines, shippingMinor: ship, discountMinor: discount, taxMinor: Math.round(total / 6), totalMinor: total, payment: 'paid', fulfilment: 'unfulfilled', state: 'open', refundedMinor: 0, shipTo: i.address ? `${i.address.fullName}, ${i.address.line1}, ${i.address.city}, ${i.address.postcode}` : '', ship: i.address ? { city: i.address.city, country: 'GB' } : undefined,
       timeline: [{ at, text: 'Order placed by hand.' }, { at, text: `Payment received (${label}).` }, ...(i.note?.trim() ? [{ at, text: i.note.trim(), note: true, by: 'Mo' }] : [])] });
     for (const l of lines) for (const p of x.products) { const d = detail(x, p); const v = d.list.find(q => q.sku === l.sku); if (v) { v.allocated += l.qty; if (p.sku === l.sku) p.allocated += l.qty; } }
     return { ok: true, id: `o${number}`, message: `Order placed and marked as paid (${label}). Stock is reserved.` };

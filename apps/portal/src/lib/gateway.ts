@@ -12,6 +12,8 @@ export interface Order {
   lines: OrderLine[]; shippingMinor: number; discountMinor: number; taxMinor: number; totalMinor: number;
   payment: PaymentStatus; fulfilment: FulfilmentStatus; state: OrderState;
   refundedMinor: number; timeline: OrderEvent[]; shipTo: string;
+  /** Delivery town and country, kept apart from the display string so the live map can place the order. */
+  ship?: { city?: string; country?: string };
   /** How the customer paid, as reported by Stripe. Card number is never held: brand and last four only. */
   method?: { brand: 'visa' | 'mastercard' | 'amex'; last4: string; wallet?: 'applepay' | 'googlepay' | 'link' };
 }
@@ -92,7 +94,7 @@ export interface StockAdjust { productId: string; mode: 'set' | 'add'; qty: numb
 export interface DomainCheck { ok: boolean; message: string; record?: { type: string; name: string; value: string } }
 /** One thing that needs the merchant's attention. The same list feeds the Overview alerts and the notification centre, so they never disagree. */
 export interface Notice { id: string; tone: 'danger' | 'warn' | 'info' | 'success'; title: string; body: string; href: string; action: string; at: string; read: boolean; kind: 'payment' | 'stock' | 'order' | 'access' | 'quote' | 'setup' }
-export interface LiveView { demo: boolean; asOf: string; visitorsNow: number; sessions: { value: number; vsPrev: number }; salesMinor: { value: number; vsPrev: number }; orders: { value: number; vsPrev: number }; behaviour: { activeCarts: number; checkingOut: number; purchased: number }; locations: { place: string; sessions: number }[]; returning: { newCustomers: number; returning: number } }
+export interface LiveView { demo: boolean; asOf: string; visitorsNow: number; sessions: { value: number; vsPrev: number }; salesMinor: { value: number; vsPrev: number }; orders: { value: number; vsPrev: number }; behaviour: { activeCarts: number; checkingOut: number; purchased: number }; locations: { place: string; sessions: number }[]; points: import('./geo/points').MapPoint[]; recent: import('./geo/points').RecentOrder[]; tracked: boolean; returning: { newCustomers: number; returning: number } }
 export interface Billing { demo: boolean; planName: string; monthlyMinor: number; buildMinor: number; status: 'not_started' | 'active' | 'past_due'; nextInvoiceAt?: string; invoices: { number: string; description: string; issuedAt: string; amountMinor: number; status: 'paid' | 'due' | 'overdue'; url?: string }[] }
 export type TaxClass = 'standard' | 'reduced' | 'zero';
 export interface OptionGroup { name: string; options: string[] }

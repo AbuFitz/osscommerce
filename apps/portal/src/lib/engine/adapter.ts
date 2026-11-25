@@ -5,17 +5,18 @@ import { slugify } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from '../discounts';
 import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus } from '../stock';
 
+import { orderPoints, recentOrders } from '../geo/points';
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
  * proven against a real Vendure in services/engine and used over HTTP in production. Money is always minor units, prices are what the customer pays (with tax).
  */
 const ORDER = `id code state active orderPlacedAt updatedAt total totalWithTax shippingWithTax currencyCode
-  customer{ firstName lastName emailAddress } shippingAddress{ fullName streetLine1 city postalCode }
+  customer{ firstName lastName emailAddress } shippingAddress{ fullName streetLine1 city postalCode countryCode }
   discounts{ amountWithTax } lines{ id quantity unitPriceWithTax productVariant{ sku name product{ name } } featuredAsset{ preview } }
   payments{ id state method amount createdAt refunds{ total state createdAt } } fulfillments{ id state trackingCode createdAt lines{ orderLineId quantity } }`;
 
 type RawOrder = { id: string; code: string; state: string; orderPlacedAt: string | null; updatedAt: string; total: number; totalWithTax: number; shippingWithTax: number;
-  customer: { firstName: string; lastName: string; emailAddress: string } | null; shippingAddress: { fullName?: string; streetLine1?: string; city?: string; postalCode?: string } | null;
+  customer: { firstName: string; lastName: string; emailAddress: string } | null; shippingAddress: { fullName?: string; streetLine1?: string; city?: string; postalCode?: string; countryCode?: string } | null;
   discounts: { amountWithTax: number }[]; lines: { id: string; quantity: number; unitPriceWithTax: number; productVariant: { sku: string; name: string; product: { name: string } }; featuredAsset: { preview: string } | null }[];
   payments: { id: string; state: string; method: string; amount: number; createdAt: string; refunds: { total: number; state: string; createdAt: string }[] }[] | null;
   fulfillments: { id: string; state: string; trackingCode: string | null; createdAt: string; lines: { orderLineId: string; quantity: number }[] }[] | null;
@@ -35,7 +36,7 @@ export function mapOrder(o: RawOrder): Order {
   ...(o.history?.items ?? []).flatMap((h): { at: string; text: string; note?: boolean; by?: string }[] => h.type === 'ORDER_NOTE' && typeof h.data.note === 'string' ? [{ at: h.createdAt, text: h.data.note, note: true, by: h.administrator ? `${h.administrator.firstName} ${h.administrator.lastName}`.trim() : undefined }] : h.type === 'ORDER_CANCELLATION' ? [{ at: h.createdAt, text: `Order cancelled${typeof h.data.reason === 'string' && h.data.reason ? `: ${h.data.reason}` : ''}.` }] : [])].sort((x, y) => x.at.localeCompare(y.at));
   return { id: o.id, number: Number(String(o.id).replace(/\D/g, '')) || 0, placedAt: placed, customer: o.customer ? `${o.customer.firstName} ${o.customer.lastName}`.trim() : 'Guest', email: o.customer?.emailAddress ?? '', lines,
     shippingMinor: o.shippingWithTax, discountMinor: Math.abs(o.discounts.reduce((s, d) => s + d.amountWithTax, 0)), taxMinor: o.totalWithTax - o.total, totalMinor: o.totalWithTax,
-    payment, fulfilment, state, refundedMinor: refunded, timeline, shipTo: a ? [a.fullName, a.streetLine1, a.city, a.postalCode].filter(Boolean).join(', ') : '' };
+    payment, fulfilment, state, refundedMinor: refunded, timeline, shipTo: a ? [a.fullName, a.streetLine1, a.city, a.postalCode].filter(Boolean).join(', ') : '', ship: a ? { city: a.city, country: a.countryCode } : undefined };
 }
 /** Orders that were actually placed (the engine also holds baskets that never checked out). Newest first. */
 /** Orders placed on or after a calendar day, for reports. Fetched in pages so a busy store is not cut off at the screen limit. */
@@ -510,4 +511,16 @@ export async function applyStockCount(x: Exec, lines: { variantId: string; count
     const msg = plan.changes.length ? `Stock count saved: ${plan.changes.length} item${plan.changes.length > 1 ? 's' : ''} changed, ${plan.unchanged} already right.` : `Nothing to change: ${plan.unchanged} item${plan.unchanged === 1 ? '' : 's'} already matched.`;
     return { ok: plan.changes.length > 0 || plan.problems.length === 0, message: plan.problems.length ? `${msg} ${plan.problems.length} could not be applied.` : msg, changed: plan.changes.length, unchanged: plan.unchanged, problems: plan.problems };
   } catch (e) { return { ...fail(e), ...none }; }
+}
+
+/** What the live view can honestly show from the engine alone: orders and where they were delivered. Visits and carts need storefront events, which are not sent yet. */
+export async function liveView(x: Exec, now = new Date()): Promise<import('../gateway').LiveView> {
+  const day = 86400_000; const iso = (ms: number) => new Date(ms).toISOString(); const t = now.getTime();
+  const orders = await reportOrders(x, iso(t - 60 * day).slice(0, 10)); const live = orders.filter(o => o.payment !== 'failed' && o.state !== 'cancelled');
+  const win = (from: number, to: number) => live.filter(o => o.placedAt >= iso(from) && o.placedAt < iso(to)); const sum = (os: Order[]) => os.reduce((n, o) => n + o.totalMinor, 0);
+  const a = win(t - day, t + 1), b = win(t - 2 * day, t - day); const points = orderPoints(live, iso(t - 30 * day));
+  const firstSeen = new Map<string, string>(); for (const o of [...live].sort((p, q) => p.placedAt.localeCompare(q.placedAt))) if (o.email && !firstSeen.has(o.email)) firstSeen.set(o.email, o.id);
+  const week = live.filter(o => o.placedAt >= iso(t - 7 * day)); const fresh = week.filter(o => firstSeen.get(o.email) === o.id).length;
+  return { demo: false, tracked: false, asOf: iso(t), visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: sum(a), vsPrev: sum(b) }, orders: { value: a.length, vsPrev: b.length },
+    behaviour: { activeCarts: 0, checkingOut: 0, purchased: a.length }, locations: points.slice(0, 8).map(p => ({ place: p.place, sessions: p.orders })), points, recent: recentOrders(live, 8), returning: { newCustomers: fresh, returning: week.length - fresh } };
 }

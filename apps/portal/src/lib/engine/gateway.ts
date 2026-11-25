@@ -40,7 +40,7 @@ export function engineGateway(exec: () => Promise<Exec>, meta: StoreMeta, contro
     async viewer() { const a = (await x('query{ activeAdministrator{ firstName lastName emailAddress } }')).activeAdministrator; const name = `${a?.firstName ?? ''} ${a?.lastName ?? ''}`.trim() || a?.emailAddress || 'Signed in'; return { name, initials: name.split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase(), role: 'Store administrator' }; },
     store: storeView,
     async summary() { return summarise(await A.listOrders(x), await lowStockOf()); },
-    async live() { return { demo: false, asOf: new Date().toISOString(), visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: 0, vsPrev: 0 }, orders: { value: 0, vsPrev: 0 }, behaviour: { activeCarts: 0, checkingOut: 0, purchased: 0 }, locations: [], returning: { newCustomers: 0, returning: 0 } }; },
+    async live() { return A.liveView(x); },
     async billing() { return control ? control.billing(meta.storeId) : { demo: false, planName: LAUNCH_PLAN.name, monthlyMinor: LAUNCH_PLAN.monthlyMinor, buildMinor: LAUNCH_PLAN.buildFromMinor, status: 'not_started', invoices: [] }; },
     async startBillingPortal() { return control ? control.startBillingPortal(meta.storeId) : { ok: false, message: 'Billing management is not connected for your store yet.' }; },
     orders: q => A.listOrders(x, q), reportOrders: from => A.reportOrders(x, from), order: id => A.getOrder(x, id), products: () => A.listProducts(x), product: id => A.getProduct(x, id), customers: () => A.listCustomers(x),

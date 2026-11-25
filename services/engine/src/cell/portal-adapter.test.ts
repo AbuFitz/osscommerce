@@ -221,6 +221,9 @@ test('orders by hand: created, filled, paid and placed in one step, with stock r
   assert.equal(o.payment, 'paid'); assert.equal(o.email, 'phone-order@example.com'); assert.equal(o.lines[0].qty, 2); assert.equal(o.lines[0].sku, 'MUG-1'); assert.ok(o.timeline.some(t => t.note && /over the phone/.test(t.text))); assert.match(o.shipTo, /Bristol/);
   assert.ok((await A.listOrders(x)).some(r => r.id === made.id), 'it appears in the orders list'); assert.equal((await A.listProducts(x)).find(p => p.sku === 'MUG-1')!.allocated, before.allocated + 2, 'two units reserved');
   assert.equal((await A.listCustomers(x)).some(c => c.email === 'phone-order@example.com'), true, 'the new customer was created');
+  // the live map: the order's delivery town is carried through and placed
+  assert.equal(o.ship?.city, 'Bristol'); assert.equal(o.ship?.country, 'GB');
+  const lv = await A.liveView(x); assert.equal(lv.tracked, false); assert.ok(lv.points.some(p => p.place === 'Bristol, United Kingdom' && p.orders >= 1 && p.precision === 'town'), 'Bristol is on the map'); assert.ok(lv.recent.some(r => r.id === made.id)); assert.ok(lv.orders.value >= 1);
   // an existing customer
   const maya = (await A.listCustomers(x)).find(c => c.email === 'maya@example.com')!; const again = await A.createManualOrder(x, { customer: { id: maya.id }, items: [{ variantId: mug.variantId, qty: 1 }], shippingMethodId: shipping.id, payment: 'cash' }); assert.equal(again.ok, true, again.message);
   // refusals
