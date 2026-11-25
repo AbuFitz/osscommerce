@@ -435,6 +435,16 @@ export const demoGateway: CommerceGateway = {
     o.timeline.push({ at: new Date().toISOString(), text: `Refund of £${(i.amountMinor / 100).toFixed(2)} confirmed${i.reason ? ` (${i.reason})` : ''}.${back ? ` ${back} item${back > 1 ? 's' : ''} put back in stock.` : ''}` });
     return { ok: true, message: `Refunded £${(i.amountMinor / 100).toFixed(2)} to ${o.customer.split(' ')[0]}. Our fee on it (£${(fee / 100).toFixed(2)}) is returned to you.${back ? ` ${back} item${back > 1 ? 's' : ''} back in stock.` : ''}` };
   },
+  async abandonedCheckouts() {
+    const st = await state(); if (st === 'new') return { asOf: AS_OF, items: [], valueMinor: 0, anonymous: 0 };
+    const at = (h: number) => new Date(Date.parse(AS_OF) - h * 3600_000).toISOString();
+    const items = [
+      { id: 'ab1', code: 'KT7Q2M', name: 'Hannah Cole', email: 'hannah@example.com', stage: 'checkout' as const, totalMinor: 7595, lastActiveAt: at(3), lines: [{ title: 'Serving bowl, large', qty: 1, unitMinor: 4200 }, { title: 'Linen apron', qty: 1, unitMinor: 3400 }] },
+      { id: 'ab2', code: 'KT4PX1', name: 'Dev Patel', email: 'dev@example.com', stage: 'cart' as const, totalMinor: 3600, lastActiveAt: at(26), lines: [{ title: 'Stoneware mug, speckled', variant: 'Large · Ocean', qty: 2, unitMinor: 1800 }] },
+      { id: 'ab3', code: 'KT9ZZ0', email: 'orla@example.com', stage: 'cart' as const, totalMinor: 2200, lastActiveAt: at(70), lines: [{ title: 'Tea towel set', qty: 1, unitMinor: 2200 }] },
+    ];
+    return { asOf: AS_OF, items, valueMinor: items.reduce((n, i) => n + i.totalMinor, 0), anonymous: 5 };
+  },
   async resolveOrderEdit() { return { ok: true, message: 'This order is not part-way through an edit.' }; },
   async previewOrderEdit(i) { return editOrder(await S(), i, false); },
   async applyOrderEdit(i) {

@@ -386,3 +386,20 @@ test('an edit left part-way can be finished: back to normal when nothing is owed
   const c = await mk('stuck-c@example.com'); assert.equal((await A.fulfilOrder(x, c, undefined, undefined)).ok, true); await x(`mutation($id:ID!){ transitionOrderToState(id:$id, state:"Modifying"){ __typename } }`, { id: c });
   assert.equal((await A.resolveOrderEdit(x, c)).ok, true); assert.equal(await state(c), 'Shipped', 'a fully sent order returns to Shipped');
 });
+
+test('abandoned checkouts: carts with an email are listed with their items and value, anonymous carts are only counted, placed and fresh orders are left out', async () => {
+  const cart = async (email: string | null, toPayment = false) => {
+    await shopClient.asAnonymousUser(); await shopClient.query(g(`mutation{ addItemToOrder(productVariantId: 1, quantity: 2){ __typename } }`));
+    if (email) await shopClient.query(g(`mutation($i: CreateCustomerInput!){ setCustomerForOrder(input:$i){ __typename } }`), { i: { emailAddress: email, firstName: 'Ab', lastName: 'Andoned' } });
+    if (toPayment) { await shopClient.query(g(`mutation($i: CreateAddressInput!){ setOrderShippingAddress(input:$i){ __typename } }`), { i: { fullName: 'A B', streetLine1: '1 St', city: 'Bath', postalCode: 'BA1 1AA', countryCode: 'GB' } }); const m = await shopClient.query(g(`query{ eligibleShippingMethods{ id } }`)); await shopClient.query(g(`mutation($id: [ID!]!){ setOrderShippingMethod(shippingMethodId:$id){ __typename } }`), { id: [m.eligibleShippingMethods[0].id] }); await shopClient.query(g(`mutation{ transitionOrderToState(state:"ArrangingPayment"){ __typename } }`)); }
+  };
+  const before = await A.listAbandoned(x, { olderThanMinutes: 0 });
+  await cart('left-cart@example.com'); await cart('left-pay@example.com', true); await cart(null);
+  const r = await A.listAbandoned(x, { olderThanMinutes: 0 }); const mine = r.items.filter(i => /^left-/.test(i.email));
+  assert.equal(mine.length, 2, 'both carts with an email are listed'); assert.equal(r.anonymous, before.anonymous + 1, 'the cart with no email is counted, not listed');
+  const pay = mine.find(i => i.email === 'left-pay@example.com')!, plain = mine.find(i => i.email === 'left-cart@example.com')!;
+  assert.equal(pay.stage, 'checkout'); assert.equal(plain.stage, 'cart'); assert.equal(plain.lines[0].qty, 2); assert.ok(plain.lines[0].unitMinor > 0 && plain.totalMinor > 0); assert.equal(plain.name, 'Ab Andoned');
+  assert.ok(r.valueMinor >= plain.totalMinor + pay.totalMinor, 'the value adds up');
+  assert.deepEqual((await A.listAbandoned(x, { olderThanMinutes: 60 })).items.filter(i => /^left-/.test(i.email)), [], 'a cart touched a moment ago is not abandoned yet');
+  const placed = await A.listOrders(x); assert.ok(placed.length > 0); assert.equal(r.items.some(i => placed.some(p => p.id === i.id)), false, 'placed orders are never listed');
+});

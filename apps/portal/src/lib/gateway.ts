@@ -34,6 +34,9 @@ export interface ManualOrderInput {
   shippingMethodId?: string; address?: { fullName: string; line1: string; line2?: string; city: string; postcode: string };
   coupon?: string; note?: string; payment: 'cash' | 'card_in_person' | 'bank_transfer' | 'other';
 }
+/** A checkout someone started and did not finish: they gave an email, so it can be followed up. */
+export interface AbandonedCheckout { id: string; code: string; name?: string; email: string; /** Whether they got as far as paying, or only had things in a cart. */ stage: 'cart' | 'checkout'; lines: { title: string; variant?: string; qty: number; unitMinor: number }[]; totalMinor: number; lastActiveAt: string }
+export interface AbandonedSummary { /** The moment the list was worked out, so "3 h ago" reads the same on server and browser. */ asOf: string; items: AbandonedCheckout[]; valueMinor: number; /** Carts with things in them but no email, which cannot be followed up. */ anonymous: number }
 export interface ShippingChoice { id: string; name: string }
 /** One sellable item's stock. `available` is what can still be sold (on hand minus reserved for open orders). */
 export interface StockRow { variantId: string; productId: string; title: string; variant?: string; sku: string; imageUrl?: string; onHand: number; allocated: number; available: number; lowAt: number; tracked: boolean; backorder: boolean; status: 'ok' | 'low' | 'out' | 'backorder' | 'untracked'; published: boolean }
@@ -184,6 +187,7 @@ export interface CommerceGateway {
   previewOrderEdit(i: OrderEditInput): Promise<OrderEditPreview>;
   applyOrderEdit(i: OrderEditApply): Promise<MutationResult>;
   /** Finish an edit that was left part-way, so the order can be fulfilled or refunded normally again. */
+  abandonedCheckouts(): Promise<AbandonedSummary>;
   resolveOrderEdit(orderId: string, payment?: ManualOrderInput['payment']): Promise<MutationResult>;
   inviteMember(email: string, role: Member['role']): Promise<MutationResult>;
   rollbackTheme(version: string): Promise<MutationResult>;

@@ -648,3 +648,20 @@ export async function liveView(x: Exec, now = new Date()): Promise<import('../ga
   return { demo: false, tracked: false, asOf: iso(t), visitorsNow: 0, sessions: { value: 0, vsPrev: 0 }, salesMinor: { value: sum(a), vsPrev: sum(b) }, orders: { value: a.length, vsPrev: b.length },
     behaviour: { activeCarts: 0, checkingOut: 0, purchased: a.length }, locations: points.slice(0, 8).map(p => ({ place: p.place, sessions: p.orders })), points, recent: recentOrders(live, 8), returning: { newCustomers: fresh, returning: week.length - fresh } };
 }
+
+// ---- Abandoned checkouts ----
+/** Orders that are still open (never placed), in the cart or payment stage, untouched for a while. Anything with an email can be followed up; the rest are only counted. */
+export async function listAbandoned(x: Exec, o: { olderThanMinutes?: number; maxAgeDays?: number; now?: Date } = {}): Promise<import('../gateway').AbandonedSummary> {
+  const now = (o.now ?? new Date()).getTime(); const end = new Date(now - (o.olderThanMinutes ?? 60) * 60_000).toISOString(); const start = new Date(now - (o.maxAgeDays ?? 30) * 86_400_000).toISOString();
+  const r = await x(`query($o: OrderListOptions){ orders(options:$o){ items{ id code state updatedAt totalWithTax customer{ firstName lastName emailAddress } lines{ quantity unitPriceWithTax productVariant{ name product{ name } } } } } }`,
+    { o: { take: 200, sort: { updatedAt: 'DESC' }, filter: { active: { eq: true }, updatedAt: { between: { start, end } } } } });
+  type Raw = { id: string; code: string; state: string; updatedAt: string; totalWithTax: number; customer: { firstName: string; lastName: string; emailAddress: string } | null; lines: { quantity: number; unitPriceWithTax: number; productVariant: { name: string; product: { name: string } } }[] };
+  const items: import('../gateway').AbandonedCheckout[] = []; let anonymous = 0;
+  for (const q of r.orders.items as Raw[]) {
+    if ((q.state !== 'AddingItems' && q.state !== 'ArrangingPayment') || q.lines.length === 0) continue;
+    const email = q.customer?.emailAddress?.trim(); if (!email) { anonymous++; continue; }
+    items.push({ id: q.id, code: q.code, name: `${q.customer?.firstName ?? ''} ${q.customer?.lastName ?? ''}`.trim() || undefined, email, stage: q.state === 'ArrangingPayment' ? 'checkout' : 'cart', totalMinor: q.totalWithTax, lastActiveAt: q.updatedAt,
+      lines: q.lines.map(l => { const base = l.productVariant.product.name; return { title: base, variant: l.productVariant.name.startsWith(base) ? l.productVariant.name.slice(base.length).trim() || undefined : l.productVariant.name, qty: l.quantity, unitMinor: l.unitPriceWithTax }; }) });
+  }
+  return { asOf: new Date(now).toISOString(), items, valueMinor: items.reduce((n, i) => n + i.totalMinor, 0), anonymous };
+}

@@ -34,7 +34,7 @@ export const PROGRESSIVE = ['/analytics', '/customers', '/discounts', '/inventor
 
 /** Second-level links shown under their parent when the menu is expanded and that section is open. Collections and Inventory live under Products when expanded; the icon rail still lists them. */
 export const CHILDREN: Record<string, { href: string; label: string }[]> = {
-  '/orders': [{ href: '/orders?filter=unfulfilled', label: 'To fulfil' }, { href: '/orders?filter=refunded', label: 'Refunds' }],
+  '/orders': [{ href: '/orders?filter=unfulfilled', label: 'To fulfil' }, { href: '/orders?filter=refunded', label: 'Refunds' }, { href: '/orders/abandoned', label: 'Abandoned checkouts' }],
   '/products': [{ href: '/collections', label: 'Collections' }, { href: '/inventory', label: 'Inventory' }],
   '/analytics': [{ href: '/analytics/live', label: 'Live view' }],
 };
