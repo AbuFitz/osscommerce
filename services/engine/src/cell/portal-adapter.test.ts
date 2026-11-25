@@ -307,3 +307,46 @@ test('editing a placed order and returning goods: totals, refunds, extra payment
   assert.equal((await A.refundOrder(x, { orderId: q0.id, amountMinor: 100, reason: 'x', restock: true, lines: [{ lineId: 'nope', qty: 1 }] })).ok, false);
   assert.equal((await A.refundOrder(x, { orderId: q0.id, amountMinor: 100, reason: 'x', restock: true, lines: [{ lineId: sentLine.id!, qty: 99 }] })).ok, false, 'cannot return more than the order holds');
 });
+
+test('delivery rules: postcode zones, order value, weight limits and weight bands decide what a customer is offered, against the real engine', async () => {
+  // start from a clean slate: earlier tests in this file left delivery options of their own
+  for (const m of (await x(`query{ shippingMethods(options:{ take:200 }){ items{ id } } }`)).shippingMethods.items as { id: string }[]) await x(`mutation($id:ID!){ deleteShippingMethod(id:$id){ result } }`, { id: m.id });
+  const vat = (await A.listShippingTax(x)).pricesIncludeTax ? 1 : 1.2; const inc = (n: number) => Math.round(n * vat);
+  const mk = async (title: string, priceMinor: number, weightGrams: number) => { const r = await A.addProduct(x, { title, priceMinor, status: 'published', onHand: 50, sku: title.replace(/\W+/g, '-').toUpperCase().slice(0, 12), description: 'x', weightGrams } as any); assert.equal(r.ok, true, r.message); };
+  await mk('Greeting card', 400, 300); await mk('Stone bowl', 3000, 3000); await mk('Garden table', 12000, 9000);
+  const items = await A.listOrderableItems(x); const card = items.find(i => i.title === 'Greeting card')!, bowl = items.find(i => i.title === 'Stone bowl')!, table = items.find(i => i.title === 'Garden table')!;
+  const rate = (label: string, priceMinor: number, extra: Partial<import('../../../../apps/portal/src/lib/gateway.ts').ZoneRate> = {}) => ({ label, priceMinor, ...extra });
+  // a catch-all UK zone with a flat price free over £50, a light-parcel option, a by-weight option that only applies to orders over £10, and a separate zone for the Highlands
+  const uk = await A.saveShippingZone(x, { name: 'Mainland UK', regions: 'United Kingdom', rates: [rate('Standard', 495, { freeOverMinor: 5000 }), rate('Light parcel', 295, { when: { maxWeightGrams: 1000 } }), rate('By weight', 0, { bands: [{ upToGrams: 1000, priceMinor: 395 }, { upToGrams: 5000, priceMinor: 795 }, { upToGrams: 20000, priceMinor: 1495 }], when: { minOrderMinor: 1000 } })] }); assert.equal(uk.ok, true, uk.message);
+  const hl = await A.saveShippingZone(x, { name: 'Highlands and islands', regions: 'IV, KW, HS, ZE, PA20–80', rates: [rate('Highlands delivery', 1295)] }); assert.equal(hl.ok, true, hl.message);
+  const back = (await A.listShippingTax(x)).zones; const mainland = back.find(z => z.name === 'Mainland UK')!, high = back.find(z => z.name === 'Highlands and islands')!;
+  assert.equal(mainland.rates.length, 3); assert.deepEqual(mainland.rates.find(r => r.label === 'Light parcel')!.when, { maxWeightGrams: 1000 }); assert.equal(mainland.rates.find(r => r.label === 'By weight')!.bands!.length, 3); assert.equal(mainland.rates.find(r => r.label === 'Standard')!.freeOverMinor, 5000);
+  assert.equal(high.regions, 'IV, KW, HS, ZE, PA20–80'); assert.equal((await A.listShippingTax(x)).unweighed !== undefined, true, 'weight rules report items with no weight');
+  // ask the engine what a customer would be offered
+  const offered = async (variantId: string, qty: number, postcode: string) => {
+    const d = (await x(`mutation{ createDraftOrder{ id } }`)).createDraftOrder.id as string;
+    try { await x(`mutation($o:ID!,$i:AddItemToDraftOrderInput!){ addItemToDraftOrder(orderId:$o, input:$i){ __typename } }`, { o: d, i: { productVariantId: variantId, quantity: qty } });
+      await x(`mutation($o:ID!,$i:CreateAddressInput!){ setDraftOrderShippingAddress(orderId:$o, input:$i){ id } }`, { o: d, i: { fullName: 'A B', streetLine1: '1 St', city: 'X', postalCode: postcode, countryCode: 'GB' } });
+      const r = (await x(`query($o:ID!){ eligibleShippingMethodsForDraftOrder(orderId:$o){ name priceWithTax } }`, { o: d })).eligibleShippingMethodsForDraftOrder as { name: string; priceWithTax: number }[];
+      return Object.fromEntries(r.map(m => [m.name, m.priceWithTax]));
+    } finally { await x(`mutation($o:ID!){ deleteDraftOrder(orderId:$o){ result } }`, { o: d }); }
+  };
+  // a £4 card, 300 g, to Bristol: standard and light parcel; no by-weight (under £10)
+  assert.deepEqual(await offered(card.variantId, 1, 'BS1 4AX'), { Standard: inc(495), 'Light parcel': inc(295) });
+  // three cards (£12, 900 g): light parcel still fits, and now by weight applies at the lightest band
+  assert.deepEqual(await offered(card.variantId, 3, 'BS1 4AX'), { Standard: inc(495), 'Light parcel': inc(295), 'By weight': inc(395) });
+  // a £30 bowl, 3 kg: too heavy for the light parcel; by weight uses the middle band
+  assert.deepEqual(await offered(bowl.variantId, 1, 'BS1 4AX'), { Standard: inc(495), 'By weight': inc(795) });
+  // two bowls, £60 and 6 kg: standard is now free, and by weight uses the heaviest band
+  assert.deepEqual(await offered(bowl.variantId, 2, 'BS1 4AX'), { Standard: inc(0), 'By weight': inc(1495) });
+  // the highlands are served only by their own zone, whatever the order
+  assert.deepEqual(await offered(card.variantId, 1, 'IV2 3AB'), { 'Highlands delivery': inc(1295) }); assert.deepEqual(await offered(bowl.variantId, 1, 'PA25 1AA'), { 'Highlands delivery': inc(1295) }); assert.deepEqual(await offered(table.variantId, 1, 'KW1 4AA'), { 'Highlands delivery': inc(1295) });
+  // PA19 is just outside the highlands range, so it is mainland
+  assert.deepEqual(Object.keys(await offered(card.variantId, 1, 'PA19 1AA')).sort(), ['Light parcel', 'Standard']);
+  // saving rules refuses nonsense with a reason
+  assert.equal((await A.saveShippingZone(x, { name: 'Bad', regions: 'United Kingdom', rates: [rate('x', 100, { when: { minOrderMinor: 900, maxOrderMinor: 100 } })] })).ok, false);
+  assert.match((await A.saveShippingZone(x, { name: 'Bad2', regions: 'Atlantis', rates: [rate('x', 100)] })).message, /could not match/);
+  // changing the Highlands zone keeps the exclusion in step: drop it, and the highlands fall back to the mainland zone
+  const higher = await A.saveShippingZone(x, { originalName: 'Highlands and islands', name: 'Highlands and islands', regions: 'IV, KW', rates: [rate('Highlands delivery', 1495)] }); assert.equal(higher.ok, true);
+  assert.deepEqual(await offered(card.variantId, 1, 'HS1 2AA'), { Standard: inc(495), 'Light parcel': inc(295) }, 'HS is no longer excluded once it leaves the highlands zone'); assert.deepEqual(await offered(card.variantId, 1, 'IV2 3AB'), { 'Highlands delivery': inc(1495) });
+});

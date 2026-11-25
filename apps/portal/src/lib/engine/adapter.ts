@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { OrderEditApply, OrderEditInput, OrderEditPreview, Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice, StockRow, StockDetail, StockMove, VariantStockAdjust, StockSettings, StockCountResult } from '../gateway';
+import { bandsFromJson, bandsJson, exclusionsFor, splitRegions, validateRate } from '../delivery';
+import type { RateWhen, ZoneRate, OrderEditApply, OrderEditInput, OrderEditPreview, Order, OrderLine, PaymentStatus, FulfilmentStatus, OrderState, Product, ProductDetail, Variant, TaxClass, Customer, NewProduct, NewDiscount, Discount, ShippingZone, ZoneInput, StockAdjust, RefundInput, MutationResult, VariantInput, OptionGroup, ProductEdit, ImageUpload, DiscountInput, DiscountProduct, Collection, CollectionInput, CustomerDetail, CustomerProfile, OrderableItem, ManualOrderInput, ShippingChoice, StockRow, StockDetail, StockMove, VariantStockAdjust, StockSettings, StockCountResult } from '../gateway';
 import { createProductWithVariants, findTaxCategories, previewCollection, type Exec } from './catalogue';
 import { slugify } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from '../discounts';
@@ -186,53 +187,51 @@ export async function createDiscount(x: Exec, d: NewDiscount): Promise<MutationR
 type RawShippingMethod = { id: string; code: string; name: string; checker: RawOperation; calculator: RawOperation };
 const ZONE_CHECKER = 'oss-delivery-zone';
 const ZONE_CALCULATOR = 'oss-flat-rate-free-over';
+const WEIGHT_CALCULATOR = 'oss-weight-bands';
+const num = (v: string | undefined) => { const n = Number(v ?? 0); return Number.isFinite(n) && n > 0 ? n : undefined; };
 
 function mapShippingZones(methods: RawShippingMethod[]): ShippingZone[] {
   const groups = new Map<string, ShippingZone>();
   for (const m of methods) {
     const legacy = m.code.startsWith('ship-') && m.calculator.code === 'default-shipping-calculator';
-    if (!legacy && (m.checker.code !== ZONE_CHECKER || m.calculator.code !== ZONE_CALCULATOR)) continue;
+    if (!legacy && (m.checker.code !== ZONE_CHECKER || (m.calculator.code !== ZONE_CALCULATOR && m.calculator.code !== WEIGHT_CALCULATOR))) continue;
     const name = legacy ? 'United Kingdom' : arg(m.checker, 'zoneName')?.trim(); const regions = legacy ? 'United Kingdom' : arg(m.checker, 'regionsLabel')?.trim();
     if (!name || !regions) continue;
     const zone = groups.get(name) ?? { name, regions, rates: [] };
-    const free = legacy ? 0 : Number(arg(m.calculator, 'freeOver') ?? 0);
-    zone.rates.push({ label: m.name, priceMinor: Number(arg(m.calculator, 'rate') ?? 0), freeOverMinor: free > 0 ? free : undefined });
-    groups.set(name, zone);
+    const weighted = !legacy && m.calculator.code === WEIGHT_CALCULATOR; const free = legacy || weighted ? 0 : Number(arg(m.calculator, 'freeOver') ?? 0);
+    const when = legacy ? undefined : { minOrderMinor: num(arg(m.checker, 'minOrder')), maxOrderMinor: num(arg(m.checker, 'maxOrder')), maxWeightGrams: num(arg(m.checker, 'maxWeight')) };
+    const rate: ZoneRate = { label: m.name, priceMinor: weighted ? 0 : Number(arg(m.calculator, 'rate') ?? 0), freeOverMinor: free > 0 ? free : undefined };
+    if (weighted) rate.bands = bandsFromJson(arg(m.calculator, 'bands') ?? '');
+    if (when) { const w: RateWhen = {}; if (when.minOrderMinor) w.minOrderMinor = when.minOrderMinor; if (when.maxOrderMinor) w.maxOrderMinor = when.maxOrderMinor; if (when.maxWeightGrams) w.maxWeightGrams = when.maxWeightGrams; if (Object.keys(w).length) rate.when = w; }
+    zone.rates.push(rate); groups.set(name, zone);
   }
   return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function listShippingTax(x: Exec): Promise<{ zones: ShippingZone[]; pricesIncludeTax: boolean }> {
+export async function listShippingTax(x: Exec): Promise<{ zones: ShippingZone[]; pricesIncludeTax: boolean; unweighed?: number }> {
   const r = await x(`query{ activeChannel{ pricesIncludeTax } shippingMethods(options:{ take:200, sort:{ createdAt:ASC } }){ items{ id code name checker{ code args{ name value } } calculator{ code args{ name value } } } } }`);
-  return { zones: mapShippingZones(r.shippingMethods.items as RawShippingMethod[]), pricesIncludeTax: !!r.activeChannel?.pricesIncludeTax };
+  const zones = mapShippingZones(r.shippingMethods.items as RawShippingMethod[]);
+  // Weight rules only work if items have a weight. Say how many do not, so a rule is never quietly under-priced.
+  let unweighed: number | undefined;
+  if (zones.some(z => z.rates.some(q => q.bands || q.when?.maxWeightGrams))) { const v = await x(`query{ productVariants(options:{ take: 500 }){ items{ enabled customFields{ weightGrams } } } }`); unweighed = (v.productVariants.items as { enabled: boolean; customFields: { weightGrams?: number | null } | null }[]).filter(i => i.enabled && !(i.customFields?.weightGrams && i.customFields.weightGrams > 0)).length; }
+  return { zones, pricesIncludeTax: !!r.activeChannel?.pricesIncludeTax, ...(unweighed !== undefined ? { unweighed } : {}) };
 }
 
 export async function saveShippingZone(x: Exec, d: ZoneInput): Promise<MutationResult> {
   try {
     const name = d.name.trim(); const regionsLabel = d.regions.trim();
     if (name.length < 2 || name.length > 60) return { ok: false, message: 'Use 2–60 characters for the zone name.' };
-    if (!regionsLabel) return { ok: false, message: 'Choose at least one country.' };
+    if (!regionsLabel) return { ok: false, message: 'Say where this zone covers: countries, or UK postcode areas such as IV, KW or PA20–80.' };
     if (!d.rates.length || d.rates.length > 10) return { ok: false, message: 'Add between 1 and 10 delivery options.' };
-    for (const rate of d.rates) {
-      if (!rate.label.trim() || rate.label.trim().length > 80) return { ok: false, message: 'Each delivery option needs a name of no more than 80 characters.' };
-      if (!Number.isInteger(rate.priceMinor) || rate.priceMinor < 0) return { ok: false, message: 'Each delivery price must be zero or more.' };
-      if (rate.freeOverMinor !== undefined && (!Number.isInteger(rate.freeOverMinor) || rate.freeOverMinor < 1)) return { ok: false, message: 'A free-delivery threshold must be at least 0.01.' };
-    }
+    for (const rate of d.rates) { const bad = validateRate(rate); if (bad) return { ok: false, message: bad }; }
     const [countryResult, methodResult] = await Promise.all([
       x(`query{ activeChannel{ pricesIncludeTax } countries(options:{ take:250 }){ items{ code name enabled } } }`),
       x(`query{ shippingMethods(options:{ take:200 }){ items{ id code name checker{ code args{ name value } } calculator{ code args{ name value } } } } }`),
     ]);
-    const countries = (countryResult.countries.items as { code: string; name: string; enabled: boolean }[]).filter(c => c.enabled);
-    const aliases: Record<string, string> = { uk: 'GB', 'great britain': 'GB', britain: 'GB', usa: 'US', 'united states': 'US' };
-    const requested = regionsLabel.split(/[,;]+/).map(v => v.trim()).filter(Boolean);
-    const codes: string[] = []; const unknown: string[] = [];
-    for (const value of requested) {
-      const lower = value.toLowerCase(); const alias = aliases[lower];
-      const found = countries.find(c => c.code.toLowerCase() === lower || c.name.toLowerCase() === lower || c.code === alias);
-      if (found) codes.push(found.code.toUpperCase()); else unknown.push(value);
-    }
-    if (unknown.length) return { ok: false, message: `We could not match ${unknown.join(', ')} to an enabled country. Use country names or two-letter ISO codes.` };
-    const countryCodes = [...new Set(codes)].join(',');
+    const { codes, postcodes, unknown } = splitRegions(regionsLabel, countryResult.countries.items as { code: string; name: string; enabled: boolean }[]);
+    if (unknown.length) return { ok: false, message: `We could not match ${unknown.join(', ')}. Use enabled country names or two-letter codes, or UK postcode areas such as IV, a range such as PA20–80, or an outward code such as SW1A.` };
+    if (!codes.length) return { ok: false, message: 'Choose at least one country or postcode area.' };
+    const countryCodes = codes.join(',');
     const methods = methodResult.shippingMethods.items as RawShippingMethod[];
     const managed = methods.filter(m => m.checker.code === ZONE_CHECKER || (m.code.startsWith('ship-') && m.calculator.code === 'default-shipping-calculator'));
     const zoneName = (m: RawShippingMethod) => m.checker.code === ZONE_CHECKER ? arg(m.checker, 'zoneName')?.trim() : 'United Kingdom';
@@ -240,9 +239,12 @@ export async function saveShippingZone(x: Exec, d: ZoneInput): Promise<MutationR
     if (managed.some(m => zoneName(m)?.toLowerCase() === name.toLowerCase() && zoneName(m)?.toLowerCase() !== original)) return { ok: false, message: `A zone named ${name} already exists.` };
     const current = original ? managed.filter(m => zoneName(m)?.toLowerCase() === original) : [];
     const pricesIncludeTax = !!countryResult.activeChannel?.pricesIncludeTax;
-    const operation = (rate: ZoneInput['rates'][number]) => ({
-      checker: { code: ZONE_CHECKER, arguments: [{ name: 'countries', value: countryCodes }, { name: 'zoneName', value: name }, { name: 'regionsLabel', value: regionsLabel }] },
-      calculator: { code: ZONE_CALCULATOR, arguments: [{ name: 'rate', value: String(rate.priceMinor) }, { name: 'freeOver', value: String(rate.freeOverMinor ?? 0) }, { name: 'includesTax', value: String(pricesIncludeTax) }, { name: 'taxRate', value: '20' }] },
+    const operation = (rate: ZoneRate) => ({
+      checker: { code: ZONE_CHECKER, arguments: [{ name: 'countries', value: countryCodes }, { name: 'zoneName', value: name }, { name: 'regionsLabel', value: regionsLabel }, { name: 'postcodes', value: postcodes }, { name: 'excludePostcodes', value: '' },
+        { name: 'minOrder', value: String(rate.when?.minOrderMinor ?? 0) }, { name: 'maxOrder', value: String(rate.when?.maxOrderMinor ?? 0) }, { name: 'maxWeight', value: String(rate.when?.maxWeightGrams ?? 0) }] },
+      calculator: rate.bands?.length
+        ? { code: WEIGHT_CALCULATOR, arguments: [{ name: 'bands', value: bandsJson(rate.bands) }, { name: 'includesTax', value: String(pricesIncludeTax) }, { name: 'taxRate', value: '20' }] }
+        : { code: ZONE_CALCULATOR, arguments: [{ name: 'rate', value: String(rate.priceMinor) }, { name: 'freeOver', value: String(rate.freeOverMinor ?? 0) }, { name: 'includesTax', value: String(pricesIncludeTax) }, { name: 'taxRate', value: '20' }] },
       fulfillmentHandler: 'manual-fulfillment', translations: [{ languageCode: 'en', name: rate.label.trim(), description: `Delivery to ${regionsLabel}` }],
     });
     for (let i = 0; i < d.rates.length; i++) {
@@ -251,8 +253,20 @@ export async function saveShippingZone(x: Exec, d: ZoneInput): Promise<MutationR
       else await x(`mutation($i:CreateShippingMethodInput!){ createShippingMethod(input:$i){ id } }`, { i: { code: `oss-zone-${randomUUID()}`, ...input } });
     }
     for (const stale of current.slice(d.rates.length)) await x(`mutation($id:ID!){ deleteShippingMethod(id:$id){ result message } }`, { id: stale.id });
+    await syncZoneExclusions(x);
     return { ok: true, message: `${name} delivery options are live.` };
   } catch (e) { return fail(e); }
+}
+/** A postcode zone must win over the catch-all for its own postcodes. The engine offers every eligible option, so each catch-all zone is told which postcode areas other zones serve. Re-run after any zone changes. */
+export async function syncZoneExclusions(x: Exec): Promise<void> {
+  type M = { id: string; code: string; fulfillmentHandlerCode: string; translations: { languageCode: string; name: string; description: string }[]; checker: RawOperation; calculator: RawOperation };
+  const all = (await x(`query{ shippingMethods(options:{ take:200 }){ items{ id code fulfillmentHandlerCode translations{ languageCode name description } checker{ code args{ name value } } calculator{ code args{ name value } } } } }`)).shippingMethods.items as M[];
+  const zones = all.filter(m => m.checker.code === ZONE_CHECKER);
+  const byName = new Map<string, string>(); for (const m of zones) byName.set(arg(m.checker, 'zoneName') ?? '', arg(m.checker, 'postcodes') ?? '');
+  const ex = exclusionsFor([...byName].map(([name, postcodes]) => ({ name, postcodes })));
+  for (const m of zones) { const want = ex.get(arg(m.checker, 'zoneName') ?? '') ?? ''; if ((arg(m.checker, 'excludePostcodes') ?? '') === want) continue;
+    const args = m.checker.args.map(a => ({ name: a.name, value: a.name === 'excludePostcodes' ? want : a.value })); if (!args.some(a => a.name === 'excludePostcodes')) args.push({ name: 'excludePostcodes', value: want });
+    await x(`mutation($i:UpdateShippingMethodInput!){ updateShippingMethod(input:$i){ id } }`, { i: { id: m.id, code: m.code, checker: { code: ZONE_CHECKER, arguments: args }, calculator: { code: m.calculator.code, arguments: m.calculator.args.map(a => ({ name: a.name, value: a.value })) }, fulfillmentHandler: m.fulfillmentHandlerCode, translations: m.translations.map(t => ({ languageCode: t.languageCode, name: t.name, description: t.description })) } }); }
 }
 
 const fail = (e: unknown): MutationResult => ({ ok: false, message: e instanceof Error ? e.message : 'That did not go through. Nothing was changed.' });

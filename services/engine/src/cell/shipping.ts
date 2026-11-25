@@ -1,4 +1,5 @@
 import { ShippingCalculator, ShippingEligibilityChecker, LanguageCode, type Order } from '@vendure/core';
+import { postcodeMatches } from '@oss-commerce/contracts';
 
 /** Calculators the engine does not ship with. The engine's only built-in is a fixed rate, so "free over £50", weight bands and per-item rates need these.
  *  All amounts are in minor units and tax-inclusive when `priceIncludesTax` is true, matching how the portal's shipping page speaks. */
@@ -42,17 +43,32 @@ export const weightBands = new ShippingCalculator({
  * so they must never be editable by store administrators. The display fields also live in the
  * checker arguments, which lets the portal reconstruct a zone without adding global records or
  * leaking one merchant's configuration to another. */
+/** Everything that decides whether a delivery option is offered, kept pure so it can be tested without an engine. Empty or missing limits mean "no limit", so zones saved before these existed behave as they always did. */
+export interface ZoneRule { countries: string; postcodes?: string; excludePostcodes?: string; minOrder?: number; maxOrder?: number; maxWeight?: number }
+export function zoneEligible(r: ZoneRule, a: { countryCode?: string; postalCode?: string; basketMinor: number; weightGrams: number }): boolean {
+  const allowed = new Set(r.countries.split(',').map(x => x.trim().toUpperCase()).filter(Boolean)); if (!a.countryCode || !allowed.has(a.countryCode.toUpperCase())) return false;
+  const only = (r.postcodes ?? '').trim(); const except = (r.excludePostcodes ?? '').trim();
+  if (only && !postcodeMatches(a.postalCode ?? '', only)) return false;
+  if (except && postcodeMatches(a.postalCode ?? '', except)) return false;
+  if (r.minOrder && a.basketMinor < r.minOrder) return false; if (r.maxOrder && a.basketMinor > r.maxOrder) return false;
+  if (r.maxWeight && a.weightGrams > r.maxWeight) return false;
+  return true;
+}
 export const deliveryZoneChecker = new ShippingEligibilityChecker({
-  code: 'oss-delivery-zone', description: L('Deliver only to the selected countries'),
+  code: 'oss-delivery-zone', description: L('Deliver only to the selected countries, postcode areas, order values and weights'),
   args: {
     countries: { type: 'string', label: L('ISO country codes') },
     zoneName: { type: 'string', label: L('Portal zone name') },
     regionsLabel: { type: 'string', label: L('Portal regions label') },
+    postcodes: { type: 'string', label: L('Only these postcode areas, ranges or outward codes'), defaultValue: '' },
+    excludePostcodes: { type: 'string', label: L('Never these postcode areas (served by a more specific zone)'), defaultValue: '' },
+    minOrder: { type: 'int', ui: money.ui, label: L('Only when the basket is at least'), defaultValue: 0 },
+    maxOrder: { type: 'int', ui: money.ui, label: L('Only when the basket is at most'), defaultValue: 0 },
+    maxWeight: { type: 'int', label: L('Only when the order weighs at most (grams)'), defaultValue: 0 },
   },
-  check: (_ctx, order, a) => {
-    const allowed = new Set(a.countries.split(',').map(x => x.trim().toUpperCase()).filter(Boolean));
-    return !!order.shippingAddress?.countryCode && allowed.has(order.shippingAddress.countryCode.toUpperCase());
-  },
-  shouldRunCheck: (_ctx, order) => ({ countryCode: order.shippingAddress?.countryCode ?? '' }),
+  check: (_ctx, order, a) => zoneEligible({ countries: a.countries, postcodes: a.postcodes, excludePostcodes: a.excludePostcodes, minOrder: a.minOrder, maxOrder: a.maxOrder, maxWeight: a.maxWeight },
+    { countryCode: order.shippingAddress?.countryCode, postalCode: order.shippingAddress?.postalCode, basketMinor: order.subTotalWithTax, weightGrams: orderWeight(order) }),
+  // Anything the answer depends on is part of the key, so a change to the basket, the weight or the address re-runs the check.
+  shouldRunCheck: (_ctx, order) => ({ countryCode: order.shippingAddress?.countryCode ?? '', postalCode: order.shippingAddress?.postalCode ?? '', basket: order.subTotalWithTax, weight: orderWeight(order) }),
 });
 export const OSS_CALCULATORS = [flatRateFreeOver, perItem, weightBands];

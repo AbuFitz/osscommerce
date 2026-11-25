@@ -1,10 +1,10 @@
 'use client';
 import { useId, useRef, useState, useTransition } from 'react';
-import { Download, Plus, Trash2, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Download, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Dialog, useToast } from '@oss-commerce/ui';
 import { FormDialog } from './FormDialog';
 import { parseProducts, type ImportResult } from '@/lib/csv';
-import { addProduct, importProducts, adjustStock, createDiscount, saveZone, checkDomain, requestLaunch, createServiceRequest, exportCustomers } from '@/app/actions';
+import { addProduct, importProducts, adjustStock, createDiscount, checkDomain, requestLaunch, createServiceRequest, exportCustomers } from '@/app/actions';
 import type { DomainCheck, Product, ShippingZone } from '@/lib/gateway';
 const pence = (s: string) => Math.round(Number(s) * 100);
 
@@ -60,36 +60,7 @@ export function ExportCustomers({ count }: { count: number }) {
     toast(`${r.count} customers exported. Only email people who agreed to marketing.`, 'ok'); })}><Download size={15} aria-hidden />{pending ? 'Preparing…' : 'Export'}</button>;
 }
 
-type Rate = { label: string; price: string; free: string };
-export function ZoneDialog({ zone, triggerClass = 'btn primary', label = 'Add zone' }: { zone?: ShippingZone; triggerClass?: string; label?: string }) {
-  const uid = useId(); const toast = useToast(); const [open, setOpen] = useState(false); const [pending, start] = useTransition(); const [err, setErr] = useState<Record<string, string>>({});
-  const init = () => ({ name: zone?.name ?? '', regions: zone?.regions ?? '', rates: (zone?.rates ?? [{ label: 'Standard, 2–4 days', priceMinor: 495 }]).map(r => ({ label: r.label, price: (r.priceMinor / 100).toFixed(2), free: r.freeOverMinor ? (r.freeOverMinor / 100).toFixed(2) : '' })) as Rate[] });
-  const [v, setV] = useState(init);
-  const set = (i: number, p: Partial<Rate>) => setV(x => ({ ...x, rates: x.rates.map((r, k) => (k === i ? { ...r, ...p } : r)) }));
-  const save = () => {
-    const e: Record<string, string> = {}; if (!v.name.trim()) e.name = 'Enter a name for this zone.'; if (!v.regions.trim()) e.regions = 'Say where this zone covers.';
-    v.rates.forEach((r, i) => { if (!r.label.trim()) e[`l${i}`] = 'Name this option.'; if (!/^\d+(\.\d{1,2})?$/.test(r.price)) e[`p${i}`] = 'Enter a price like 4.95.'; if (r.free && !/^\d+(\.\d{1,2})?$/.test(r.free)) e[`f${i}`] = 'Enter an amount.'; });
-    setErr(e); if (Object.keys(e).length) return;
-    start(async () => { const r = await saveZone({ originalName: zone?.name, name: v.name, regions: v.regions, rates: v.rates.map(x => ({ label: x.label.trim(), priceMinor: pence(x.price), freeOverMinor: x.free ? pence(x.free) : undefined })) }); toast(r.message, r.ok ? 'ok' : 'error'); if (r.ok) setOpen(false); });
-  };
-  return (<>
-    <button className={triggerClass} type="button" onClick={() => { setV(init()); setErr({}); setOpen(true); }}>{label}</button>
-    <Dialog open={open} onClose={() => !pending && setOpen(false)} title={zone ? `Edit ${zone.name}` : 'Add delivery zone'} description="Customers in this zone choose from the options below at checkout."
-      footer={<><button className="btn" type="button" onClick={() => setOpen(false)} disabled={pending}>Cancel</button><button className="btn primary" type="button" disabled={pending} aria-busy={pending} onClick={save}>{pending ? 'Saving…' : 'Save zone'}</button></>}>
-      <div className="fd">
-        <div className={`field${err.name ? ' bad' : ''}`}><label htmlFor={`${uid}zn`}>Zone name</label><input id={`${uid}zn`} value={v.name} onChange={e => setV({ ...v, name: e.target.value })} aria-invalid={!!err.name} />{err.name && <p className="ferr" role="alert">{err.name}</p>}</div>
-        <div className={`field${err.regions ? ' bad' : ''}`}><label htmlFor={`${uid}zr`}>Countries</label><input id={`${uid}zr`} value={v.regions} placeholder="United Kingdom, Ireland" onChange={e => setV({ ...v, regions: e.target.value })} aria-invalid={!!err.regions} aria-describedby={`${uid}zh`} />{err.regions && <p className="ferr" role="alert">{err.regions}</p>}<p id={`${uid}zh`} className="hint">Separate country names or two-letter ISO codes with commas.</p></div>
-        <fieldset className="rates"><legend>Delivery options</legend>
-          {v.rates.map((r, i) => (<div className="rate" key={i}>
-            <div className={`field${err[`l${i}`] ? ' bad' : ''}`}><label htmlFor={`${uid}rl${i}`}>Name</label><input id={`${uid}rl${i}`} value={r.label} onChange={e => set(i, { label: e.target.value })} aria-invalid={!!err[`l${i}`]} /></div>
-            <div className={`field${err[`p${i}`] ? ' bad' : ''}`}><label htmlFor={`${uid}rp${i}`}>Price</label><div className="adorn"><span aria-hidden>£</span><input id={`${uid}rp${i}`} inputMode="decimal" value={r.price} onChange={e => set(i, { price: e.target.value })} aria-invalid={!!err[`p${i}`]} /></div></div>
-            <div className={`field${err[`f${i}`] ? ' bad' : ''}`}><label htmlFor={`${uid}rf${i}`}>Free over</label><div className="adorn"><span aria-hidden>£</span><input id={`${uid}rf${i}`} inputMode="decimal" placeholder="None" value={r.free} onChange={e => set(i, { free: e.target.value })} aria-invalid={!!err[`f${i}`]} /></div></div>
-            {v.rates.length > 1 && <button type="button" className="iconbtn sm" aria-label={`Remove ${r.label || 'option'}`} onClick={() => setV(x => ({ ...x, rates: x.rates.filter((_, k) => k !== i) }))}><Trash2 size={15} aria-hidden /></button>}
-          </div>))}
-          {Object.values(err).filter(m => m && m !== err.name && m !== err.regions)[0] && <p className="ferr" role="alert">{Object.values(err).filter(m => m && m !== err.name && m !== err.regions)[0]}</p>}
-          <button type="button" className="btn sm" onClick={() => setV(x => ({ ...x, rates: [...x.rates, { label: '', price: '', free: '' }] }))}><Plus size={14} aria-hidden />Add option</button></fieldset>
-      </div></Dialog></>);
-}
+export { ZoneDialog } from './ZoneEditor';
 
 export function DomainCheckButton({ host }: { host: string }) {
   const toast = useToast(); const [pending, start] = useTransition(); const [r, setR] = useState<DomainCheck | null>(null);

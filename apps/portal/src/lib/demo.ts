@@ -2,6 +2,7 @@ import 'server-only';
 import { cookies } from 'next/headers';
 import { LAUNCH_PLAN } from '@oss-commerce/contracts';
 import { orderPoints, recentOrders } from './geo/points';
+import { splitRegions, validateRate } from './delivery';
 import { GATE_COPY, LAUNCH_GATES, type Notice, type LiveView, type Billing, type OptionGroup, type Variant, type VariantInput, type Collection, type ProductDetail, type Discount, type Automation, type ShippingZone, type Member, type AccessGrant, type ServiceRequest, type CommerceGateway, type Customer, type Order, type Product, type Summary, type PaymentSetup, type StartPaymentSetup } from './gateway';
 import { StoreId, OrganisationId, feeMinor, feeRefundMinor, validateDraft } from '@oss-commerce/contracts';
 import { statusOf, validateDiscount } from './discounts';
@@ -86,7 +87,7 @@ const DISCOUNTS: Discount[] = [
       { id: 'd6', code: 'LINEN15', name: 'Linen 15%', kind: 'percent', value: 15, productIds: ['p2'], status: 'paused', used: 3, window: 'No end date' },
     ];
 const ZONES: ShippingZone[] = [
-        { name: 'United Kingdom', regions: 'England, Scotland, Wales, Northern Ireland', rates: [{ label: 'Standard, 2–4 days', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Next day', priceMinor: 795 }] },
+        { name: 'United Kingdom', regions: 'England, Scotland, Wales, Northern Ireland', rates: [{ label: 'Standard, 2–4 days', priceMinor: 495, freeOverMinor: 5000 }, { label: 'Light parcel, 3–5 days', priceMinor: 295, when: { maxWeightGrams: 1000 } }, { label: 'Next day', priceMinor: 795 }, { label: 'Large items', priceMinor: 0, bands: [{ upToGrams: 5000, priceMinor: 895 }, { upToGrams: 20000, priceMinor: 1595 }], when: { minOrderMinor: 5000 } }] },
         { name: 'Highlands and Islands', regions: 'IV, KW, HS, ZE, PA20–80', rates: [{ label: 'Standard, 3–6 days', priceMinor: 895 }] },
       ];
 const MEMBERS: Member[] = [
@@ -334,7 +335,7 @@ export const demoGateway: CommerceGateway = {
   async startPaymentSetup(): Promise<StartPaymentSetup> { return { ok: false, message: 'Stripe onboarding opens here once the store is connected to the live platform. This is a demo.' }; },
   async shippingTax() {
     return {
-      zones: (await S()).zones,
+      zones: (await S()).zones, unweighed: 3,
       pricesIncludeTax: true, vatRegistered: null,
       payments: { account: 'acct_••••3F2A', capabilities: [{ label: 'Card payments', ok: true }, { label: 'Payouts', ok: true }, { label: 'Identity verification', ok: true }], applicationFeeBp: 50, payouts: 'Weekly, Fridays' },
     };
@@ -563,6 +564,8 @@ export const demoGateway: CommerceGateway = {
     const x = await S(); const name = z.name.trim(); const i = z.originalName ? x.zones.findIndex(q => q.name === z.originalName) : -1;
     if (x.zones.some((q, k) => q.name.toLowerCase() === name.toLowerCase() && k !== i)) return { ok: false, message: `A zone called ${name} already exists.` };
     if (!z.rates.length) return { ok: false, message: 'Add at least one delivery option.' };
+    for (const r of z.rates) { const bad = validateRate(r); if (bad) return { ok: false, message: bad }; }
+    const sp = splitRegions(z.regions, [{ code: 'GB', name: 'United Kingdom', enabled: true }, { code: 'IE', name: 'Ireland', enabled: true }, { code: 'US', name: 'United States', enabled: true }, { code: 'FR', name: 'France', enabled: true }, { code: 'DE', name: 'Germany', enabled: true }]); if (sp.unknown.length) return { ok: false, message: `We could not match ${sp.unknown.join(', ')}. Use country names, or UK postcode areas such as IV, a range such as PA20–80, or an outward code such as SW1A.` };
     const zone = { name, regions: z.regions.trim(), rates: z.rates }; if (i >= 0) x.zones[i] = zone; else x.zones.push(zone); return { ok: true, message: i >= 0 ? `${name} updated.` : `${name} added. Customers there can now check out.` };
   },
   async checkDomain() {

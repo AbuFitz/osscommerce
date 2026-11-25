@@ -67,12 +67,17 @@ export interface StorefrontView {
 }
 export interface Member { name: string; email: string; role: 'owner' | 'manager' | 'fulfilment' | 'analyst'; status: 'active' | 'invited' }
 export interface AccessGrant { id: string; who: string; purpose: string; scopes: string[]; write: boolean; state: 'pending' | 'active' | 'expired' | 'revoked'; expires: string }
-export interface ShippingZone { name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
+/** When a delivery option is offered. Every limit is optional; none set means always offered. */
+export interface RateWhen { minOrderMinor?: number; maxOrderMinor?: number; maxWeightGrams?: number }
+export interface WeightBand { upToGrams: number; priceMinor: number }
+/** One delivery option. Priced as a flat amount (optionally free over a spend), or by weight bands when `bands` is set. */
+export interface ZoneRate { label: string; priceMinor: number; freeOverMinor?: number; when?: RateWhen; bands?: WeightBand[] }
+export interface ShippingZone { name: string; /** Countries and/or UK postcode areas, ranges and outward codes, separated by commas. */ regions: string; rates: ZoneRate[] }
 /** What the merchant sees about payments. Derived by the platform from Stripe's account state (see packages/payments readiness); the portal never interprets raw Stripe fields. */
 export type PaymentSetupStatus = 'unknown' | 'not_started' | 'onboarding' | 'pending_verification' | 'action_required' | 'restricted' | 'enabled' | 'payouts_paused' | 'disconnected';
 export interface PaymentSetup { status: PaymentSetupStatus; headline: string; detail: string; chargesEnabled: boolean; payoutsEnabled: boolean; checkoutAllowed: boolean; actionRequired: boolean; due: string[]; pending: string[]; deadline?: string; account?: string; applicationFeeBp: number; payoutSchedule?: string }
 export type StartPaymentSetup = { ok: true; mode: 'hosted'; url: string } | { ok: false; message: string };
-export interface ShippingTax { zones: ShippingZone[]; pricesIncludeTax: boolean; vatRegistered: boolean | null; payments: { account: string; capabilities: { label: string; ok: boolean }[]; applicationFeeBp: number; payouts: string } }
+export interface ShippingTax { zones: ShippingZone[]; pricesIncludeTax: boolean; /** Items with no weight set, which count as zero when pricing or limiting by weight. Only reported when a delivery option uses weight. */ unweighed?: number; vatRegistered: boolean | null; payments: { account: string; capabilities: { label: string; ok: boolean }[]; applicationFeeBp: number; payouts: string } }
 export interface Readiness { gate: LaunchGate; label: string; done: boolean; hint: string }
 export interface StoreView { name: string; store: StoreRecord; readiness: Readiness[] }
 
@@ -89,7 +94,7 @@ export interface NewProduct {
   description?: string; compareAtMinor?: number; barcode?: string; weightGrams?: number; taxClass?: TaxClass; seoTitle?: string; seoDescription?: string; handle?: string;
 }
 export interface NewDiscount { code: string; kind: 'percent' | 'fixed' | 'shipping'; value: number; minSpendMinor?: number; limit?: number; endDate?: string }
-export interface ZoneInput { originalName?: string; name: string; regions: string; rates: { label: string; priceMinor: number; freeOverMinor?: number }[] }
+export interface ZoneInput { originalName?: string; name: string; regions: string; rates: ZoneRate[] }
 export interface StockAdjust { productId: string; mode: 'set' | 'add'; qty: number; reason: 'recount' | 'received' | 'damaged' | 'returned' | 'other' }
 export interface DomainCheck { ok: boolean; message: string; record?: { type: string; name: string; value: string } }
 /** One thing that needs the merchant's attention. The same list feeds the Overview alerts and the notification centre, so they never disagree. */

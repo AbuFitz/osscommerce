@@ -39,3 +39,10 @@ export function zoneForPostcode<Z extends { name: string; regions: string }>(pos
   for (const z of zones) { const toks = parseZoneTokens(z.regions); for (const t of toks) { const r = rank(t, p); if (r && (!best || r > best.r)) best = { z, r }; } if (!fb && toks.some(t => t.kind === 'fallback')) fb = z; }
   return best ? { zone: best.z, via: 'specific' } : fb ? { zone: fb, via: 'fallback' } : { zone: null, via: 'none' };
 }
+
+/** The postcode-shaped tokens in a region list (areas such as IV, ranges such as PA20–80, outward codes such as SW1A), without country names or catch-alls. */
+export const postcodeTokens = (regions: string): ZoneToken[] => parseZoneTokens(regions).filter(t => t.kind !== 'fallback');
+/** Does this postcode fall inside any of the postcode areas, ranges or outward codes listed? A list with none of them never matches. */
+export function postcodeMatches(postcode: string, regions: string): boolean {
+  const p = parsePostcode(postcode); if (!p) return false; return postcodeTokens(regions).some(t => rank(t, p) > 0);
+}
