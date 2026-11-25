@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from 'next/server';
  */
 export function proxy(req: NextRequest) {
   if (process.env.ENGINE_ADMIN_URL) {
-    const open = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/h/');
+    const open = ['/login', '/set-password', '/forgot-password'].some(p => req.nextUrl.pathname.startsWith(p)) || req.nextUrl.pathname.startsWith('/h/');
     if (!open && !req.cookies.get('osc_session')) return NextResponse.redirect(new URL('/login', req.url));
     return NextResponse.next();
   }

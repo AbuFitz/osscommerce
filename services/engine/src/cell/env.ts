@@ -4,6 +4,8 @@ import { z } from 'zod';
  *  Fails closed: missing or unsafe settings stop the process rather than falling back to defaults. */
 const Base = z.object({
   APP_ENV: z.enum(['development', 'test', 'staging', 'production']),
+  /** The merchant portal's public address. Staff invitation and password-reset emails link here. */
+  PORTAL_URL: z.string().url().optional(),
   STORE_ID: z.string().min(3), CELL_ID: z.string().min(3), CHANNEL_TOKEN: z.string().min(16),
   DATABASE_URL: z.string().url(),
   /** Direct (non-pooled) connection for migrations. Falls back to DATABASE_URL. */

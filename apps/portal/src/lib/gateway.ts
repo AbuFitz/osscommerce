@@ -118,7 +118,7 @@ export interface VariantInput { options: string[]; sku: string; priceMinor: numb
 /** A shelf of products. `rule`: products join by themselves when their name contains a word. `manual`: you pick them. `other`: set up another way (we can still delete it). */
 export interface Collection { id: string; name: string; kind?: 'rule' | 'manual' | 'other'; contains: string; productIds?: string[]; count: number; products: string[] }
 export interface CollectionInput { id?: string; name: string; kind: 'rule' | 'manual'; contains?: string; productIds?: string[] }
-export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string; /** The step cannot finish until the person says how an extra amount was paid. */ needsPayment?: boolean; /** Shown once and never stored, for example a new team member's first password. */ secret?: string }
+export interface MutationResult { ok: boolean; message: string; /** The id of what was created, when something was. */ id?: string; /** The step cannot finish until the person says how an extra amount was paid. */ needsPayment?: boolean; }
 /** A refund, optionally for specific returned lines. Returned lines can be put back in stock. Our fee on the refunded part is returned by platform policy, not chosen per refund. */
 export interface RefundInput { orderId: string; amountMinor: number; reason: string; restock: boolean; lines?: { lineId: string; qty: number }[] }
 /** Changes to an order after it was placed. Quantities are the new totals (0 removes a line). */
@@ -201,10 +201,12 @@ export interface CommerceGateway {
   /** Finish an edit that was left part-way, so the order can be fulfilled or refunded normally again. */
   abandonedCheckouts(): Promise<AbandonedSummary>;
   resolveOrderEdit(orderId: string, payment?: ManualOrderInput['payment']): Promise<MutationResult>;
-  /** Adds a team member with a one-time password to hand over. */
+  /** Invites a team member by email. They choose their own password from the link, so nobody ever sees it. */
   inviteMember(i: { email: string; firstName: string; lastName: string; role: Exclude<Member['role'], 'owner'> }): Promise<MutationResult>;
   setMemberRole(id: string, role: Exclude<Member['role'], 'owner'>): Promise<MutationResult>;
   removeMember(id: string): Promise<MutationResult>;
+  /** Sends a fresh invitation link to someone who has not accepted yet. The earlier link stops working. */
+  resendInvite(id: string): Promise<MutationResult>;
   /** What your team has done, newest first. Pass the last id you have to get the next page. */
   activity(q?: { before?: number; actor?: string }): Promise<ActivityPage>;
   changePassword(current: string, next: string): Promise<MutationResult>;

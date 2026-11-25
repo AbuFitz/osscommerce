@@ -32,3 +32,14 @@ test('commerce email preparer refuses incomplete events and unknown templates in
   await assert.rejects(prepare({ ...request, template: 'made_up' }), PermanentError);
   await assert.rejects(commerceEmailPreparer(async () => null)(request), PermanentError);
 });
+
+test('account emails (staff invitation, password reset) come from the platform with the link, and refuse an incomplete event', async () => {
+  const prepare = commerceEmailPreparer(async () => null, { fromName: 'OneSimpleCommerce', fromEmail: 'accounts@mail.example.com' });
+  const base = { storeId: 's1', to: 'sam@example.com', audience: 'shopper' as const, idempotencyKey: 'k', headers: {} };
+  const invite = await prepare({ ...base, template: 'staff_invite', data: { name: 'Sam Lee', role: 'Fulfilment', invitedBy: 'Maya Okafor', actionUrl: 'https://portal.example/set-password?k=invite&t=abc', validHours: 168 } });
+  assert.equal(invite.from, 'OneSimpleCommerce <accounts@mail.example.com>'); assert.match(invite.subject, /Maya Okafor invited you/); assert.match(invite.html!, /set-password\?k=invite&amp;t=abc/); assert.match(invite.text!, /7 days/); assert.match(invite.text!, /Fulfilment/);
+  const reset = await prepare({ ...base, template: 'staff_password_reset', data: { name: 'Sam Lee', actionUrl: 'https://portal.example/set-password?k=reset&t=abc', validHours: 1 } });
+  assert.match(reset.subject, /Reset your OneSimpleCommerce password/); assert.match(reset.text!, /an hour/);
+  await assert.rejects(prepare({ ...base, template: 'staff_invite', data: { name: 'Sam' } }), /complete link/);
+  await assert.rejects(commerceEmailPreparer(async () => null)({ ...base, template: 'staff_invite', data: {} }), /not configured/);
+});

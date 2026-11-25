@@ -8,6 +8,9 @@ const Env = z.object({
   QUEUE_DATABASE_URL: z.string().url().startsWith('postgres'),
   RESEND_API_KEY: z.string().min(1),
   RESEND_WEBHOOK_SECRET: z.string().min(1),
+  /** The address account emails (staff invitations, password resets) are sent from. It must be on a domain verified in Resend. */
+  ACCOUNT_EMAIL_FROM: z.string().email(),
+  ACCOUNT_EMAIL_REPLY_TO: z.string().email().optional(),
   UNSUBSCRIBE_SECRET: z.string().regex(/^[0-9a-f]{64}$/i),
   PUBLIC_BASE_URL: z.string().url().startsWith('https://'),
   CELL_CREDENTIALS_JSON: z.string().min(2),

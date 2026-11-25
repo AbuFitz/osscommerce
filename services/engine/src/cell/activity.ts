@@ -34,6 +34,10 @@ export class ActivityService implements OnApplicationBootstrap {
     if (ctx.session?.user?.channelPermissions?.some(c => c.permissions.includes(Permission.SuperAdmin))) return { id: null, name: PLATFORM_ACTOR };
     const a = await this.admins.findOneByUserId(ctx, ctx.activeUserId); return { id: a ? String(a.id) : null, name: a ? `${a.firstName} ${a.lastName}`.trim() || a.emailAddress : 'A team member' };
   }
+  /** Records a change made by a named person who has no session yet (for example, someone setting their password from an emailed link). */
+  async recordAs(ctx: RequestContext, who: { id: string; name: string }, e: ActivityInput): Promise<void> {
+    try { await this.repo().save(this.repo().create({ channelId: String(ctx.channelId), actorId: who.id, actorName: who.name, action: e.action, summary: e.summary.slice(0, 400), subjectType: e.subjectType ?? null, subjectId: e.subjectId == null ? null : String(e.subjectId) })); } catch { /* the log must never block the change it describes */ }
+  }
   async record(ctx: RequestContext, e: ActivityInput): Promise<void> {
     try {
       const who = await this.actor(ctx); if (!who) return; const channelId = String(ctx.channelId); const subjectId = e.subjectId == null ? null : String(e.subjectId);

@@ -21,7 +21,7 @@ export class Limiter {
 
 const MIN = 60_000;
 /** Per person (the username they try) is the strong limit; per address is a wider, best-effort one, because a forwarded address can be forged. */
-const BY_USER = new Limiter(10, 15 * MIN); const BY_ADDR = new Limiter(60, 15 * MIN); const BY_PASSWORD = new Limiter(5, 15 * MIN);
+const BY_USER = new Limiter(10, 15 * MIN); const BY_ADDR = new Limiter(60, 15 * MIN); const BY_PASSWORD = new Limiter(5, 15 * MIN); const BY_RESET = new Limiter(3, 15 * MIN);
 const wait = (s: number) => new UserInputError(`Too many attempts. Wait ${Math.ceil(s / 60)} minute${s > 60 ? 's' : ''} and try again.`);
 const addr = (req: { headers?: Record<string, string | string[] | undefined>; ip?: string }) => String(req?.headers?.['x-forwarded-for'] ?? req?.ip ?? 'unknown').split(',')[0].trim();
 
@@ -35,6 +35,8 @@ export class RateLimit implements NestInterceptor {
     const req = gql.getContext().req;
     if (field === 'login') { const u = String(gql.getArgs().username ?? '').trim().toLowerCase(); const s = Math.max(BY_USER.hit(`u:${u}`), BY_ADDR.hit(`a:${addr(req)}`)); if (s) throw wait(s); }
     if (field === 'changeMyPassword') { const s = BY_PASSWORD.hit(`p:${req?.user?.id ?? req?.session?.user?.id ?? addr(req)}`); if (s) throw wait(s); }
+    if (field === 'requestStaffPasswordReset') { const e = String(gql.getArgs().email ?? '').trim().toLowerCase(); const s = Math.max(BY_RESET.hit(`r:${e}`), BY_ADDR.hit(`a:${addr(req)}`)); if (s) throw wait(s); }
+    if (field === 'acceptStaffToken') { const s = BY_ADDR.hit(`t:${addr(req)}`); if (s) throw wait(s); }
     return next.handle();
   }
 }

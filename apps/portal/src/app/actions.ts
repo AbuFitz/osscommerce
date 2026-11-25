@@ -28,6 +28,7 @@ export async function applyOrderEdit(i: OrderEditApply) { return run(() => gatew
 export async function inviteMember(i: { email: string; firstName: string; lastName: string; role: Exclude<Member['role'], 'owner'> }) { return run(() => gateway().inviteMember({ email: i.email.trim().slice(0, 200), firstName: i.firstName.trim().slice(0, 80), lastName: i.lastName.trim().slice(0, 80), role: i.role }), ['/settings/team', '/settings/activity']); }
 export async function setMemberRole(id: string, role: Exclude<Member['role'], 'owner'>) { return run(() => gateway().setMemberRole(id, role), ['/settings/team', '/settings/activity']); }
 export async function removeMember(id: string) { return run(() => gateway().removeMember(id), ['/settings/team', '/settings/activity']); }
+export async function resendInvite(id: string) { return run(() => gateway().resendInvite(id), ['/settings/team']); }
 export async function changePassword(current: string, next: string) { return run(() => gateway().changePassword(current, next), []); }
 export async function moreActivity(before: number, actor?: string) { return gateway().activity({ before, actor }); }
 export async function rollbackTheme(v: string) { return run(() => gateway().rollbackTheme(v), ['/storefront']); }

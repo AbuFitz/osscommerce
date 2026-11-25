@@ -22,7 +22,7 @@ export const TEMPLATES: { id: TemplateId; label: string; audience: 'customer' | 
 ];
 
 const font = 'Inter, -apple-system, Segoe UI, Helvetica, Arial, sans-serif';
-function Frame({ brand, preheader, children }: { brand: Brand; preheader: string; children: React.ReactNode }) {
+function Frame({ brand, preheader, children, about = 'order' }: { brand: Brand; preheader: string; children: React.ReactNode; about?: 'order' | 'account' }) {
   return (
     <Html lang="en-GB"><Head /><Preview>{preheader}</Preview>
       <Body style={{ margin: 0, background: '#f4f3ee', fontFamily: font, color: '#16210f' }}>
@@ -32,7 +32,7 @@ function Frame({ brand, preheader, children }: { brand: Brand; preheader: string
           <Section style={{ padding: '20px 8px 0', color: '#6b705f', fontSize: 12, lineHeight: '18px' }}>
             {brand.footer && <Text style={{ margin: '0 0 8px' }}>{brand.footer}</Text>}
             <Text style={{ margin: 0 }}>Questions? Reply or write to <Link href={`mailto:${brand.supportEmail}`} style={{ color: '#6b705f' }}>{brand.supportEmail}</Link>.{brand.address ? ` ${brand.address}` : ''}</Text>
-            <Text style={{ margin: '8px 0 0' }}>This is a service email about your order. It is not marketing.</Text>
+            <Text style={{ margin: '8px 0 0' }}>{about === 'account' ? 'This is a service email about your account. It is not marketing.' : 'This is a service email about your order. It is not marketing.'}</Text>
           </Section>
         </Container>
       </Body></Html>
@@ -74,3 +74,21 @@ export async function renderTemplate(id: TemplateId, brand: Brand, order: OrderD
   return { subject: edit.subject?.trim() || t.subject(order, brand), html: await render(el), text: await render(el, { plainText: true }) };
 }
 export const SAMPLE_ORDER: OrderData = { number: '1043', placed: '14 Nov 2026', customerName: 'Maya', lines: [{ title: 'Stoneware mug, speckled', qty: 2, unit: '£18.00' }, { title: 'Linen apron', qty: 1, unit: '£34.00' }], subtotal: '£70.00', shipping: '£4.95', vatIncluded: '£12.49', total: '£74.95', shipTo: '12 Mill Lane, Bristol BS1 4AX', trackingUrl: 'https://example.com/track/123', carrier: 'Royal Mail Tracked', refund: '£18.00', orderUrl: 'https://example.com/orders/1043' };
+
+/** Emails about someone's own account on the platform (an invitation, a password reset). They come from OneSimpleCommerce, not from a shop, and a shop cannot edit or switch them off. */
+export type AccountTemplateId = 'staff_invite' | 'staff_password_reset';
+export interface AccountData { name: string; actionUrl: string; validHours: number; role?: string; invitedBy?: string }
+const hoursText = (h: number) => (h % 24 === 0 && h >= 48 ? `${h / 24} days` : h === 1 ? 'an hour' : `${h} hours`);
+export const ACCOUNT_BRAND: Brand = { shopName: 'OneSimpleCommerce', accent: '#4f46e5', supportEmail: 'support@onesimplecommerce.com' };
+const ACCOUNT_COPY: Record<AccountTemplateId, { subject: (d: AccountData) => string; title: string; intro: (d: AccountData) => string; button: string }> = {
+  staff_invite: { subject: d => d.invitedBy ? `${d.invitedBy} invited you to OneSimpleCommerce` : 'You have been invited to OneSimpleCommerce', title: 'Join the team',
+    intro: d => `Hi ${d.name.split(' ')[0] || 'there'}, ${d.invitedBy ? `${d.invitedBy} has` : 'you have been'} ${d.invitedBy ? 'added you' : 'added'} to their store${d.role ? ` as ${d.role}` : ''}. Choose a password to finish setting up your account. The link works once and lasts ${hoursText(d.validHours)}.`, button: 'Choose a password' },
+  staff_password_reset: { subject: () => 'Reset your OneSimpleCommerce password', title: 'Reset your password',
+    intro: d => `Use the button below to choose a new password. The link works once and lasts ${hoursText(d.validHours)}. If you did not ask for this, you can ignore this email and your password will not change.`, button: 'Choose a new password' },
+};
+export async function renderAccountEmail(id: AccountTemplateId, d: AccountData, brand: Brand = ACCOUNT_BRAND): Promise<Rendered> {
+  const c = ACCOUNT_COPY[id];
+  const el = (<Frame brand={{ ...brand, footer: undefined }} about="account" preheader={c.title}><H>{c.title}</H><P>{c.intro(d)}</P><Cta href={d.actionUrl} brand={brand}>{c.button}</Cta>
+    <Text style={{ margin: '18px 0 0', fontSize: 12, color: '#6b705f', lineHeight: '18px' }}>If the button does not work, copy this address into your browser:<br />{d.actionUrl}</Text></Frame>);
+  return { subject: c.subject(d), html: await render(el), text: await render(el, { plainText: true }) };
+}

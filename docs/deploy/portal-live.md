@@ -55,7 +55,7 @@ team invitations and roles (support-access grants are connected), and live visit
 1. **A hosted engine cell.** Vendure needs a long-running Node server and worker, PostgreSQL and Redis. It cannot run on Vercel. Until one exists at a public HTTPS address there is nothing for `ENGINE_ADMIN_URL` to point to.
 2. **An administrator account per merchant** on that cell, with a role limited to their channel (never SuperAdmin).
 3. **Stripe**: live keys on the cell, the merchant's connected account onboarded, and Stripe's written confirmation of the fee arrangement.
-4. **Control plane**: apply migrations through `0018_domain_verification` before adding the runtime database URL. The portal credential must inherit `oss_runtime`, never own the tables. Provision each store's platform Stripe customer/subscription binding as the schema owner.
+4. **Control plane**: apply migrations through `0019_account_email_rules` before adding the runtime database URL. The portal credential must inherit `oss_runtime`, never own the tables. Provision each store's platform Stripe customer/subscription binding as the schema owner.
 5. **Vercel**: set the variables above on the portal project and remove `NEXT_PUBLIC_OSS_DEMO`.
 
 ## Trying it locally

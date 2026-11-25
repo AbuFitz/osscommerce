@@ -17,7 +17,7 @@ Optional capacity controls are `DATABASE_POOL_MAX`, `UPSTREAM_TIMEOUT_MS`, `STOR
 
 ## Deployment checks
 
-1. Apply the control-plane migrations through `0018_domain_verification` using the schema-owner deployment credential.
+1. Apply the control-plane migrations through `0019_account_email_rules` using the schema-owner deployment credential.
 2. Create a separate gateway login that inherits `oss_runtime`. Do not use the schema owner. Startup checks both conditions and exits if either is wrong.
 3. Set the database URL with `sslmode=require` or stronger outside development.
 4. `/healthz` proves the process is accepting HTTP. `/readyz` also proves PostgreSQL is reachable and is the Railway health check.

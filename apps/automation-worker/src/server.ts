@@ -21,7 +21,7 @@ export async function start() {
   const boss = new PgBoss({ connectionString: cfg.QUEUE_DATABASE_URL, schema: 'pgboss_automation' });
   await boss.start();
   const stores = new PgStores(runtime); const scheduler = new PgBossScheduler(boss);
-  const sender = new ResendSender({ apiKey: cfg.RESEND_API_KEY, prepare: commerceEmailPreparer(storeId => stores.emailProfile.get(storeId)) });
+  const sender = new ResendSender({ apiKey: cfg.RESEND_API_KEY, prepare: commerceEmailPreparer(storeId => stores.emailProfile.get(storeId), { fromName: 'OneSimpleCommerce', fromEmail: cfg.ACCOUNT_EMAIL_FROM, replyTo: cfg.ACCOUNT_EMAIL_REPLY_TO }) });
   const deps: Deps = {
     rules: stores.rules, events: stores.events, runs: stores.runs, suppression: stores.suppression, scheduler, sender,
     consent: stores.consent, state: stores.state, limits: stores.limits,

@@ -14,6 +14,13 @@ import { engineLogin, httpExec, EngineError } from '../../../../apps/portal/src/
 import * as A from '../../../../apps/portal/src/lib/engine/adapter.ts';
 import { ensureTaxCategories } from '../../../../apps/portal/src/lib/engine/catalogue.ts';
 import { provisionStore } from './provision-store.ts';
+import { OssOutbox } from './outbox-entity.ts';
+import { TransactionalConnection } from '@vendure/core';
+
+const outboxEvents = async () => (await server.app.get(TransactionalConnection).rawConnection.getRepository(OssOutbox).find()).map(r => JSON.parse(r.payload) as { type: string; recipient: { email: string }; data: Record<string, any> });
+const callAs = async (k: 'A' | 'B', query: string, variables: Record<string, unknown>) => { const r = await fetch(`http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOptions.adminApiPath}`, { method: 'POST', headers: { 'content-type': 'application/json', 'vendure-token': m[k].channelToken }, body: JSON.stringify({ query, variables }) }); return (await r.json()) as { data?: any; errors?: { message: string }[] }; };
+const tokenOf = async (type: string, email: string) => { const ev = (await outboxEvents()).filter(e => e.type === type && e.recipient.email === email).pop(); return ev ? new globalThis.URL(ev.data.actionUrl).searchParams.get('t')! : null; };
+const ACCEPT = 'mutation($t:String!,$p:String!){ acceptStaffToken(token:$t,password:$p) }';
 
 const dir = path.join(__dirname, '.tmp-tenancy'); fs.mkdirSync(dir, { recursive: true }); registerInitializer('sqljs', new SqljsInitializer(dir));
 const intents = new Map<string, any>(); const refunds: any[] = []; let n = 0;
@@ -25,7 +32,7 @@ const stripe: any = {
 const deps: any = { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } };
 const { server, adminClient, shopClient } = createTestEnvironment(mergeConfig(testConfig, {
   authOptions: { requireVerification: false, tokenMethod: 'bearer', superadminCredentials: { identifier: 'ops', password: 'long-random-pass' } },
-  plugins: [CatalogueFieldsPlugin, AssetServerPlugin.init({ route: 'assets', assetUploadDir: path.join(dir, 'assets') }), CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43) }, deps)],
+  plugins: [CatalogueFieldsPlugin, AssetServerPlugin.init({ route: 'assets', assetUploadDir: path.join(dir, 'assets') }), CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43), portalUrl: 'https://portal.example' }, deps)],
 }));
 const URL = `http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOptions.adminApiPath}`; const g = (s: string) => parse(s);
 type M = { x: ReturnType<typeof httpExec>; token: string; channelId: string; channelToken: string; adminId: string };
@@ -232,18 +239,22 @@ test('editing a placed order is closed to other stores, line by line', async () 
 test('staff: owners add staff with fixed roles; each role can do only its own work; stores never see each other\'s staff', async () => {
   const exec = (k: 'A' | 'B') => async (email: string, pw: string) => { const s = await engineLogin({ url: URL, channelToken: m[k].channelToken }, email, pw); return s ? httpExec({ url: URL, channelToken: m[k].channelToken }, s.token) : null; };
   const run = async (x: ReturnType<typeof httpExec>, q: string, v?: any) => { try { return { data: await x(q, v) }; } catch (e) { return { denied: e instanceof EngineError ? e.code : 'ERR', message: (e as Error).message }; } };
-  const INVITE = `mutation($e:String!,$f:String!,$l:String!,$r:String!){ inviteStaff(email:$e, firstName:$f, lastName:$l, role:$r){ id email temporaryPassword } }`;
+  const INVITE = `mutation($e:String!,$f:String!,$l:String!,$r:String!){ inviteStaff(email:$e, firstName:$f, lastName:$l, role:$r){ id email } }`;
   const list = async (who: 'A' | 'B') => (await m[who].x(`query{ staffMembers{ id name email role owner } }`)).staffMembers as { id: string; name: string; email: string; role: string; owner: boolean }[];
+  const join = async (email: string) => { const pw = `Chosen-pass-${email.split('@')[0]}-1`; const r = await callAs('A', ACCEPT, { t: (await tokenOf('staff.invited', email))!, p: pw }); assert.equal(r.data?.acceptStaffToken, true, JSON.stringify(r)); return pw; };
   assert.deepEqual((await list('A')).map(s => s.role), ['owner'], 'a new store has only its owner');
   // an owner invites a manager, a fulfilment person and a view-only person
-  const mia = (await m.A.x(INVITE, { e: 'Mia@a.test', f: 'Mia', l: 'Manager', r: 'manager' })).inviteStaff; assert.equal(mia.email, 'mia@a.test', 'emails are stored lower-case'); assert.match(mia.temporaryPassword, /^[A-Za-z0-9]{14}$/);
+  const mia = (await m.A.x(INVITE, { e: 'Mia@a.test', f: 'Mia', l: 'Manager', r: 'manager' })).inviteStaff; assert.equal(mia.email, 'mia@a.test', 'emails are stored lower-case'); assert.equal(mia.temporaryPassword, undefined, 'no password is ever handed back');
   const fay = (await m.A.x(INVITE, { e: 'fay@a.test', f: 'Fay', l: 'Fulfil', r: 'fulfilment' })).inviteStaff; const ann = (await m.A.x(INVITE, { e: 'ann@a.test', f: 'Ann', l: 'Analyst', r: 'analyst' })).inviteStaff;
   assert.deepEqual((await list('A')).map(s => s.role), ['owner', 'manager', 'fulfilment', 'analyst']);
+  const pw = { mia: '', fay: '', ann: '' }; assert.ok((await m.A.x(`query{ staffMembers{ email pending } }`)).staffMembers.filter((x: any) => x.pending).length === 3, 'three invitations are waiting');
+  assert.equal(await exec('A')('mia@a.test', 'anything-at-all-1'), null, 'an invited person cannot sign in until they accept');
+  pw.mia = await join('mia@a.test'); pw.fay = await join('fay@a.test'); pw.ann = await join('ann@a.test'); assert.equal((await m.A.x(`query{ staffMembers{ pending } }`)).staffMembers.some((x: any) => x.pending), false);
   // refused invitations
   assert.match((await run(m.A.x, INVITE, { e: 'mia@a.test', f: 'x', l: 'y', r: 'manager' })).message!, /already has an account/); assert.match((await run(m.A.x, INVITE, { e: 'x@a.test', f: 'x', l: 'y', r: 'owner' })).message!, /Manager, Fulfilment or View only/);
   assert.match((await run(m.A.x, INVITE, { e: 'nope', f: 'x', l: 'y', r: 'manager' })).message!, /valid email/); assert.match((await run(m.A.x, INVITE, { e: 'z@a.test', f: '', l: 'y', r: 'manager' })).message!, /first and last name/);
   // the manager works on products and orders, but cannot manage staff or change delivery settings
-  const mx = (await exec('A')('mia@a.test', mia.temporaryPassword))!; assert.ok(mx, 'the temporary password signs in');
+  const mx = (await exec('A')('mia@a.test', pw.mia))!; assert.ok(mx, 'the password they chose signs in');
   assert.equal((await A.addProduct(mx, { title: 'Manager mug', priceMinor: 1200, sku: 'MGR-1', status: 'published', onHand: 5 })).ok, true);
   assert.ok((await run(mx, `query{ staffMembers{ id } }`)).denied, 'a manager cannot see the staff list'); assert.ok((await run(mx, INVITE, { e: 'q@a.test', f: 'q', l: 'q', r: 'manager' })).denied, 'a manager cannot invite');
   assert.ok((await run(mx, `mutation{ createShippingMethod(input:{ code:"x", fulfillmentHandler:"manual-fulfillment", checker:{ code:"default-shipping-eligibility-checker", arguments:[{ name:"orderMinimum", value:"0" }] }, calculator:{ code:"default-shipping-calculator", arguments:[{ name:"rate", value:"1" },{ name:"includesTax", value:"auto" },{ name:"taxRate", value:"0" }] }, translations:[{ languageCode:en, name:"x" }] }){ id } }`)).denied, 'a manager cannot change delivery');
@@ -251,32 +262,32 @@ test('staff: owners add staff with fixed roles; each role can do only its own wo
   // an order, then fulfilment: reads orders, fulfils, but cannot touch the catalogue or discounts
   const items = await A.listOrderableItems(m.A.x); const mug = items.find(i => i.sku === 'MUG-A')!; const shipping = (await A.listShippingChoices(m.A.x))[0];
   const made = await A.createManualOrder(m.A.x, { customer: { email: 'staff-order@example.com', firstName: 'St', lastName: 'Aff' }, items: [{ variantId: mug.variantId, qty: 1 }], address: { fullName: 'St Aff', line1: '1 St', city: 'Bath', postcode: 'BA1 1AA' }, shippingMethodId: shipping?.id, payment: 'cash' }); assert.equal(made.ok, true, made.message);
-  const fx = (await exec('A')('fay@a.test', fay.temporaryPassword))!; assert.ok((await A.listOrders(fx)).some(o => o.id === made.id), 'fulfilment sees orders');
+  const fx = (await exec('A')('fay@a.test', pw.fay))!; assert.ok((await A.listOrders(fx)).some(o => o.id === made.id), 'fulfilment sees orders');
   assert.ok((await run(fx, `mutation{ createProduct(input:{ translations:[{ languageCode:en, name:"x", slug:"x", description:"" }] }){ id } }`)).denied, 'fulfilment cannot add products'); assert.ok((await run(fx, `query{ promotions{ totalItems } }`)).denied, 'fulfilment cannot read discounts');
   assert.ok((await run(fx, `query{ activity(take:5){ items{ id } } }`)).denied, 'fulfilment cannot read the activity log');
   assert.equal((await A.fulfilOrder(fx, made.id!, 'TRK1')).ok, true, 'fulfilment can fulfil');
   // view-only reads, never writes
-  const ax = (await exec('A')('ann@a.test', ann.temporaryPassword))!; assert.ok((await A.listProducts(ax)).length >= 1, 'view-only reads products'); assert.ok((await run(ax, `mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id: ids.A.product })).denied, 'view-only cannot edit');
+  const ax = (await exec('A')('ann@a.test', pw.ann))!; assert.ok((await A.listProducts(ax)).length >= 1, 'view-only reads products'); assert.ok((await run(ax, `mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id: ids.A.product })).denied, 'view-only cannot edit');
   assert.ok((await run(ax, `mutation($id:ID!){ addNoteToOrder(input:{ id:$id, note:"x", isPublic:false }){ id } }`, { id: made.id })).denied, 'view-only cannot add notes');
   // stores never see each other's staff, and cannot touch them
   assert.deepEqual((await list('B')).map(s => s.role), ['owner'], 'B sees none of A\'s staff');
   assert.match((await run(m.B.x, `mutation($id:ID!){ removeStaff(id:$id) }`, { id: mia.id })).message!, /not found/); assert.match((await run(m.B.x, `mutation($id:ID!){ setStaffRole(id:$id, role:"analyst") }`, { id: mia.id })).message!, /not found/);
   // Signing in with B's channel token succeeds in Vendure, but the session holds no permission there: every request is refused
-  const miaInB = await exec('B')('mia@a.test', mia.temporaryPassword); if (miaInB) { assert.ok((await run(miaInB, `query{ products{ totalItems } }`)).denied, 'A\'s staff can read nothing in B'); assert.ok((await run(miaInB, `query{ orders{ totalItems } }`)).denied); assert.ok((await run(miaInB, `query{ staffMembers{ id } }`)).denied); }
+  const miaInB = await exec('B')('mia@a.test', pw.mia); if (miaInB) { assert.ok((await run(miaInB, `query{ products{ totalItems } }`)).denied, 'A\'s staff can read nothing in B'); assert.ok((await run(miaInB, `query{ orders{ totalItems } }`)).denied); assert.ok((await run(miaInB, `query{ staffMembers{ id } }`)).denied); }
   assert.match((await run(m.A.x, `mutation($id:ID!){ removeStaff(id:$id) }`, { id: m.A.adminId })).message!, /not found/, 'the owner cannot be removed through staff tools');
   // role change and removal
   assert.equal((await m.A.x(`mutation($id:ID!){ setStaffRole(id:$id, role:"analyst") }`, { id: mia.id })).setStaffRole, true); assert.equal((await list('A')).find(s => s.email === 'mia@a.test')!.role, 'analyst');
-  const mx2 = (await exec('A')('mia@a.test', mia.temporaryPassword))!; assert.ok((await run(mx2, `mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id: ids.A.product })).denied, 'after being made view-only she cannot edit');
-  assert.equal((await m.A.x(`mutation($id:ID!){ removeStaff(id:$id) }`, { id: fay.id })).removeStaff, true); assert.equal(await exec('A')('fay@a.test', fay.temporaryPassword), null, 'a removed person cannot sign in'); assert.ok((await run(fx, `query{ activeAdministrator{ id } }`)).denied || true);
+  const mx2 = (await exec('A')('mia@a.test', pw.mia))!; assert.ok((await run(mx2, `mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id: ids.A.product })).denied, 'after being made view-only she cannot edit');
+  assert.equal((await m.A.x(`mutation($id:ID!){ removeStaff(id:$id) }`, { id: fay.id })).removeStaff, true); assert.equal(await exec('A')('fay@a.test', pw.fay), null, 'a removed person cannot sign in'); assert.ok((await run(fx, `query{ activeAdministrator{ id } }`)).denied || true);
   assert.deepEqual((await list('A')).map(s => s.role).sort(), ['analyst', 'analyst', 'owner']);
   // password: wrong current is refused; a new one works and the old one stops
-  assert.match((await run(ax, `mutation{ changeMyPassword(current:"wrong-wrong-1", next:"A-brand-new-pass-1") }`)).message!, /not right/); assert.match((await run(ax, `mutation{ changeMyPassword(current:"${ann.temporaryPassword}", next:"short") }`)).message!, /at least 10/);
-  assert.equal((await ax(`mutation{ changeMyPassword(current:"${ann.temporaryPassword}", next:"A-brand-new-pass-1") }`)).changeMyPassword, true); assert.equal(await exec('A')('ann@a.test', ann.temporaryPassword), null, 'the old password stops working'); assert.ok(await exec('A')('ann@a.test', 'A-brand-new-pass-1'));
+  assert.match((await run(ax, `mutation{ changeMyPassword(current:"wrong-wrong-1", next:"A-brand-new-pass-1") }`)).message!, /not right/); assert.match((await run(ax, `mutation{ changeMyPassword(current:"${pw.ann}", next:"short") }`)).message!, /at least 10/);
+  assert.equal((await ax(`mutation{ changeMyPassword(current:"${pw.ann}", next:"A-brand-new-pass-1") }`)).changeMyPassword, true); assert.equal(await exec('A')('ann@a.test', pw.ann), null, 'the old password stops working'); assert.ok(await exec('A')('ann@a.test', 'A-brand-new-pass-1'));
   // activity: who did what, in this store only, paged
   const act = async (who: 'A' | 'B', a = '') => (await m[who].x(`query{ activity(take:50${a}){ hasMore items{ id actor action summary subjectType subjectId at } } }`)).activity as { hasMore: boolean; items: { id: string; actor: string; action: string; summary: string }[] };
   let log = await act('A'); for (let i = 0; i < 20 && !(log.items.some(e => e.actor === 'Fay Fulfil') && log.items.some(e => e.actor === 'Mia Manager')); i++) { await new Promise(r => setTimeout(r, 150)); log = await act('A'); }
   assert.ok(log.items.some(e => e.actor === 'Mia Manager' && /Added product Manager mug/.test(e.summary)), 'the manager\'s product is in the log under her name'); assert.ok(log.items.some(e => e.actor === 'Fay Fulfil' && /fulfilled/.test(e.summary)), 'the fulfilment is in the log under her name');
-  assert.ok(log.items.some(e => /Added Mia Manager as Manager/.test(e.summary)) && log.items.some(e => /Removed Fay Fulfil/.test(e.summary)) && log.items.some(e => /Changed Mia Manager to View only/.test(e.summary)), 'staff changes are logged too');
+  assert.ok(log.items.some(e => /Invited Mia Manager as Manager/.test(e.summary)) && log.items.some(e => /Removed Fay Fulfil/.test(e.summary)) && log.items.some(e => /Changed Mia Manager to View only/.test(e.summary)), 'staff changes are logged too');
   assert.equal((await act('B')).items.some(e => /Mia|Fay|Manager mug/.test(e.summary)), false, 'B never sees A\'s activity');
   const one = (await m.A.x(`query{ activity(take:1){ hasMore items{ id } } }`)).activity; assert.equal(one.items.length, 1); assert.equal(one.hasMore, true); const next = (await m.A.x(`query($b:Int){ activity(take:1, before:$b){ items{ id } } }`, { b: Number(one.items[0].id) })).activity; assert.ok(Number(next.items[0].id) < Number(one.items[0].id), 'paging goes back in time');
   assert.ok((await act('A', ', actor:"Mia Manager"')).items.every(e => e.actor === 'Mia Manager'), 'filtering by person works');
@@ -305,4 +316,33 @@ test('rate limits: repeated sign-in guesses for one account are stopped, and ano
   let blockedAt = 0; for (let i = 1; i <= 14 && !blockedAt; i++) if ((await guess('victim@a.test')).errors?.[0]?.message.startsWith('Too many attempts')) blockedAt = i;
   assert.equal(blockedAt, 11, 'the eleventh guess in a window is refused');
   assert.equal((await guess('someone-else@a.test')).errors, undefined, 'a different account is not locked out by that');
+});
+
+test('emailed links: an invitation works once, for one store, and a reset never reveals who works there', async () => {
+  const INVITE = `mutation($e:String!,$f:String!,$l:String!,$r:String!){ inviteStaff(email:$e, firstName:$f, lastName:$l, role:$r){ id email } }`;
+  const sent = (await m.A.x(INVITE, { e: 'link@a.test', f: 'Lin', l: 'Ker', r: 'fulfilment' })).inviteStaff;
+  const ev = (await outboxEvents()).filter(e => e.type === 'staff.invited' && e.recipient.email === 'link@a.test'); assert.equal(ev.length, 1, 'one email event per invitation');
+  assert.match(ev[0].data.actionUrl, /^https:\/\/portal\.example\/set-password\?k=invite&t=[A-Za-z0-9_-]{43}$/); assert.equal(ev[0].data.role, 'Fulfilment'); assert.ok(!/pass/i.test(JSON.stringify(ev[0].data).replace(/set-password/, '')), 'the event carries a link, never a password');
+  const token = (await tokenOf('staff.invited', 'link@a.test'))!;
+  // the wrong store, a short password and a made-up token all fail the same way
+  assert.match((await callAs('B', ACCEPT, { t: token, p: 'Long-enough-pass-1' })).errors![0].message, /expired or has already been used/);
+  assert.match((await callAs('A', ACCEPT, { t: token, p: 'short' })).errors![0].message, /at least 10/); assert.match((await callAs('A', ACCEPT, { t: 'x'.repeat(43), p: 'Long-enough-pass-1' })).errors![0].message, /expired or has already been used/);
+  // asking again cancels the first link; the new one works once
+  assert.equal((await m.A.x(`mutation($id:ID!){ resendStaffInvite(id:$id) }`, { id: sent.id })).resendStaffInvite, true); const fresh = (await tokenOf('staff.invited', 'link@a.test'))!; assert.notEqual(fresh, token);
+  assert.match((await callAs('A', ACCEPT, { t: token, p: 'Long-enough-pass-1' })).errors![0].message, /expired or has already been used/, 'the earlier link is dead');
+  assert.equal((await callAs('A', ACCEPT, { t: fresh, p: 'Long-enough-pass-1' })).data.acceptStaffToken, true);
+  assert.match((await callAs('A', ACCEPT, { t: fresh, p: 'Another-long-pass-1' })).errors![0].message, /expired or has already been used/, 'a link works once');
+  assert.ok(await engineLogin({ url: URL, channelToken: m.A.channelToken }, 'link@a.test', 'Long-enough-pass-1'), 'and they can sign in');
+  assert.match((await m.A.x(`query{ activity(take:10){ items{ summary actor } } }`)).activity.items.map((e: any) => `${e.actor}: ${e.summary}`).join('\n'), /Lin Ker: Lin Ker accepted the invitation/);
+  // an expired link is refused
+  await m.A.x(`mutation($id:ID!){ resendStaffInvite(id:$id) }`, { id: sent.id }).catch(() => {}); // already accepted: nothing to resend
+  // password reset: known and unknown addresses get the same answer, and only known ones get an email
+  const RESET = 'mutation($e:String!){ requestStaffPasswordReset(email:$e) }'; const before = (await outboxEvents()).length;
+  assert.equal((await callAs('A', RESET, { e: 'nobody@a.test' })).data.requestStaffPasswordReset, true); assert.equal((await outboxEvents()).length, before, 'no email for an unknown address');
+  assert.equal((await callAs('B', RESET, { e: 'link@a.test' })).data.requestStaffPasswordReset, true); assert.equal((await outboxEvents()).length, before, 'and none for another store\'s staff');
+  assert.equal((await callAs('A', RESET, { e: 'LINK@a.test' })).data.requestStaffPasswordReset, true); const reset = (await tokenOf('staff.password_reset', 'link@a.test'))!; assert.ok(reset);
+  assert.equal((await callAs('A', ACCEPT, { t: reset, p: 'Brand-new-pass-77' })).data.acceptStaffToken, true); assert.ok(await engineLogin({ url: URL, channelToken: m.A.channelToken }, 'link@a.test', 'Brand-new-pass-77')); assert.equal(await engineLogin({ url: URL, channelToken: m.A.channelToken }, 'link@a.test', 'Long-enough-pass-1'), null, 'the old password is gone');
+  // the owner can reset too, and a reset request is limited
+  assert.equal((await callAs('A', RESET, { e: 'owner-a@example.com' })).data.requestStaffPasswordReset, true); assert.ok(await tokenOf('staff.password_reset', 'owner-a@example.com'));
+  let limited = false; for (let i = 0; i < 6; i++) if ((await callAs('A', RESET, { e: 'spam@a.test' })).errors?.[0]?.message.startsWith('Too many')) limited = true; assert.ok(limited, 'repeated reset requests are stopped');
 });

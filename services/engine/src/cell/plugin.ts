@@ -9,6 +9,7 @@ import { PaymentSessionResolver, shopApiExtensions } from './shop-extension.ts';
 import { STOCK_RESOLVERS, stockApiExtensions } from './stock-extension.ts';
 import { StaffResolver, StaffService, staffApiExtensions } from './staff.ts';
 import { ActivityService, OssActivity } from './activity.ts';
+import { OssStaffToken } from './staff-token.ts';
 import { RateLimit } from './rate-limit.ts';
 import { PrivacyResolver, PrivacyService, privacyApiExtensions } from './privacy.ts';
 import { ManageStaff, ReadActivity } from './merchant-role.ts';
@@ -37,13 +38,13 @@ export class MemGate implements CheckoutGate {
   async set(allowed: boolean, reason?: string, source: CheckoutGateSource = 'payments') { this.states.set(source, { allowed, reason }); }
 }
 export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: string; webhookSecret: string; feeBp: number; refundsReturnFee: boolean; storeId: string; publishableKey: string;
-  checkoutGate?: CheckoutGate; controlSecret?: string;
+  checkoutGate?: CheckoutGate; controlSecret?: string; /** Where emailed staff links point: the merchant portal's address. Without it, invitations are refused. */ portalUrl?: string;
   outbox?: { cellId: string; secret: string; url: string; post(url: string, init: { body: string; headers: Record<string, string> }): Promise<{ status: number }>; intervalMs?: number; onAlert?: (m: string) => void } }
 
 /** Registers the Connect payment handler and mounts the signed webhook route. Order lookups go through Vendure's own connection. */
 @VendurePlugin({
   imports: [PluginCommonModule],
-  entities: [OssOutbox, OssActivity],
+  entities: [OssOutbox, OssActivity, OssStaffToken],
   providers: [OutboxService, ActivityService, StaffService, PrivacyService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }, { provide: APP_INTERCEPTOR, useClass: RateLimit }],
   shopApiExtensions: { schema: shopApiExtensions, resolvers: [PaymentSessionResolver] },
   adminApiExtensions: { schema: gql`${print(stockApiExtensions)}\n${print(staffApiExtensions)}\n${print(privacyApiExtensions)}`, resolvers: [...STOCK_RESOLVERS, StaffResolver, PrivacyResolver] },

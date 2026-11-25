@@ -38,7 +38,8 @@ export async function engineLogin(t: EngineTarget, username: string, password: s
   let res: Response;
   try { res = await f(t.url, { method: 'POST', cache: 'no-store', headers: { 'content-type': 'application/json', ...(t.channelToken ? { 'vendure-token': t.channelToken } : {}) }, body: JSON.stringify({ query: 'mutation($u:String!,$p:String!){ login(username:$u,password:$p){ __typename ... on CurrentUser { identifier } ... on ErrorResult { message } } }', variables: { u: username, p: password } }) }); }
   catch (e) { throw new EngineError(`The commerce engine could not be reached: ${e instanceof Error ? e.message : 'network error'}`, 'UNREACHABLE'); }
-  const body = await res.json().catch(() => null) as { data?: { login?: { __typename: string; identifier?: string } } } | null; const token = res.headers.get('vendure-auth-token');
+  const body = await res.json().catch(() => null) as { data?: { login?: { __typename: string; identifier?: string } }; errors?: { message: string }[] } | null; const token = res.headers.get('vendure-auth-token');
+  const locked = body?.errors?.find(e => e.message.startsWith('Too many attempts')); if (locked) throw new EngineError(locked.message, 'RATE_LIMITED', 429);
   if (body?.data?.login?.__typename !== 'CurrentUser' || !token) return null;
   return { token, identifier: body.data.login.identifier ?? username };
 }

@@ -3,7 +3,7 @@ import { z } from 'zod';
 /** Domain events emitted by a merchant's engine cell (or verified Stripe webhooks) into the automation service. */
 export const EventType = z.enum([
   'order.paid', 'order.fulfilled', 'order.refunded', 'order.cancelled', 'payment.failed', 'stock.low',
-  'checkout.started', 'checkout.completed', 'customer.password_reset_requested', 'order.unfulfilled_reminder_due',
+  'checkout.started', 'checkout.completed', 'customer.password_reset_requested', 'order.unfulfilled_reminder_due', 'staff.invited', 'staff.password_reset',
 ]);
 export type EventType = z.infer<typeof EventType>;
 
@@ -54,3 +54,4 @@ export interface Run {
 /** Errors a sender raises so the engine knows whether retrying could ever help. */
 export class TransientError extends Error { readonly transient = true; }
 export class PermanentError extends Error { readonly transient = false; }
+

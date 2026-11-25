@@ -1,4 +1,4 @@
-import { renderTemplate, type Brand, type Editable, type OrderData, type TemplateId } from '@oss-commerce/emails';
+import { renderAccountEmail, renderTemplate, type Brand, type Editable, type OrderData, type TemplateId } from '@oss-commerce/emails';
 import { z } from 'zod';
 import { PermanentError } from './model.ts';
 import type { SendRequest } from './ports.ts';
@@ -46,8 +46,21 @@ function placed(value: string): string {
 }
 
 /** Converts immutable commerce-event data into the shared React Email templates. No values are invented. */
-export function commerceEmailPreparer(profileFor: (storeId: string) => Promise<CommerceEmailProfile | null>) {
+/** The sender for emails about a person's own account (invitations, password resets). These come from the platform, not from a shop. */
+export interface PlatformEmailProfile { fromName: string; fromEmail: string; replyTo?: string }
+const AccountTemplate = z.enum(['staff_invite', 'staff_password_reset']);
+const AccountPayload = z.object({ name: z.string().min(1).max(200), actionUrl: z.string().url().max(500), validHours: z.number().positive().max(24 * 30), role: z.string().max(60).optional(), invitedBy: z.string().max(200).optional() });
+
+export function commerceEmailPreparer(profileFor: (storeId: string) => Promise<CommerceEmailProfile | null>, platform?: PlatformEmailProfile) {
   return async (request: SendRequest): Promise<PreparedEmail> => {
+    const account = AccountTemplate.safeParse(request.template);
+    if (account.success) {
+      if (!platform) throw new PermanentError('Platform email sender is not configured');
+      const d = AccountPayload.safeParse(request.data); if (!d.success) throw new PermanentError('Account email event does not contain a complete link');
+      const from = z.string().email().safeParse(platform.fromEmail); if (!from.success) throw new PermanentError('Platform email sender is invalid');
+      const rendered = await renderAccountEmail(account.data, d.data);
+      return { from: `${safeName(platform.fromName)} <${from.data}>`, replyTo: platform.replyTo, subject: rendered.subject, html: rendered.html, text: rendered.text };
+    }
     const template = Template.safeParse(request.template);
     if (!template.success) throw new PermanentError(`Unknown email template ${request.template}`);
     const payload = Payload.safeParse(request.data);

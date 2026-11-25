@@ -10,7 +10,7 @@ export default async function Team() {
   return (<><Header title="Team and access" back={{ href: '/settings', label: 'Settings' }}>{owner ? <InviteStaff /> : <ChangePassword />}</Header>
     <div className="grid">
       <section className="w c-7" aria-labelledby="mb"><div className="wh"><h2 id="mb">Members</h2></div>
-        <div className="rows">{members.map((m, i) => <div key={m.id ?? m.email} className="row mrow"><Avatar name={m.name} i={i} /><span className="t"><b>{m.name}{m.self ? ' (you)' : ''}</b><span>{m.email}</span></span><span className="badge" title={ROLE_INFO[m.role].blurb}>{ROLE_INFO[m.role].label}</span>{owner && m.id && m.role !== 'owner' && <MemberActions id={m.id} name={m.name} role={m.role} />}</div>)}</div>
+        <div className="rows">{members.map((m, i) => <div key={m.id ?? m.email} className="row mrow"><Avatar name={m.name} i={i} /><span className="t"><b>{m.name}{m.self ? ' (you)' : ''}</b><span>{m.email}</span></span><span className={`badge ${m.status === 'invited' ? 'warn' : ''}`} title={ROLE_INFO[m.role].blurb}>{m.status === 'invited' ? `Invited · ${ROLE_INFO[m.role].label}` : ROLE_INFO[m.role].label}</span>{owner && m.id && m.role !== 'owner' && <MemberActions id={m.id} name={m.name} role={m.role} pending={m.status === 'invited'} />}</div>)}</div>
         {owner && <p className="muted" style={{ fontSize: 12.5, marginBottom: 0 }}>Owners do everything. Managers cannot change delivery, payments or staff. <a href="/settings/activity">See the activity log</a>.</p>}{owner && <div style={{ marginTop: 12 }}><ChangePassword /></div>}</section>
       <section className="w c-5" aria-labelledby="gr"><div className="wh"><h2 id="gr">Access requests</h2></div>
         <div className="rows">{grants.map(g => (
