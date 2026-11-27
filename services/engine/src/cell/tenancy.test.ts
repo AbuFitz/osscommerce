@@ -381,3 +381,39 @@ test('customer segments: each store keeps its own, invalid ones are refused, and
   assert.equal((await run(vx, `query{ customerSegments{ id } }`)).denied, undefined, 'view-only reads segments'); assert.ok((await run(vx, SAVE, { n: 'Nope', d: def })).denied, 'view-only cannot create'); assert.ok((await run(vx, `mutation($id:Int!){ deleteCustomerSegment(id:$id) }`, { id: vip.id })).denied, 'or delete');
   assert.equal((await m.A.x(`mutation($id:Int!){ deleteCustomerSegment(id:$id) }`, { id: vip.id })).deleteCustomerSegment, true); assert.deepEqual((await m.A.x(`query{ customerSegments{ id } }`)).customerSegments, []);
 });
+
+test('reviews: shoppers submit, the merchant approves, only approved ones show, and stores never mix', async () => {
+  const SHOP = `http://localhost:${testConfig.apiOptions.port}/shop-api`;
+  const shop = async (k: 'A' | 'B', query: string, variables?: Record<string, unknown>) => { const r = await fetch(SHOP, { method: 'POST', headers: { 'content-type': 'application/json', 'vendure-token': m[k].channelToken }, body: JSON.stringify({ query, variables }) }); return (await r.json()) as { data?: any; errors?: { message: string }[] }; };
+  const SUBMIT = `mutation($i:ReviewInput!){ submitReview(input:$i) }`; const pid = ids.A.product;
+  const input = (o: Record<string, unknown> = {}) => ({ productId: pid, rating: 5, title: 'Lovely', body: 'Really well made, holds heat for ages.', name: 'Pat', email: 'pat@example.com', ...o });
+  assert.equal((await shop('A', SUBMIT, { i: input() })).data.submitReview, true);
+  for (const [bad, re] of [[{ rating: 6 }, /1 to 5/], [{ rating: 0 }, /1 to 5/], [{ email: 'nope' }, /valid email/], [{ title: ' ' }, /title/], [{ body: 'short' }, /at least 10/], [{ name: '' }, /name/], [{ productId: '99999' }, /not found/]] as const) assert.match((await shop('A', SUBMIT, { i: input(bad as any) })).errors![0].message, re as RegExp);
+  assert.match((await shop('A', SUBMIT, { i: input() })).errors![0].message, /already reviewed/, 'one review per person per product');
+  // not shown until approved; the author's email is never a field shoppers can ask for
+  const READ = `query($p:ID!){ productReviews(productId:$p){ summary{ count average } items{ id rating title body authorName verified reply } hasMore } }`;
+  assert.deepEqual((await shop('A', READ, { p: pid })).data.productReviews.summary, { count: 0, average: 0 }); assert.ok((await shop('A', `query{ productReviews(productId:"${pid}"){ items{ email } } }`)).errors, 'email cannot be requested');
+  const pending = (await m.A.x(`query{ reviews(status:"pending"){ total pending items{ id productName rating authorName email verified status } } }`)).reviews; assert.equal(pending.pending, 1); assert.equal(pending.items[0].verified, false); assert.equal(pending.items[0].productName, 'Mug A');
+  // another store: cannot see, moderate or review A's product
+  assert.deepEqual((await m.B.x(`query{ reviews{ total } }`)).reviews.total, 0); assert.match((await m.B.x(`mutation($id:Int!){ moderateReview(id:$id, status:"approved") }`, { id: pending.items[0].id }).catch((e: Error) => ({ message: e.message }))).message ?? '', /not found/);
+  assert.match((await shop('B', SUBMIT, { i: input() })).errors![0].message, /not found/, 'B has no such product');
+  // approve, reply: now public, with a rounded average
+  const id = pending.items[0].id; assert.equal((await m.A.x(`mutation($id:Int!){ moderateReview(id:$id, status:"approved") }`, { id })).moderateReview, true); await m.A.x(`mutation($id:Int!,$r:String){ replyToReview(id:$id, reply:$r) }`, { id, r: 'Thank you, Pat!' });
+  const pub = (await shop('A', READ, { p: pid })).data.productReviews; assert.deepEqual(pub.summary, { count: 1, average: 5 }); assert.equal(pub.items[0].reply, 'Thank you, Pat!'); assert.equal(pub.items[0].verified, false);
+  // a real buyer is marked verified, and plain text stays plain text (storefronts escape it)
+  const items = await A.listOrderableItems(m.A.x); const mug = items.find(i => i.sku === 'MUG-A')!; const ship = (await A.listShippingChoices(m.A.x))[0];
+  const made = await A.createManualOrder(m.A.x, { customer: { email: 'buyer-rev@example.com', firstName: 'Bu', lastName: 'Yer' }, items: [{ variantId: mug.variantId, qty: 1 }], address: { fullName: 'Bu Yer', line1: '2 Rev St', city: 'Bath', postcode: 'BA1 1AA' }, shippingMethodId: ship?.id, payment: 'cash' }); assert.equal(made.ok, true, made.message);
+  assert.equal((await shop('A', SUBMIT, { i: input({ email: 'Buyer-Rev@example.com', name: 'Bu', rating: 3, body: '<script>alert(1)</script> arrived fine' }) })).data.submitReview, true);
+  const v = (await m.A.x(`query{ reviews(status:"pending"){ items{ id verified body } } }`)).reviews.items[0]; assert.equal(v.verified, true, 'a customer with a paid order is verified'); assert.equal(v.body, '<script>alert(1)</script> arrived fine', 'stored as given: text, never markup');
+  await m.A.x(`mutation($id:Int!){ moderateReview(id:$id, status:"approved") }`, { id: v.id }); assert.deepEqual((await shop('A', READ, { p: pid })).data.productReviews.summary, { count: 2, average: 4 });
+  // rejected reviews disappear again; a view-only person cannot moderate; erasing the customer removes their review
+  await m.A.x(`mutation($id:Int!){ moderateReview(id:$id, status:"rejected") }`, { id: v.id }); assert.equal((await shop('A', READ, { p: pid })).data.productReviews.summary.count, 1);
+  await m.A.x(`mutation($id:Int!){ moderateReview(id:$id, status:"approved") }`, { id: v.id });
+  const email = 'rev-view@a.test'; await m.A.x(`mutation($e:String!){ inviteStaff(email:$e, firstName:"V", lastName:"V", role:"analyst"){ id } }`, { e: email }); await callAs('A', ACCEPT, { t: (await tokenOf('staff.invited', email))!, p: 'Viewer-pass-12345' });
+  const vx = httpExec({ url: URL, channelToken: m.A.channelToken }, (await engineLogin({ url: URL, channelToken: m.A.channelToken }, email, 'Viewer-pass-12345'))!.token);
+  assert.equal(await vx(`query{ reviews{ total } }`).then(() => 'read', () => 'denied'), 'read'); assert.equal(await vx(`mutation($id:Int!){ deleteReview(id:$id) }`, { id }).then(() => 'did', () => 'denied'), 'denied');
+  assert.equal((await A.fulfilOrder(m.A.x, made.id!)).ok, true); const cid = (await m.A.x(`query{ customers(options:{ filter:{ emailAddress:{ eq:"buyer-rev@example.com" } } }){ items{ id } } }`)).customers.items[0].id;
+  await m.A.x(`mutation($id:ID!){ eraseCustomer(id:$id) }`, { id: cid }); assert.equal((await shop('A', READ, { p: pid })).data.productReviews.summary.count, 1, 'the erased customer\'s review is gone');
+  // sharing: twenty-five attempts an hour per address is plenty
+  let limited = false; for (let i = 0; i < 40 && !limited; i++) limited = !!(await shop('A', SUBMIT, { i: input({ email: `spam${i}@example.com`, productId: '99999' }) })).errors?.some(e => /Too many/.test(e.message)); assert.ok(limited, 'review spam is slowed down');
+});

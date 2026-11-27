@@ -8,7 +8,7 @@ import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus
 
 import { orderPoints, recentOrders } from '../geo/points';
 import { EngineError } from './exec';
-import type { ActivityPage, Member, SavedSegment } from '../gateway';
+import type { Review, ActivityPage, Member, ReviewPage, ReviewStatus, SavedSegment } from '../gateway';
 import { validateSegment, type SegmentDefinition } from '@oss-commerce/contracts';
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
@@ -706,3 +706,12 @@ export async function saveSegment(x: Exec, i: { id?: string; name: string; defin
   try { const r = await x('mutation($id:Int,$n:String!,$d:String!){ saveCustomerSegment(id:$id,name:$n,definition:$d){ id } }', { id: i.id ? Number(i.id) : null, n: i.name.trim(), d: JSON.stringify(i.definition) }); return { ok: true, message: i.id ? 'Segment saved.' : `Segment ${i.name.trim()} created.`, id: String(r.saveCustomerSegment.id) }; } catch (e) { return said(e); }
 }
 export async function deleteSegment(x: Exec, id: string): Promise<MutationResult> { try { await x('mutation($id:Int!){ deleteCustomerSegment(id:$id) }', { id: Number(id) }); return { ok: true, message: 'Segment deleted. No customers were affected.' }; } catch (e) { return said(e); } }
+
+// ── Reviews ─────────────────────────────────────────────────────────────────
+export async function listReviews(x: Exec, status?: ReviewStatus): Promise<ReviewPage> {
+  const r = (await x('query($s:String){ reviews(status:$s, take:100){ total pending items{ id productId productName rating title body authorName email verified status reply at } } }', { s: status ?? null })).reviews as { total: number; pending: number; items: (Omit<Review, 'id'> & { id: number; reply: string | null })[] };
+  return { total: r.total, pending: r.pending, items: r.items.map(i => ({ ...i, id: String(i.id), reply: i.reply ?? undefined })) };
+}
+export async function moderateReview(x: Exec, id: string, status: ReviewStatus): Promise<MutationResult> { try { await x('mutation($i:Int!,$s:String!){ moderateReview(id:$i,status:$s) }', { i: Number(id), s: status }); return { ok: true, message: { approved: 'Approved. Shoppers can see it now.', rejected: 'Rejected. Shoppers will not see it.', pending: 'Moved back to waiting.' }[status] }; } catch (e) { return said(e); } }
+export async function replyToReview(x: Exec, id: string, reply: string): Promise<MutationResult> { try { await x('mutation($i:Int!,$r:String){ replyToReview(id:$i,reply:$r) }', { i: Number(id), r: reply.trim().slice(0, 1000) }); return { ok: true, message: reply.trim() ? 'Reply saved. It shows under the review.' : 'Reply removed.' }; } catch (e) { return said(e); } }
+export async function deleteReview(x: Exec, id: string): Promise<MutationResult> { try { await x('mutation($i:Int!){ deleteReview(id:$i) }', { i: Number(id) }); return { ok: true, message: 'Review deleted.' }; } catch (e) { return said(e); } }

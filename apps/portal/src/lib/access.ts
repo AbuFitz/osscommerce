@@ -9,7 +9,7 @@ const STORE_ONLY = ['/settings/payments', '/settings/shipping', '/settings/prefe
 const HIDDEN: Record<Kind, string[]> = {
   owner: [],
   manager: ['/settings/payments', '/settings/shipping', '/account/billing'],
-  fulfilment: ['/products', '/collections', '/discounts', '/analytics', '/automations', '/storefront', '/content', ...STORE_ONLY],
+  fulfilment: ['/products', '/reviews', '/collections', '/discounts', '/analytics', '/automations', '/storefront', '/content', ...STORE_ONLY],
   analyst: ['/automations', '/storefront', '/content', ...STORE_ONLY],
 };
 export const hiddenFor = (kind: Kind): string[] => HIDDEN[kind] ?? [];

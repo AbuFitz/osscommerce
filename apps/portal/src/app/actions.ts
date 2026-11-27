@@ -206,3 +206,7 @@ export async function eraseCustomerAction(id: string) { return run(() => gateway
 
 export async function saveSegmentAction(i: { id?: string; name: string; definition: SegmentDefinition }) { return run(() => gateway().saveSegment(i), ['/customers', '/settings/activity']); }
 export async function deleteSegmentAction(id: string) { return run(() => gateway().deleteSegment(id), ['/customers', '/settings/activity']); }
+
+export async function moderateReviewAction(id: string, status: 'pending' | 'approved' | 'rejected') { return run(() => gateway().moderateReview(id, status), ['/reviews', '/settings/activity']); }
+export async function replyToReviewAction(id: string, reply: string) { return run(() => gateway().replyToReview(id, reply), ['/reviews']); }
+export async function deleteReviewAction(id: string) { return run(() => gateway().deleteReview(id), ['/reviews', '/settings/activity']); }

@@ -3,6 +3,7 @@ import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
 import { Inject, Injectable } from '@nestjs/common';
 import { Address, Allow, Ctx, Customer, CustomerHistoryEntry, NativeAuthenticationMethod, Order, Permission, RequestContext, Transaction, TransactionalConnection, User, UserInputError } from '@vendure/core';
 import { ActivityService } from './activity.ts';
+import { ReviewService } from './reviews.ts';
 
 export const privacyApiExtensions = gql`
   extend type Query { customerDataExport(id: ID!): String! }
@@ -14,7 +15,7 @@ const CLEAN = { fullName: 'Erased customer', company: '', streetLine1: 'Erased',
 
 @Injectable()
 export class PrivacyService {
-  constructor(@Inject(TransactionalConnection) private conn: TransactionalConnection, @Inject(ActivityService) private activity: ActivityService) {}
+  constructor(@Inject(TransactionalConnection) private conn: TransactionalConnection, @Inject(ActivityService) private activity: ActivityService, @Inject(ReviewService) private reviews: ReviewService) {}
 
   /** A customer of THIS store, or "not found": another store's customer is indistinguishable from one that does not exist. */
   private async mine(ctx: RequestContext, id: string) {
@@ -54,6 +55,7 @@ export class PrivacyService {
     for (const a of c.addresses) await this.conn.getRepository(ctx, Address).delete(a.id);
     const user = (await this.conn.getRepository(ctx, Customer).findOne({ where: { id: c.id }, relations: ['user'] }))?.user;
     if (user) { await this.conn.getRepository(ctx, NativeAuthenticationMethod).createQueryBuilder().delete().where('userId = :u', { u: user.id }).execute(); await this.conn.getRepository(ctx, User).update(user.id, { identifier: email, deletedAt: new Date() }); }
+    await this.reviews.eraseByEmail(ctx, c.emailAddress);
     await this.conn.getRepository(ctx, Customer).update(c.id, { title: '', firstName: 'Erased', lastName: 'customer', emailAddress: email, phoneNumber: '' });
     await this.activity.record(ctx, { action: 'customer.erased', summary: `Erased the personal data of ${who}`, subjectType: 'customer', subjectId: c.id });
     return true;

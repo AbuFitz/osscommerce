@@ -26,6 +26,9 @@ export interface Customer { id: string; name: string; email: string; orders: num
 import type { SegmentDefinition } from '@oss-commerce/contracts';
 /** A customer segment the merchant saved: a name and rules. Who is in it is worked out from orders each time it is shown. */
 export interface SavedSegment { id: string; name: string; definition: SegmentDefinition }
+export type ReviewStatus = 'pending' | 'approved' | 'rejected';
+export interface Review { id: string; productId: string; productName: string; rating: number; title: string; body: string; authorName: string; email: string; verified: boolean; status: ReviewStatus; reply?: string; at: string }
+export interface ReviewPage { items: Review[]; total: number; pending: number }
 export interface CustomerNote { id: string; text: string; at: string; by?: string }
 export interface CustomerDetail extends Customer {
   firstName: string; lastName: string; phone: string; since: string; addresses: string[]; aovMinor: number;
@@ -156,6 +159,11 @@ export interface CommerceGateway {
   products(): Promise<Product[]>;
   customers(): Promise<Customer[]>;
   customerSegments(): Promise<SavedSegment[]>;
+  /** Shopper reviews, newest first. New ones wait here for approval; shoppers only ever see approved ones. */
+  reviews(status?: ReviewStatus): Promise<ReviewPage>;
+  moderateReview(id: string, status: ReviewStatus): Promise<MutationResult>;
+  replyToReview(id: string, reply: string): Promise<MutationResult>;
+  deleteReview(id: string): Promise<MutationResult>;
   saveSegment(i: { id?: string; name: string; definition: SegmentDefinition }): Promise<MutationResult>;
   deleteSegment(id: string): Promise<MutationResult>;
   customer(id: string): Promise<CustomerDetail | null>;
