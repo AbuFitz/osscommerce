@@ -3,7 +3,7 @@
 import { test, after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path'; import fs from 'node:fs';
-import { mergeConfig } from '@vendure/core';
+import { mergeConfig, DefaultSearchPlugin } from '@vendure/core';
 import { createTestEnvironment, testConfig, SqljsInitializer, registerInitializer } from '@vendure/testing';
 import { parse } from 'graphql';
 import { CatalogueFieldsPlugin } from './catalogue-fields.ts';
@@ -32,7 +32,7 @@ const stripe: any = {
 const deps: any = { account: 'acct_1', seen: { markIfNew: async () => true }, orders: { byOrderCode: async () => null, setPaymentState: async () => {}, flagForReview: async () => {} }, checkout: { restrict: async () => {}, allow: async () => {} } };
 const { server, adminClient, shopClient } = createTestEnvironment(mergeConfig(testConfig, {
   authOptions: { requireVerification: false, tokenMethod: 'bearer', superadminCredentials: { identifier: 'ops', password: 'long-random-pass' } },
-  plugins: [CatalogueFieldsPlugin, AssetServerPlugin.init({ route: 'assets', assetUploadDir: path.join(dir, 'assets') }), CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43), portalUrl: 'https://portal.example' }, deps)],
+  plugins: [DefaultSearchPlugin.init({ bufferUpdates: false }), CatalogueFieldsPlugin, AssetServerPlugin.init({ route: 'assets', assetUploadDir: path.join(dir, 'assets') }), CellPlugin.init({ stripe, sdk: new Stripe('sk_test_x'), account: 'acct_1', webhookSecret: 'whsec_x', feeBp: 50, refundsReturnFee: true, storeId: 'store_a', publishableKey: 'pk', checkoutGate: new MemGate(), controlSecret: 'c'.repeat(43), portalUrl: 'https://portal.example' }, deps)],
 }));
 const URL = `http://localhost:${testConfig.apiOptions.port}/${testConfig.apiOptions.adminApiPath}`; const g = (s: string) => parse(s);
 type M = { x: ReturnType<typeof httpExec>; token: string; channelId: string; channelToken: string; adminId: string };
@@ -445,4 +445,18 @@ test('trade pricing: a percentage off for customers marked as trade, off by defa
   const email = 'trade-view@a.test'; await m.A.x(`mutation($e:String!){ inviteStaff(email:$e, firstName:"V", lastName:"V", role:"analyst"){ id } }`, { e: email }); await callAs('A', ACCEPT, { t: (await tokenOf('staff.invited', email))!, p: 'Viewer-pass-12345' });
   const vx = httpExec({ url: URL, channelToken: m.A.channelToken }, (await engineLogin({ url: URL, channelToken: m.A.channelToken }, email, 'Viewer-pass-12345'))!.token);
   assert.equal((await run(vx, VIEW)).denied, undefined, 'view-only can read'); assert.ok((await run(vx, SAVE, { p: 50, e: true })).denied, 'but not change'); assert.ok((await run(vx, MARK, { c: retailId, m: true })).denied);
+});
+
+test('storefront search: finds published products by name, part of a name, SKU and description; hides drafts; never crosses stores', async () => {
+  const SHOP = `http://localhost:${testConfig.apiOptions.port}/shop-api`;
+  const find = async (k: 'A' | 'B', term: string, extra = '') => { const r = await fetch(SHOP, { method: 'POST', headers: { 'content-type': 'application/json', 'vendure-token': m[k].channelToken }, body: JSON.stringify({ query: `query($t:String!){ search(input:{ term:$t, groupByProduct:true, take:20 ${extra} }){ totalItems items{ productName sku productId priceWithTax{ ... on PriceRange{ min max } ... on SinglePrice{ value } } } } }`, variables: { t: term } }) }); const j = (await r.json()) as { data?: { search: { totalItems: number; items: { productName: string }[] } }; errors?: { message: string }[] }; assert.ok(!j.errors, JSON.stringify(j.errors)); return j.data!.search.items.map(i => i.productName); };
+  const add = async (title: string, sku: string, description: string, status: 'published' | 'draft') => { const r = await A.addProduct(m.A.x, { title, priceMinor: 1500, sku, status, onHand: 5, description }); assert.equal(r.ok, true, r.message); };
+  await add('Zanzibar teapot', 'ZANZ-1', '<p>A glazed ceramic pot for loose leaf.</p>', 'published'); await add('Hidden prototype', 'PROTO-1', '<p>Not for sale yet</p>', 'draft');
+  const until = async (k: 'A' | 'B', term: string, ok: (n: string[]) => boolean) => { let n = await find(k, term); for (let i = 0; i < 30 && !ok(n); i++) { await new Promise(r => setTimeout(r, 200)); n = await find(k, term); } return n; };
+  assert.deepEqual(await until('A', 'Zanzibar', n => n.length > 0), ['Zanzibar teapot'], 'whole word'); assert.deepEqual(await find('A', 'zanz'), ['Zanzibar teapot'], 'start of a word, any case'); assert.deepEqual(await find('A', 'ZANZ-1'), ['Zanzibar teapot'], 'by SKU');
+  assert.deepEqual(await find('A', 'loose leaf'), ['Zanzibar teapot'], 'by description'); assert.deepEqual(await find('A', 'prototype'), [], 'a draft is never found'); assert.deepEqual(await find('A', 'xyzzy'), [], 'no match, no results');
+  assert.deepEqual(await find('B', 'Zanzibar'), [], 'another store never finds it');
+  // an unpublished product stays hidden after it is published, and disappears again when hidden
+  const id = (await A.listProducts(m.A.x)).find(p => p.title === 'Hidden prototype')!.id; await m.A.x(`mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:true }){ id } }`, { id }); assert.deepEqual(await until('A', 'prototype', n => n.length > 0), ['Hidden prototype'], 'published, so found');
+  await m.A.x(`mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id }); assert.deepEqual(await until('A', 'prototype', n => n.length === 0), [], 'hidden again, so gone');
 });
