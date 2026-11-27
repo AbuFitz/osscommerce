@@ -8,7 +8,7 @@ import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus
 
 import { orderPoints, recentOrders } from '../geo/points';
 import { EngineError } from './exec';
-import type { Review, ActivityPage, Member, ReviewPage, ReviewStatus, SavedSegment } from '../gateway';
+import type { TradePricing, Review, ActivityPage, Member, ReviewPage, ReviewStatus, SavedSegment } from '../gateway';
 import { validateSegment, type SegmentDefinition } from '@oss-commerce/contracts';
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
@@ -715,3 +715,11 @@ export async function listReviews(x: Exec, status?: ReviewStatus): Promise<Revie
 export async function moderateReview(x: Exec, id: string, status: ReviewStatus): Promise<MutationResult> { try { await x('mutation($i:Int!,$s:String!){ moderateReview(id:$i,status:$s) }', { i: Number(id), s: status }); return { ok: true, message: { approved: 'Approved. Shoppers can see it now.', rejected: 'Rejected. Shoppers will not see it.', pending: 'Moved back to waiting.' }[status] }; } catch (e) { return said(e); } }
 export async function replyToReview(x: Exec, id: string, reply: string): Promise<MutationResult> { try { await x('mutation($i:Int!,$r:String){ replyToReview(id:$i,reply:$r) }', { i: Number(id), r: reply.trim().slice(0, 1000) }); return { ok: true, message: reply.trim() ? 'Reply saved. It shows under the review.' : 'Reply removed.' }; } catch (e) { return said(e); } }
 export async function deleteReview(x: Exec, id: string): Promise<MutationResult> { try { await x('mutation($i:Int!){ deleteReview(id:$i) }', { i: Number(id) }); return { ok: true, message: 'Review deleted.' }; } catch (e) { return said(e); } }
+
+// ── Trade pricing ───────────────────────────────────────────────────────────
+export async function getTradePricing(x: Exec): Promise<TradePricing> { return (await x('query{ tradePricing{ percent enabled members{ id name email } } }')).tradePricing as TradePricing; }
+export async function saveTradePricing(x: Exec, percent: number, enabled: boolean): Promise<MutationResult> {
+  if (!Number.isFinite(percent) || percent < 1 || percent > 90) return { ok: false, message: 'Choose a trade discount from 1% to 90%.' };
+  try { await x('mutation($p:Float!,$e:Boolean!){ saveTradePricing(percent:$p,enabled:$e) }', { p: percent, e: enabled }); return { ok: true, message: enabled ? `Trade customers get ${percent}% off.` : 'Trade pricing is off.' }; } catch (e) { return said(e); }
+}
+export async function setTradeCustomer(x: Exec, customerId: string, member: boolean): Promise<MutationResult> { try { await x('mutation($c:ID!,$m:Boolean!){ setTradeCustomer(customerId:$c,member:$m) }', { c: customerId, m: member }); return { ok: true, message: member ? 'Marked as a trade customer.' : 'No longer a trade customer.' }; } catch (e) { return said(e); } }

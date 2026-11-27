@@ -417,3 +417,32 @@ test('reviews: shoppers submit, the merchant approves, only approved ones show, 
   // sharing: twenty-five attempts an hour per address is plenty
   let limited = false; for (let i = 0; i < 40 && !limited; i++) limited = !!(await shop('A', SUBMIT, { i: input({ email: `spam${i}@example.com`, productId: '99999' }) })).errors?.some(e => /Too many/.test(e.message)); assert.ok(limited, 'review spam is slowed down');
 });
+
+test('trade pricing: a percentage off for customers marked as trade, off by default, never reaching another store', async () => {
+  const run = async (x: ReturnType<typeof httpExec>, q: string, v?: any) => { try { return { data: await x(q, v) }; } catch (e) { return { denied: e instanceof EngineError ? e.code : 'ERR', message: (e as Error).message }; } };
+  const SAVE = `mutation($p:Float!,$e:Boolean!){ saveTradePricing(percent:$p, enabled:$e) }`; const MARK = `mutation($c:ID!,$m:Boolean!){ setTradeCustomer(customerId:$c, member:$m) }`; const VIEW = `query{ tradePricing{ percent enabled members{ id name email } } }`;
+  assert.deepEqual((await m.A.x(VIEW)).tradePricing, { percent: 0, enabled: false, members: [] }, 'nothing is set up until asked');
+  for (const bad of [0, 0.5, 91, NaN]) assert.match((await run(m.A.x, SAVE, { p: bad, e: true })).message ?? 'no error', /1% to 90%|Float|NaN/);
+  const items = await A.listOrderableItems(m.A.x); const mug = items.find(i => i.sku === 'MUG-A')!; const ship = (await A.listShippingChoices(m.A.x))[0];
+  assert.equal((await A.adjustVariantStock(m.A.x, { variantId: mug.variantId, mode: 'add', qty: 50, reason: 'received' })).ok, true);
+  const order = async (email: string) => { const r = await A.createManualOrder(m.A.x, { customer: { email, firstName: 'T', lastName: email.split('@')[0] }, items: [{ variantId: mug.variantId, qty: 2 }], address: { fullName: 'T T', line1: '1 Trade St', city: 'Bath', postcode: 'BA1 1AA' }, shippingMethodId: ship?.id, payment: 'cash' }); assert.equal(r.ok, true, r.message); return (await m.A.x(`query($id:ID!){ order(id:$id){ subTotalWithTax totalWithTax discounts{ description amountWithTax } } }`, { id: r.id })).order as { subTotalWithTax: number; totalWithTax: number; discounts: { description: string; amountWithTax: number }[] }; };
+  const first = { trade: await order('trade-co@example.com'), retail: await order('retail-pat@example.com') }; assert.equal(first.trade.discounts.length, 0, 'no discount before trade pricing exists');
+  const cust = async (email: string) => (await m.A.x(`query($e:String!){ customers(options:{ filter:{ emailAddress:{ eq:$e } } }){ items{ id } } }`, { e: email })).customers.items[0].id as string;
+  const tradeId = await cust('trade-co@example.com'), retailId = await cust('retail-pat@example.com');
+  assert.equal((await m.A.x(SAVE, { p: 20, e: true })).saveTradePricing, true); assert.equal((await m.A.x(MARK, { c: tradeId, m: true })).setTradeCustomer, true);
+  const v = (await m.A.x(VIEW)).tradePricing; assert.equal(v.percent, 20); assert.equal(v.enabled, true); assert.deepEqual(v.members.map((x: any) => x.email), ['trade-co@example.com']);
+  const second = { trade: await order('trade-co@example.com'), retail: await order('retail-pat@example.com') };
+  assert.equal(second.retail.discounts.length, 0, 'retail customers pay the list price'); assert.equal(second.retail.subTotalWithTax, first.retail.subTotalWithTax);
+  assert.equal(second.trade.discounts.length, 1, 'the trade customer gets one discount line'); assert.ok(Math.abs(second.trade.discounts[0].amountWithTax + Math.round(second.retail.subTotalWithTax * 0.2)) <= 2, `20% off the items (${JSON.stringify(second.trade.discounts)})`); assert.ok(second.trade.totalWithTax < first.trade.totalWithTax);
+  // turning it off stops it; changing the percent changes it; unmarking removes them
+  await m.A.x(SAVE, { p: 20, e: false }); assert.equal((await order('trade-co@example.com')).discounts.length, 0, 'off means off');
+  await m.A.x(SAVE, { p: 10, e: true }); const tenth = await order('trade-co@example.com'); assert.ok(Math.abs(tenth.discounts[0].amountWithTax + Math.round(second.retail.subTotalWithTax * 0.1)) <= 2, '10% now');
+  await m.A.x(MARK, { c: tradeId, m: false }); assert.equal((await order('trade-co@example.com')).discounts.length, 0); assert.deepEqual((await m.A.x(VIEW)).tradePricing.members, []);
+  // another store: sees nothing, cannot mark A's customer, and the discount never applies there
+  assert.deepEqual((await m.B.x(VIEW)).tradePricing, { percent: 0, enabled: false, members: [] }); assert.match((await run(m.B.x, MARK, { c: retailId, m: true })).message!, /not found/);
+  assert.equal((await m.A.x(VIEW)).tradePricing.members.length, 0, 'B could not add A\'s customer');
+  // a manager can change it (promotions and customers); view-only cannot
+  const email = 'trade-view@a.test'; await m.A.x(`mutation($e:String!){ inviteStaff(email:$e, firstName:"V", lastName:"V", role:"analyst"){ id } }`, { e: email }); await callAs('A', ACCEPT, { t: (await tokenOf('staff.invited', email))!, p: 'Viewer-pass-12345' });
+  const vx = httpExec({ url: URL, channelToken: m.A.channelToken }, (await engineLogin({ url: URL, channelToken: m.A.channelToken }, email, 'Viewer-pass-12345'))!.token);
+  assert.equal((await run(vx, VIEW)).denied, undefined, 'view-only can read'); assert.ok((await run(vx, SAVE, { p: 50, e: true })).denied, 'but not change'); assert.ok((await run(vx, MARK, { c: retailId, m: true })).denied);
+});

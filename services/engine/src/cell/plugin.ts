@@ -13,6 +13,7 @@ import { OssStaffToken } from './staff-token.ts';
 import { DescriptionGuard } from './description-guard.ts';
 import { OssSegment, SegmentResolver, SegmentService, segmentApiExtensions } from './segments.ts';
 import { OssReview, ReviewAdminResolver, ReviewService, ReviewShopResolver, reviewAdminExtensions, reviewShopExtensions } from './reviews.ts';
+import { OssTrade, TradeResolver, TradeService, tradeApiExtensions } from './trade.ts';
 import { RateLimit } from './rate-limit.ts';
 import { PrivacyResolver, PrivacyService, privacyApiExtensions } from './privacy.ts';
 import { ManageStaff, ReadActivity } from './merchant-role.ts';
@@ -47,10 +48,10 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
 /** Registers the Connect payment handler and mounts the signed webhook route. Order lookups go through Vendure's own connection. */
 @VendurePlugin({
   imports: [PluginCommonModule],
-  entities: [OssOutbox, OssActivity, OssStaffToken, OssSegment, OssReview],
-  providers: [OutboxService, ActivityService, StaffService, PrivacyService, DescriptionGuard, SegmentService, ReviewService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }, { provide: APP_INTERCEPTOR, useClass: RateLimit }],
+  entities: [OssOutbox, OssActivity, OssStaffToken, OssSegment, OssReview, OssTrade],
+  providers: [OutboxService, ActivityService, StaffService, PrivacyService, DescriptionGuard, SegmentService, ReviewService, TradeService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }, { provide: APP_INTERCEPTOR, useClass: RateLimit }],
   shopApiExtensions: { schema: gql`${print(shopApiExtensions)}\n${print(reviewShopExtensions)}`, resolvers: [PaymentSessionResolver, ReviewShopResolver] },
-  adminApiExtensions: { schema: gql`${print(stockApiExtensions)}\n${print(staffApiExtensions)}\n${print(privacyApiExtensions)}\n${print(segmentApiExtensions)}\n${print(reviewAdminExtensions)}`, resolvers: [...STOCK_RESOLVERS, StaffResolver, PrivacyResolver, SegmentResolver, ReviewAdminResolver] },
+  adminApiExtensions: { schema: gql`${print(stockApiExtensions)}\n${print(staffApiExtensions)}\n${print(privacyApiExtensions)}\n${print(segmentApiExtensions)}\n${print(reviewAdminExtensions)}\n${print(tradeApiExtensions)}`, resolvers: [...STOCK_RESOLVERS, StaffResolver, PrivacyResolver, SegmentResolver, ReviewAdminResolver, TradeResolver] },
   configuration: (config) => {
     const o = CellPlugin.options;
     config.paymentOptions.paymentMethodHandlers.push(connectHandler({ stripe: o.stripe, account: o.account, feeBp: o.feeBp, refundsReturnFee: o.refundsReturnFee }));

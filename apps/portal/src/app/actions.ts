@@ -214,3 +214,6 @@ export async function deleteReviewAction(id: string) { return run(() => gateway(
 export async function saveMenuAction(key: string, items: { label: string; link: string }[], publish: boolean) { return run(() => gateway().saveMenu(key, items, publish), ['/content/menus', '/content']); }
 export async function saveSitePageAction(page: { slug: string; title: string; body: string; seoDescription?: string }, publish: boolean, isNew: boolean) { return run(() => gateway().saveSitePage(page, publish, isNew), ['/content/pages', '/content']); }
 export async function deleteSitePageAction(slug: string) { return run(() => gateway().deleteSitePage(slug), ['/content/pages', '/content']); }
+
+export async function saveTradePricingAction(percent: number, enabled: boolean) { return run(() => gateway().saveTradePricing(percent, enabled), ['/customers', '/discounts']); }
+export async function setTradeCustomerAction(customerId: string, member: boolean) { return run(() => gateway().setTradeCustomer(customerId, member), ['/customers', `/customers/${customerId}`]); }
