@@ -23,6 +23,9 @@ export interface Order {
 }
 export interface Product { id: string; imageUrl?: string; title: string; status: 'draft' | 'published' | 'archived'; sku: string; priceMinor: number; onHand: number; allocated: number; threshold: number; variants: number }
 export interface Customer { id: string; name: string; email: string; orders: number; spentMinor: number; lastOrder: string; marketing: boolean }
+import type { SegmentDefinition } from '@oss-commerce/contracts';
+/** A customer segment the merchant saved: a name and rules. Who is in it is worked out from orders each time it is shown. */
+export interface SavedSegment { id: string; name: string; definition: SegmentDefinition }
 export interface CustomerNote { id: string; text: string; at: string; by?: string }
 export interface CustomerDetail extends Customer {
   firstName: string; lastName: string; phone: string; since: string; addresses: string[]; aovMinor: number;
@@ -152,6 +155,9 @@ export interface CommerceGateway {
   order(id: string): Promise<Order | null>;
   products(): Promise<Product[]>;
   customers(): Promise<Customer[]>;
+  customerSegments(): Promise<SavedSegment[]>;
+  saveSegment(i: { id?: string; name: string; definition: SegmentDefinition }): Promise<MutationResult>;
+  deleteSegment(id: string): Promise<MutationResult>;
   customer(id: string): Promise<CustomerDetail | null>;
   addCustomerNote(customerId: string, text: string): Promise<MutationResult>;
   stockRows(): Promise<StockRow[]>;

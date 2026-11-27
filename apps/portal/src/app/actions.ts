@@ -1,5 +1,6 @@
 'use server';
 import { revalidatePath } from 'next/cache';
+import type { SegmentDefinition } from '@oss-commerce/contracts';
 import { gateway } from '@/lib/gateway-instance';
 import type { OrderEditApply, OrderEditInput, StockSettings, VariantStockAdjust, ManualOrderInput, CustomerProfile, CollectionInput, DiscountInput, ImageUpload, ProductEdit, OptionGroup, VariantInput, NewProduct, NewDiscount, ZoneInput, StockAdjust, MutationResult, RefundInput, Member, LegalPage, ServiceRequest, EmailSettings, Preferences } from '@/lib/gateway';
 
@@ -202,3 +203,6 @@ export async function applyStockCountAction(lines: { variantId: string; counted:
 
 export async function exportCustomerAction(id: string) { return gateway().customerExport(id); }
 export async function eraseCustomerAction(id: string) { return run(() => gateway().eraseCustomer(id), ['/customers', `/customers/${id}`, '/settings/activity']); }
+
+export async function saveSegmentAction(i: { id?: string; name: string; definition: SegmentDefinition }) { return run(() => gateway().saveSegment(i), ['/customers', '/settings/activity']); }
+export async function deleteSegmentAction(id: string) { return run(() => gateway().deleteSegment(id), ['/customers', '/settings/activity']); }

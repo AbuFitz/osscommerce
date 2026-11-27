@@ -8,7 +8,8 @@ import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus
 
 import { orderPoints, recentOrders } from '../geo/points';
 import { EngineError } from './exec';
-import type { ActivityPage, Member } from '../gateway';
+import type { ActivityPage, Member, SavedSegment } from '../gateway';
+import { validateSegment, type SegmentDefinition } from '@oss-commerce/contracts';
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
  * proven against a real Vendure in services/engine and used over HTTP in production. Money is always minor units, prices are what the customer pays (with tax).
@@ -694,3 +695,14 @@ export async function exportCustomer(x: Exec, id: string): Promise<string | null
 export async function eraseCustomer(x: Exec, id: string): Promise<MutationResult> {
   try { await x('mutation($id:ID!){ eraseCustomer(id:$id) }', { id }); return { ok: true, message: 'Personal details erased. The sales stay in your records.' }; } catch (e) { return said(e); }
 }
+
+// ── Customer segments ───────────────────────────────────────────────────────
+export async function listSegments(x: Exec): Promise<SavedSegment[]> {
+  const r = (await x('query{ customerSegments{ id name definition } }')).customerSegments as { id: number; name: string; definition: string }[];
+  return r.flatMap(s => { try { return [{ id: String(s.id), name: s.name, definition: JSON.parse(s.definition) as SegmentDefinition }]; } catch { return []; } });
+}
+export async function saveSegment(x: Exec, i: { id?: string; name: string; definition: SegmentDefinition }): Promise<MutationResult> {
+  const bad = validateSegment(i.name, i.definition); if (bad) return { ok: false, message: bad };
+  try { const r = await x('mutation($id:Int,$n:String!,$d:String!){ saveCustomerSegment(id:$id,name:$n,definition:$d){ id } }', { id: i.id ? Number(i.id) : null, n: i.name.trim(), d: JSON.stringify(i.definition) }); return { ok: true, message: i.id ? 'Segment saved.' : `Segment ${i.name.trim()} created.`, id: String(r.saveCustomerSegment.id) }; } catch (e) { return said(e); }
+}
+export async function deleteSegment(x: Exec, id: string): Promise<MutationResult> { try { await x('mutation($id:Int!){ deleteCustomerSegment(id:$id) }', { id: Number(id) }); return { ok: true, message: 'Segment deleted. No customers were affected.' }; } catch (e) { return said(e); } }

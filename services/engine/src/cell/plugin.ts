@@ -11,6 +11,7 @@ import { StaffResolver, StaffService, staffApiExtensions } from './staff.ts';
 import { ActivityService, OssActivity } from './activity.ts';
 import { OssStaffToken } from './staff-token.ts';
 import { DescriptionGuard } from './description-guard.ts';
+import { OssSegment, SegmentResolver, SegmentService, segmentApiExtensions } from './segments.ts';
 import { RateLimit } from './rate-limit.ts';
 import { PrivacyResolver, PrivacyService, privacyApiExtensions } from './privacy.ts';
 import { ManageStaff, ReadActivity } from './merchant-role.ts';
@@ -45,10 +46,10 @@ export interface CellPluginOptions { stripe: StripePort; sdk: Stripe; account: s
 /** Registers the Connect payment handler and mounts the signed webhook route. Order lookups go through Vendure's own connection. */
 @VendurePlugin({
   imports: [PluginCommonModule],
-  entities: [OssOutbox, OssActivity, OssStaffToken],
-  providers: [OutboxService, ActivityService, StaffService, PrivacyService, DescriptionGuard, { provide: APP_INTERCEPTOR, useClass: TenantGuard }, { provide: APP_INTERCEPTOR, useClass: RateLimit }],
+  entities: [OssOutbox, OssActivity, OssStaffToken, OssSegment],
+  providers: [OutboxService, ActivityService, StaffService, PrivacyService, DescriptionGuard, SegmentService, { provide: APP_INTERCEPTOR, useClass: TenantGuard }, { provide: APP_INTERCEPTOR, useClass: RateLimit }],
   shopApiExtensions: { schema: shopApiExtensions, resolvers: [PaymentSessionResolver] },
-  adminApiExtensions: { schema: gql`${print(stockApiExtensions)}\n${print(staffApiExtensions)}\n${print(privacyApiExtensions)}`, resolvers: [...STOCK_RESOLVERS, StaffResolver, PrivacyResolver] },
+  adminApiExtensions: { schema: gql`${print(stockApiExtensions)}\n${print(staffApiExtensions)}\n${print(privacyApiExtensions)}\n${print(segmentApiExtensions)}`, resolvers: [...STOCK_RESOLVERS, StaffResolver, PrivacyResolver, SegmentResolver] },
   configuration: (config) => {
     const o = CellPlugin.options;
     config.paymentOptions.paymentMethodHandlers.push(connectHandler({ stripe: o.stripe, account: o.account, feeBp: o.feeBp, refundsReturnFee: o.refundsReturnFee }));

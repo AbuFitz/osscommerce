@@ -362,3 +362,22 @@ test('myRole: each person is told their own role, in their own store', async () 
   const pwOf = async (email: string, role: string) => { const id = (await m.A.x(`mutation($e:String!,$r:String!){ inviteStaff(email:$e, firstName:"R", lastName:"R", role:$r){ id } }`, { e: email, r: role })).inviteStaff.id; const t = (await tokenOf('staff.invited', email))!; const pw = `Role-pass-${role}-1`; assert.equal((await callAs('A', ACCEPT, { t, p: pw })).data.acceptStaffToken, true); return { id, pw }; };
   for (const role of ['manager', 'fulfilment', 'analyst']) { const { pw } = await pwOf(`role-${role}@a.test`, role); const s = await engineLogin({ url: URL, channelToken: m.A.channelToken }, `role-${role}@a.test`, pw); assert.equal(await mine(httpExec({ url: URL, channelToken: m.A.channelToken }, s!.token)), role); }
 });
+
+test('customer segments: each store keeps its own, invalid ones are refused, and no store can touch another\'s', async () => {
+  const SAVE = `mutation($id:Int,$n:String!,$d:String!){ saveCustomerSegment(id:$id, name:$n, definition:$d){ id name definition } }`;
+  const run = async (x: ReturnType<typeof httpExec>, q: string, v?: any) => { try { return { data: await x(q, v) }; } catch (e) { return { denied: e instanceof EngineError ? e.code : 'ERR', message: (e as Error).message }; } };
+  const def = JSON.stringify({ match: 'all', rules: [{ field: 'spent', op: 'gte', value: 100 }, { field: 'orders', op: 'gte', value: 2 }] });
+  const vip = (await m.A.x(SAVE, { n: 'VIPs', d: def })).saveCustomerSegment; assert.equal(vip.name, 'VIPs');
+  assert.deepEqual((await m.A.x(`query{ customerSegments{ id name } }`)).customerSegments.map((s: any) => s.name), ['VIPs']); assert.deepEqual((await m.B.x(`query{ customerSegments{ id } }`)).customerSegments, [], 'B sees none of A\'s segments');
+  assert.match((await run(m.A.x, SAVE, { n: 'Bad', d: JSON.stringify({ match: 'all', rules: [] }) })).message!, /at least one rule/); assert.match((await run(m.A.x, SAVE, { n: 'Bad', d: 'not json' })).message!, /not valid/);
+  assert.match((await run(m.A.x, SAVE, { n: 'Bad', d: JSON.stringify({ match: 'all', rules: [{ field: 'password', op: 'eq', value: 1 }] }) })).message!, /cannot filter/);
+  // B cannot rename or delete A's segment: it simply is not there for B
+  assert.match((await run(m.B.x, SAVE, { id: vip.id, n: 'Hijacked', d: def })).message!, /not found/); assert.match((await run(m.B.x, `mutation($id:Int!){ deleteCustomerSegment(id:$id) }`, { id: vip.id })).message!, /not found/);
+  assert.equal((await m.A.x(`query{ customerSegments{ name } }`)).customerSegments[0].name, 'VIPs');
+  // edit, then a view-only person can read but not change
+  assert.equal((await m.A.x(SAVE, { id: vip.id, n: 'Best customers', d: def })).saveCustomerSegment.name, 'Best customers');
+  const email = 'seg-view@a.test'; await m.A.x(`mutation($e:String!){ inviteStaff(email:$e, firstName:"V", lastName:"V", role:"analyst"){ id } }`, { e: email }); await callAs('A', ACCEPT, { t: (await tokenOf('staff.invited', email))!, p: 'Viewer-pass-12345' });
+  const vx = httpExec({ url: URL, channelToken: m.A.channelToken }, (await engineLogin({ url: URL, channelToken: m.A.channelToken }, email, 'Viewer-pass-12345'))!.token);
+  assert.equal((await run(vx, `query{ customerSegments{ id } }`)).denied, undefined, 'view-only reads segments'); assert.ok((await run(vx, SAVE, { n: 'Nope', d: def })).denied, 'view-only cannot create'); assert.ok((await run(vx, `mutation($id:Int!){ deleteCustomerSegment(id:$id) }`, { id: vip.id })).denied, 'or delete');
+  assert.equal((await m.A.x(`mutation($id:Int!){ deleteCustomerSegment(id:$id) }`, { id: vip.id })).deleteCustomerSegment, true); assert.deepEqual((await m.A.x(`query{ customerSegments{ id } }`)).customerSegments, []);
+});
