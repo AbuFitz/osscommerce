@@ -852,3 +852,7 @@ html{scroll-padding-top:84px}
 /* Reviews */
 .rv-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}.rv{display:grid;gap:8px}.rv-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.rv-top b{font-weight:600}.stars{display:inline-flex;gap:1px;color:#f59e0b}
 .rv-body{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}.rv-meta{margin:0;font-size:13px}.rv-mail{opacity:.8}.rv-reply{margin:0;padding:10px 12px;border-radius:12px;background:rgba(120,120,140,.12);font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Menus */
+.mn-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start}.mn-list{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:8px}.mn-list li{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mn-fields{display:flex;gap:6px;flex:1 1 240px;min-width:0}.mn-fields input{min-width:0;flex:1;height:40px;border-radius:12px;border:1px solid var(--line,rgba(120,120,140,.3));padding:0 10px;background:transparent;color:inherit}.mn-fields input:first-child{flex:.7}.mn-btns{display:flex;gap:2px}

@@ -7,6 +7,7 @@ import { automationOutcome, grantTransition, paymentView, platformBillingView, p
 import { liveBilling, liveConnect, type BillingPort, type ConnectPort } from '@oss-commerce/payments';
 import { isUuid, serviceRequestView, validateServiceRequest } from './service-requests';
 import { legalPagesFromRows, validateLegalBody } from './legal-content';
+import { menusFromRows, pagesFromRows, validateMenu, validatePage, type MenuItem, type MenuView, type SitePage } from './site-content';
 import { defaultHomepage, homepageView, parseHomepageBody, validateSectionFields } from './homepage-content';
 import { liveDomainVerification, VERCEL_CNAME, type DomainVerificationPort } from './domain-verification';
 
@@ -37,6 +38,11 @@ export interface ControlPlanePort {
   checkDomain(storeId: string): Promise<{ ok: boolean; message: string; record?: { type: string; name: string; value: string } }>;
   legalPages(storeId: string): Promise<LegalPage[]>;
   saveLegal(storeId: string, slug: LegalPage['slug'], body: string, publish: boolean): Promise<{ ok: boolean; message: string }>;
+  menus(storeId: string): Promise<MenuView[]>;
+  saveMenu(storeId: string, key: string, items: MenuItem[], publish: boolean): Promise<{ ok: boolean; message: string }>;
+  sitePages(storeId: string): Promise<SitePage[]>;
+  saveSitePage(storeId: string, page: { slug: string; title: string; body: string; seoDescription?: string }, publish: boolean, isNew: boolean): Promise<{ ok: boolean; message: string }>;
+  deleteSitePage(storeId: string, slug: string): Promise<{ ok: boolean; message: string }>;
 }
 
 export class PgControlPlane implements ControlPlanePort {
@@ -311,6 +317,43 @@ export class PgControlPlane implements ControlPlanePort {
       const entry = `legal/${valid.slug}`; await client.query('select * from cp.save_content_draft($1,$2,$3::jsonb,$4)', [storeId, entry, JSON.stringify({ body: valid.body }), 'merchant']);
       if (publish) { const result = (await client.query('select * from cp.publish_content_entry($1,$2,$3)', [storeId, entry, 'merchant'])).rows[0]; if (!result?.changed) throw new Error('The draft could not be published.'); }
       return { ok: true, message: publish ? 'Page published.' : 'Draft saved.' };
+    });
+  }
+
+  menus(storeId: string) {
+    return this.tx(storeId, async client => menusFromRows((await client.query(`select distinct on(entry) entry,body,published_at,created_at from cp.content_revisions where store_id=$1 and entry=any($2::text[]) order by entry,revision desc`, [storeId, ['menu/header', 'menu/footer']])).rows));
+  }
+  saveMenu(storeId: string, key: string, items: MenuItem[], publish: boolean) {
+    const valid = validateMenu(key, items); if (!valid.ok) return Promise.resolve(valid);
+    return this.tx(storeId, async client => {
+      const entry = `menu/${valid.key}`; await client.query('select * from cp.save_content_draft($1,$2,$3::jsonb,$4)', [storeId, entry, JSON.stringify({ items: valid.items }), 'merchant']);
+      if (publish) { const r = (await client.query('select * from cp.publish_content_entry($1,$2,$3)', [storeId, entry, 'merchant'])).rows[0]; if (!r?.changed) throw new Error('The menu could not be published.'); }
+      return { ok: true, message: publish ? 'Menu published. Your store shows it now.' : 'Draft saved. Publish when you are ready.' };
+    });
+  }
+  sitePages(storeId: string) {
+    return this.tx(storeId, async client => pagesFromRows((await client.query(`select distinct on(entry) entry,body,published_at,created_at from cp.content_revisions where store_id=$1 and entry like 'site/%' order by entry,revision desc`, [storeId])).rows));
+  }
+  saveSitePage(storeId: string, page: { slug: string; title: string; body: string; seoDescription?: string }, publish: boolean, isNew: boolean) {
+    const valid = validatePage(page, publish); if (!valid.ok) return Promise.resolve(valid);
+    return this.tx(storeId, async client => {
+      const entry = `site/${valid.page.slug}`;
+      const existing = (await client.query(`select distinct on(entry) entry,body from cp.content_revisions where store_id=$1 and entry like 'site/%' order by entry,revision desc`, [storeId])).rows.filter((r: any) => !r.body?.deleted);
+      const has = existing.some((r: any) => r.entry === entry);
+      if (isNew && has) return { ok: false, message: 'You already have a page at that address. Choose another.' };
+      if (!has && existing.length >= 50) return { ok: false, message: 'You can keep up to 50 pages. Delete one you no longer use.' };
+      await client.query('select * from cp.save_content_draft($1,$2,$3::jsonb,$4)', [storeId, entry, JSON.stringify({ title: valid.page.title, body: valid.page.body, seoDescription: valid.page.seoDescription }), 'merchant']);
+      if (publish) { const r = (await client.query('select * from cp.publish_content_entry($1,$2,$3)', [storeId, entry, 'merchant'])).rows[0]; if (!r?.changed) throw new Error('The page could not be published.'); }
+      return { ok: true, message: publish ? 'Page published.' : 'Draft saved.' };
+    });
+  }
+  deleteSitePage(storeId: string, slug: string) {
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/.test(slug)) return Promise.resolve({ ok: false, message: 'That page does not exist.' });
+    return this.tx(storeId, async client => {
+      const entry = `site/${slug}`; const cur = (await client.query(`select body from cp.content_revisions where store_id=$1 and entry=$2 order by revision desc limit 1`, [storeId, entry])).rows[0];
+      if (!cur || cur.body?.deleted) return { ok: false, message: 'That page does not exist.' };
+      await client.query('select * from cp.save_content_draft($1,$2,$3::jsonb,$4)', [storeId, entry, JSON.stringify({ deleted: true }), 'merchant']);
+      await client.query('select * from cp.publish_content_entry($1,$2,$3)', [storeId, entry, 'merchant']); return { ok: true, message: 'Page deleted. It no longer shows on your store.' };
     });
   }
 }

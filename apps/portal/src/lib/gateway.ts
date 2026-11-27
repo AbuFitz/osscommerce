@@ -96,6 +96,7 @@ export interface StoreView { name: string; store: StoreRecord; readiness: Readin
 
 export interface ContentSection { id: string; type: 'hero' | 'image_text' | 'product_row' | 'announcement' | 'faq'; label: string; fields: Record<string, string>; changed: boolean }
 export interface ContentView { page: { id: string; title: string; path: string }; sections: ContentSection[]; publishedAt: string; previewUrl: string; versions: { id: string; at: string; note: string; current: boolean }[] }
+import type { MenuItem, MenuView, SitePage } from './site-content';
 export interface LegalPage { slug: 'privacy' | 'terms' | 'shipping' | 'returns'; title: string; status: 'not_set_up' | 'draft' | 'published'; updatedAt?: string; body: string }
 export interface Automation { id: string; name: string; trigger: string; action: string; kind: 'transactional' | 'operational' | 'marketing'; enabled: boolean; lastRun?: string; runsMonth: number; needsConsent?: boolean }
 export interface AutomationRun { id: string; at: string; automation: string; event: string; outcome: 'sent' | 'skipped_no_consent' | 'failed_retrying' | 'failed'; detail: string }
@@ -194,6 +195,11 @@ export interface CommerceGateway {
   startPaymentSetup(): Promise<StartPaymentSetup>;
   content(): Promise<ContentView>;
   legalPages(): Promise<LegalPage[]>;
+  menus(): Promise<MenuView[]>;
+  saveMenu(key: string, items: MenuItem[], publish: boolean): Promise<MutationResult>;
+  sitePages(): Promise<SitePage[]>;
+  saveSitePage(page: { slug: string; title: string; body: string; seoDescription?: string }, publish: boolean, isNew: boolean): Promise<MutationResult>;
+  deleteSitePage(slug: string): Promise<MutationResult>;
   automations(): Promise<{ rules: Automation[]; runs: AutomationRun[]; runsLimit: number }>;
   serviceRequests(): Promise<ServiceRequest[]>;
   emailSettings(): Promise<EmailSettings>;

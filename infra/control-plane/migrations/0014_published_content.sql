@@ -34,7 +34,7 @@ end $$;
 create function cp.get_published_content(p_storefront text, p_entry text) returns table(entry text, revision integer, schema_version integer, body jsonb, published_at timestamptz)
 language sql security definer set search_path = cp, pg_temp stable as $$
   select r.entry,r.revision,r.schema_version,r.body,r.published_at
-  from cp.content_revisions r join cp.storefronts f using(storefront_id) join cp.stores s using(store_id)
+  from cp.content_revisions r join cp.storefronts f using(storefront_id) join cp.stores s on s.store_id=f.store_id
   where r.storefront_id=p_storefront and r.entry=p_entry and r.published_at is not null
     and f.state in ('connected','approved','live') and s.lifecycle in ('configuring','ready','live')
   order by r.revision desc limit 1
