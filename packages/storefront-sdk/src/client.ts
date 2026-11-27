@@ -6,7 +6,9 @@ export const SUPPORTED_API = 'v1';
 
 export interface RequestEvent { operation: string; attempt: number; ms: number; status?: number; requestId?: string; outcome: 'ok' | 'error' | 'retry'; code?: string }
 export interface ClientOptions { timeoutMs?: number; maxRetries?: number; fetch?: typeof fetch; onEvent?: (e: RequestEvent) => void; sleep?: (ms: number) => Promise<void> }
-export interface CallOptions { session?: string; idempotencyKey?: string; signal?: AbortSignal; mutation?: boolean; language?: string; currency?: string }
+/** The shopper's own address and browser, as seen by your storefront server. Used only to count a visit once per day without cookies, and to slow review spam. Never stored. */
+export interface ShopperHints { ip?: string; agent?: string }
+export interface CallOptions { shopper?: ShopperHints; session?: string; idempotencyKey?: string; signal?: AbortSignal; mutation?: boolean; language?: string; currency?: string }
 export interface Result<T> { data: T; session?: string; requestId?: string }
 export interface PublishedContent<T> { entry: string; revision: number; schemaVersion: number; body: T; publishedAt: string }
 export interface StorefrontPreferences { configVersion: number; guestCheckout: boolean; askMarketingConsent: boolean; showSoldOut: boolean; checkoutPaused: boolean }
@@ -27,7 +29,7 @@ export function createClient(cfg: StorefrontConfig, o: ClientOptions = {}) {
         const res = await f(`${cfg.apiUrl}/v1/shop`, {
           method: 'POST', signal: ac.signal, cache: 'no-store',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.serverSecret}`, 'oss-storefront': cfg.storefrontId, 'oss-sdk': SDK_VERSION, 'oss-api': SUPPORTED_API, 'oss-operation': operation,
-            ...(c.session ? { 'oss-session': c.session } : {}), ...(c.idempotencyKey ? { 'idempotency-key': c.idempotencyKey } : {}), ...(c.language ? { 'oss-language': c.language } : {}), ...(c.currency ? { 'oss-currency': c.currency } : {}) },
+            ...(c.session ? { 'oss-session': c.session } : {}), ...(c.shopper?.ip ? { 'oss-client-ip': c.shopper.ip } : {}), ...(c.shopper?.agent ? { 'oss-client-agent': c.shopper.agent.replace(/[^\x20-\x7e]/g, '').slice(0, 300) } : {}), ...(c.idempotencyKey ? { 'idempotency-key': c.idempotencyKey } : {}), ...(c.language ? { 'oss-language': c.language } : {}), ...(c.currency ? { 'oss-currency': c.currency } : {}) },
           body: JSON.stringify({ query, variables }),
         });
         const requestId = res.headers.get('oss-request-id') ?? undefined;
@@ -84,7 +86,19 @@ export function createClient(cfg: StorefrontConfig, o: ClientOptions = {}) {
       } finally { clearTimeout(timer); }
     }
   }
-  return { call, query: <T>(op: string, q: string, v: Record<string, unknown> = {}, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: false }), mutate: <T>(op: string, q: string, v: Record<string, unknown>, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: true }), content, preferences };
+  /** Counts a visit, without cookies. Call from the server (a route handler or middleware) with the shopper's own address and browser. Never throws: a failed count must not break a page. */
+  async function trackVisit(v: { kind: 'page' | 'product' | 'cart' | 'checkout' | 'purchase'; path: string; referrer?: string; width?: number }, shopper: ShopperHints): Promise<boolean> {
+    try { await call('trackVisit', 'mutation($i: VisitInput!){ trackVisit(input: $i) }', { i: v }, { shopper, mutation: true }); return true; } catch { return false; }
+  }
+  /** Approved reviews and the average rating for a product. Plain text: render it as text, never as HTML. */
+  async function productReviews(productId: string, page: { take?: number; skip?: number } = {}) {
+    return (await call<{ productReviews: { summary: { count: number; average: number }; items: { id: number; rating: number; title: string; body: string; authorName: string; verified: boolean; reply: string | null; at: string }[]; hasMore: boolean } }>('productReviews', 'query($p: ID!, $t: Int, $s: Int){ productReviews(productId: $p, take: $t, skip: $s){ summary{ count average } items{ id rating title body authorName verified reply at } hasMore } }', { p: productId, t: page.take ?? 10, s: page.skip ?? 0 }, { mutation: false })).data.productReviews;
+  }
+  /** Sends a review for the merchant to approve. Pass the shopper's own address so one person cannot flood a store. */
+  async function submitReview(r: { productId: string; rating: number; title: string; body: string; name: string; email: string }, shopper: ShopperHints) {
+    await call('submitReview', 'mutation($i: ReviewInput!){ submitReview(input: $i) }', { i: r }, { shopper, mutation: true }); return true;
+  }
+  return { trackVisit, productReviews, submitReview, call, query: <T>(op: string, q: string, v: Record<string, unknown> = {}, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: false }), mutate: <T>(op: string, q: string, v: Record<string, unknown>, c: CallOptions = {}) => call<T>(op, q, v, { ...c, mutation: true }), content, preferences };
 }
 
 /** Compatibility handshake. Run at boot and in CI: the API states which SDK majors it supports. */

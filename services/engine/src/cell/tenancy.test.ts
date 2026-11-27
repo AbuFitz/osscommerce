@@ -14,6 +14,7 @@ import { engineLogin, httpExec, EngineError } from '../../../../apps/portal/src/
 import * as A from '../../../../apps/portal/src/lib/engine/adapter.ts';
 import { ensureTaxCategories } from '../../../../apps/portal/src/lib/engine/catalogue.ts';
 import { provisionStore } from './provision-store.ts';
+import { VisitorService } from './visitors.ts';
 import { OssOutbox } from './outbox-entity.ts';
 import { TransactionalConnection } from '@vendure/core';
 
@@ -459,4 +460,28 @@ test('storefront search: finds published products by name, part of a name, SKU a
   // an unpublished product stays hidden after it is published, and disappears again when hidden
   const id = (await A.listProducts(m.A.x)).find(p => p.title === 'Hidden prototype')!.id; await m.A.x(`mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:true }){ id } }`, { id }); assert.deepEqual(await until('A', 'prototype', n => n.length > 0), ['Hidden prototype'], 'published, so found');
   await m.A.x(`mutation($id:ID!){ updateProduct(input:{ id:$id, enabled:false }){ id } }`, { id }); assert.deepEqual(await until('A', 'prototype', n => n.length === 0), [], 'hidden again, so gone');
+});
+
+test('visitor analytics: cookieless funnel, robots ignored, nothing personal kept, stores apart', async () => {
+  const SHOP = `http://localhost:${testConfig.apiOptions.port}/shop-api`;
+  const hit = async (k: 'A' | 'B', visitor: { ip: string; ua: string }, kind: string, path: string, extra: Record<string, unknown> = {}) => { const r = await fetch(SHOP, { method: 'POST', headers: { 'content-type': 'application/json', 'vendure-token': m[k].channelToken, 'x-forwarded-for': visitor.ip, 'user-agent': visitor.ua }, body: JSON.stringify({ query: `mutation($i:VisitInput!){ trackVisit(input:$i) }`, variables: { i: { kind, path, ...extra } } }) }); const j = (await r.json()) as { data?: { trackVisit: boolean }; errors?: unknown }; assert.equal(j.data?.trackVisit, true, JSON.stringify(j)); };
+  const STATS = `query{ visitorStats(days:7){ visitors pageviews funnel{ visited viewedProduct addedToCart startedCheckout purchased } pages{ label count } sources{ label count } devices{ label count } daily{ day visitors pageviews } } }`;
+  const phone = { ip: '198.51.100.1', ua: 'Mozilla/5.0 (iPhone) Safari' }, desk = { ip: '198.51.100.2', ua: 'Mozilla/5.0 (Windows) Chrome' }, lap = { ip: '198.51.100.3', ua: 'Mozilla/5.0 (Mac) Firefox' };
+  await hit('A', phone, 'page', '/?utm_campaign=x', { referrer: 'https://www.google.com/', width: 390 }); await hit('A', phone, 'product', '/products/mug-a', { width: 390 }); await hit('A', phone, 'cart', '/cart', { width: 390 }); await hit('A', phone, 'checkout', '/checkout', { width: 390 }); await hit('A', phone, 'purchase', '/thanks', { width: 390 });
+  await hit('A', desk, 'page', '/', { referrer: 'https://l.facebook.com/', width: 1440 }); await hit('A', desk, 'product', '/products/mug-a', { width: 1440 }); await hit('A', desk, 'cart', '/cart', { width: 1440 });
+  await hit('A', lap, 'page', '/pages/our-story', { width: 1100 });
+  await hit('A', { ip: '198.51.100.9', ua: 'Googlebot/2.1' }, 'page', '/'); await hit('A', { ip: '198.51.100.8', ua: 'Mozilla/5.0 Chrome' }, 'nonsense', '/');   // a robot and a made-up kind change nothing
+  const s = (await m.A.x(STATS)).visitorStats;
+  assert.equal(s.visitors, 3, 'three people'); assert.deepEqual(s.funnel, { visited: 3, viewedProduct: 2, addedToCart: 2, startedCheckout: 1, purchased: 1 }); assert.equal(s.pageviews, 3);
+  assert.deepEqual(s.pages.map((p: any) => [p.label, p.count]), [['/', 2], ['/products/mug-a', 2], ['/pages/our-story', 1]].sort((a, b) => (b[1] as number) - (a[1] as number) || String(a[0]).localeCompare(String(b[0]))).map(x => x), 'query strings are gone');
+  assert.deepEqual(Object.fromEntries(s.sources.map((x: any) => [x.label, x.count])), { Search: 1, Social: 1, Direct: 1 }); assert.deepEqual(Object.fromEntries(s.devices.map((x: any) => [x.label, x.count])), { Phone: 1, Desktop: 2 }); assert.equal(s.daily.length, 1);
+  // nothing identifying is stored: no address, no agent, only a short hash
+  const rows = await server.app.get(TransactionalConnection).rawConnection.query(`select * from oss_visit`); assert.ok(rows.length >= 3); assert.ok(!JSON.stringify(rows).match(/198\.51|Mozilla|iPhone|Chrome/), 'no address or browser is stored');
+  // another store sees none of it, and its own are its own
+  assert.equal((await m.B.x(STATS)).visitorStats.visitors, 0); await hit('B', phone, 'page', '/'); assert.equal((await m.B.x(STATS)).visitorStats.visitors, 1); assert.equal((await m.A.x(STATS)).visitorStats.visitors, 3);
+  // old hashes are deleted, and a fulfilment person cannot read the stats
+  const svc = server.app.get(VisitorService); await svc.prune(new Date(Date.now() + 5 * 86400_000)); assert.equal((await server.app.get(TransactionalConnection).rawConnection.query(`select * from oss_visit`)).length, 0, 'visitor hashes do not outlive two days');
+  assert.ok((await m.A.x(STATS)).visitorStats, 'page totals stay'); 
+  const email = 'vis-ful@a.test'; await m.A.x(`mutation($e:String!){ inviteStaff(email:$e, firstName:"F", lastName:"F", role:"fulfilment"){ id } }`, { e: email }); await callAs('A', ACCEPT, { t: (await tokenOf('staff.invited', email))!, p: 'Fulfil-pass-12345' });
+  const fx = httpExec({ url: URL, channelToken: m.A.channelToken }, (await engineLogin({ url: URL, channelToken: m.A.channelToken }, email, 'Fulfil-pass-12345'))!.token); assert.equal(await fx(STATS).then(() => 'read', () => 'denied'), 'denied');
 });

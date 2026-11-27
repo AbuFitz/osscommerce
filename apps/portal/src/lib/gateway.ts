@@ -28,6 +28,7 @@ import type { SegmentDefinition } from '@oss-commerce/contracts';
 export interface SavedSegment { id: string; name: string; definition: SegmentDefinition }
 /** Trade (wholesale) pricing: a percentage off for customers marked as trade. Shoppers' catalogue prices do not change; trade customers see the reduction in their basket. */
 export interface TradePricing { percent: number; enabled: boolean; members: { id: string; name: string; email: string }[] }
+export interface VisitorStats { visitors: number; pageviews: number; funnel: { visited: number; viewedProduct: number; addedToCart: number; startedCheckout: number; purchased: number }; pages: { label: string; count: number }[]; sources: { label: string; count: number }[]; devices: { label: string; count: number }[]; daily: { day: string; visitors: number; pageviews: number }[] }
 export type ReviewStatus = 'pending' | 'approved' | 'rejected';
 export interface Review { id: string; productId: string; productName: string; rating: number; title: string; body: string; authorName: string; email: string; verified: boolean; status: ReviewStatus; reply?: string; at: string }
 export interface ReviewPage { items: Review[]; total: number; pending: number }
@@ -162,6 +163,8 @@ export interface CommerceGateway {
   products(): Promise<Product[]>;
   customers(): Promise<Customer[]>;
   customerSegments(): Promise<SavedSegment[]>;
+  /** Visitors to the storefront over the last `days` days. Counted without cookies and without keeping anything about a person. */
+  visitorStats(days: number): Promise<VisitorStats>;
   tradePricing(): Promise<TradePricing>;
   saveTradePricing(percent: number, enabled: boolean): Promise<MutationResult>;
   setTradeCustomer(customerId: string, member: boolean): Promise<MutationResult>;

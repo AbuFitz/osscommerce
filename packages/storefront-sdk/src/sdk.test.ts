@@ -117,3 +117,12 @@ test('platform-built event verifies end to end at the storefront', async () => {
 });
 
 test('signing vector is shared with the cell dispatcher', () => assert.equal(sign('k'.repeat(40), '{"a":1}', 1700000000), 't=1700000000,v1=65bc88d8b5a50339be3468ec13d7cadb91095faf49ecf51063403f667356507d'));
+
+test('visits and reviews: the shopper\'s hints ride along, a failed count never throws, and reviews are read as plain text', async () => {
+  const seen: { headers: Record<string, string>; body: string }[] = []; let fail = false;
+  const f = (async (_u: string, init: any) => { seen.push({ headers: init.headers, body: init.body }); if (fail) return new Response('nope', { status: 503 }); const q = JSON.parse(init.body).query as string; return new Response(JSON.stringify({ data: q.includes('productReviews') ? { productReviews: { summary: { count: 1, average: 5 }, items: [{ id: 1, rating: 5, title: 't', body: '<b>x</b>', authorName: 'n', verified: true, reply: null, at: '2026-11-27T00:00:00Z' }], hasMore: false } } : { trackVisit: true } }), { status: 200, headers: { 'content-type': 'application/json' } }); }) as unknown as typeof fetch;
+  const c = createClient(loadConfig(env), { fetch: f, sleep: async () => {} });
+  assert.equal(await c.trackVisit({ kind: 'page', path: '/' }, { ip: '203.0.113.7', agent: 'Mozilla/5.0\u0001 Test' }), true); assert.equal(seen[0].headers['oss-client-ip'], '203.0.113.7'); assert.equal(seen[0].headers['oss-client-agent'], 'Mozilla/5.0 Test', 'control characters are stripped');
+  const r = await c.productReviews('1'); assert.equal(r.summary.average, 5); assert.equal(r.items[0].body, '<b>x</b>', 'returned as given: the storefront renders it as text');
+  fail = true; seen.length = 0; assert.equal(await c.trackVisit({ kind: 'page', path: '/' }, { ip: '203.0.113.7' }), false, 'a failure is a false, never an exception'); assert.equal(seen.length, 1, 'and a visit is never retried, so it cannot be counted twice');
+});

@@ -856,3 +856,9 @@ html{scroll-padding-top:84px}
 /* Menus */
 .mn-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start}.mn-list{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:8px}.mn-list li{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .mn-fields{display:flex;gap:6px;flex:1 1 240px;min-width:0}.mn-fields input{min-width:0;flex:1;height:40px;border-radius:12px;border:1px solid var(--line,rgba(120,120,140,.3));padding:0 10px;background:transparent;color:inherit}.mn-fields input:first-child{flex:.7}.mn-btns{display:flex;gap:2px}
+
+/* Visitors */
+.vs-bars{list-style:none;margin:0;padding:0;display:grid;gap:10px}.vs-bars li{display:grid;grid-template-columns:minmax(80px,38%) 1fr auto;gap:10px;align-items:center;font-size:14px}.vs-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vs-bar{height:8px;border-radius:99px;background:rgba(120,120,140,.16);overflow:hidden;display:block}.vs-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#6366f1,#38bdf8)}.vs-bar.big{height:14px}
+.vs-funnel{list-style:none;margin:0;padding:0;display:grid;gap:14px}.vs-fl{display:flex;justify-content:space-between;gap:8px;margin-bottom:6px}.vs-fp{display:block;margin-top:4px;font-size:12.5px}
+.vs-daily{display:flex;align-items:flex-end;gap:3px;height:150px}.vs-daily span{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,#38bdf8,#6366f1);min-width:3px}

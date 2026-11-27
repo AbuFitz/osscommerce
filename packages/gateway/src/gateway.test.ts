@@ -105,3 +105,14 @@ test('session wrap/unwrap round trip is storefront-bound', () => { const s = wra
 test('createPaymentSession is allowed, needs a session, and is not a payment-completing operation', () => {
   const c: any = classify('mutation { createPaymentSession { clientSecret publishableKey } }'); assert.equal(c.ok, true); assert.equal(c.needsSession, true); assert.equal(c.isPayment, false);
 });
+
+test('a visit and a review are public to the storefront; the shopper\'s address and browser are forwarded for those two only, in a strict shape', async () => {
+  const VISIT = 'mutation { trackVisit(input:{ kind:"page", path:"/" }) }', REVIEW = 'mutation { submitReview(input:{ productId:"1", rating:5, title:"t", body:"long enough body", name:"n", email:"a@b.co" }) }', REVIEWS = 'query { productReviews(productId:"1"){ summary{ count } } }';
+  assert.equal((classify(VISIT) as any).needsSession, false); assert.equal((classify(REVIEW) as any).needsSession, false); assert.equal((classify(REVIEWS) as any).cacheable, true);
+  const w = world(); const hints = { 'oss-client-ip': '203.0.113.7', 'oss-client-agent': 'Mozilla/5.0 (X11; Linux) Test' };
+  await post(w.g, secretA, VISIT, hints); await post(w.g, secretA, REVIEW, hints); assert.equal(w.calls.length, 2);
+  for (const c of w.calls) { assert.equal(c.headers['x-forwarded-for'], '203.0.113.7'); assert.equal(c.headers['user-agent'], 'Mozilla/5.0 (X11; Linux) Test'); assert.equal(c.headers['vendure-token'], 'chan-a'); }
+  w.calls.length = 0; await post(w.g, secretA, VISIT, { 'oss-client-ip': 'not an address; drop table', 'oss-client-agent': 'bad\u0001agent' }); assert.equal(w.calls[0].headers['x-forwarded-for'], undefined, 'a malformed address is dropped'); assert.equal(w.calls[0].headers['user-agent'], undefined, 'and so is a malformed agent');
+  w.calls.length = 0; await post(w.g, secretA, READ, hints); await post(w.g, secretA, ADD, hints); assert.ok(w.calls.every(c => c.headers['x-forwarded-for'] === undefined && c.headers['user-agent'] === undefined), 'other operations never carry the hints');
+  w.calls.length = 0; await post(w.g, secretA, VISIT, { 'x-forwarded-for': '9.9.9.9', 'user-agent': 'spoof' }); assert.equal(w.calls[0].headers['x-forwarded-for'], undefined, 'raw forwarded headers from the caller are still dropped');
+});

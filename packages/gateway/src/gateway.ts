@@ -34,7 +34,10 @@ export function createGateway(d: GatewayDeps) {
     const idem = h('idempotency-key');
     if (c.kind === 'mutation' && idem) { const hit = await d.idempotency.get(`${who.storefrontId}:${idem}`); if (hit) return { status: hit.status, headers: { 'content-type': 'application/json', 'oss-request-id': requestId, 'oss-replayed': 'true', 'cache-control': 'no-store' }, body: hit.body }; }
     // Forward with ONLY platform-chosen identity. Client-supplied channel, auth, cookie and forwarded headers are dropped, never trusted.
-    const up = await d.upstream.post(`${cell.url}/shop-api`, { timeoutMs: d.timeoutMs ?? 8000, body: req.body, headers: { 'content-type': 'application/json', 'vendure-token': cell.channelToken, 'oss-request-id': requestId, ...(raw ? { authorization: `Bearer ${raw}` } : {}) } });
+    // The shopper's own address and browser matter only to counting a visit and to limiting review spam. The storefront server is authenticated, so these two hints are accepted from it
+    // for those two operations alone, in a strict shape, and never for anything else.
+    const hint = c.fields.some(f => f === 'trackVisit' || f === 'submitReview') ? { ip: /^[0-9a-fA-F:.]{3,45}$/.test(h('oss-client-ip') ?? '') ? h('oss-client-ip')! : undefined, agent: /^[\x20-\x7e]{1,300}$/.test(h('oss-client-agent') ?? '') ? h('oss-client-agent')! : undefined } : {};
+    const up = await d.upstream.post(`${cell.url}/shop-api`, { timeoutMs: d.timeoutMs ?? 8000, body: req.body, headers: { 'content-type': 'application/json', 'vendure-token': cell.channelToken, 'oss-request-id': requestId, ...(hint.ip ? { 'x-forwarded-for': hint.ip } : {}), ...(hint.agent ? { 'user-agent': hint.agent } : {}), ...(raw ? { authorization: `Bearer ${raw}` } : {}) } });
     const newRaw = up.headers['vendure-auth-token'];
     const out: GatewayResponse = { status: up.status, body: up.body, headers: { 'content-type': 'application/json', 'oss-request-id': requestId, 'cache-control': c.cacheable ? 'public, max-age=0, must-revalidate' : 'no-store', ...(newRaw ? { 'oss-session': wrap(d.sessionKey, who.storefrontId, newRaw) } : {}) } };
     if (c.kind === 'mutation' && idem && up.status === 200) await d.idempotency.put(`${who.storefrontId}:${idem}`, { status: up.status, body: up.body });

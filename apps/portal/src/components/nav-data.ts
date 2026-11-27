@@ -37,6 +37,6 @@ export const PROGRESSIVE = ['/analytics', '/customers', '/discounts', '/inventor
 export const CHILDREN: Record<string, { href: string; label: string }[]> = {
   '/orders': [{ href: '/orders?filter=unfulfilled', label: 'To fulfil' }, { href: '/orders?filter=refunded', label: 'Refunds' }, { href: '/orders/abandoned', label: 'Abandoned checkouts' }],
   '/products': [{ href: '/collections', label: 'Collections' }, { href: '/inventory', label: 'Inventory' }],
-  '/analytics': [{ href: '/analytics/live', label: 'Live view' }],
+  '/analytics': [{ href: '/analytics/live', label: 'Live view' }, { href: '/analytics/visitors', label: 'Visitors' }],
 };
 export const NESTED = new Set(['/collections', '/inventory']);

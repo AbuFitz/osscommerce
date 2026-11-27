@@ -1,7 +1,7 @@
 import { gate } from '@/lib/gate';
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { Radio, Tag } from 'lucide-react';
+import { Eye, Radio, Tag } from 'lucide-react';
 import { gateway } from '@/lib/gateway-instance';
 import { buildReport, resolveRange, ymd } from '@/lib/analytics';
 import { money } from '@/lib/format';
@@ -23,7 +23,7 @@ export default async function Analytics({ searchParams }: { searchParams: Promis
   return (<>
     <Header title="Analytics" eyebrow={`${dmy(range.from)} to ${dmy(range.to)} · Europe/London`}>
       <Suspense fallback={null}><RangePicker label={range.label} from={range.from} to={range.to} today={today} /></Suspense>
-      <Link className="btn" href="/analytics/live"><Radio size={16} aria-hidden />Live view</Link>
+      <Link className="btn" href="/analytics/visitors"><Eye size={16} aria-hidden />Visitors</Link><Link className="btn" href="/analytics/live"><Radio size={16} aria-hidden />Live view</Link>
     </Header>
     <section className="w an-card" aria-label="Sales over time"><MainChart report={r} /></section>
     <div className="an-grid">

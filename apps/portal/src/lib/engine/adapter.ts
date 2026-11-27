@@ -8,7 +8,7 @@ import { DEFAULT_LOW_AT, appendLog, parseLog, planAdjust, planCount, stockStatus
 
 import { orderPoints, recentOrders } from '../geo/points';
 import { EngineError } from './exec';
-import type { TradePricing, Review, ActivityPage, Member, ReviewPage, ReviewStatus, SavedSegment } from '../gateway';
+import type { VisitorStats, TradePricing, Review, ActivityPage, Member, ReviewPage, ReviewStatus, SavedSegment } from '../gateway';
 import { validateSegment, type SegmentDefinition } from '@oss-commerce/contracts';
 /**
  * Maps the engine's Admin API onto the portal's views. Every function takes the executor as a port, so the same code is
@@ -723,3 +723,8 @@ export async function saveTradePricing(x: Exec, percent: number, enabled: boolea
   try { await x('mutation($p:Float!,$e:Boolean!){ saveTradePricing(percent:$p,enabled:$e) }', { p: percent, e: enabled }); return { ok: true, message: enabled ? `Trade customers get ${percent}% off.` : 'Trade pricing is off.' }; } catch (e) { return said(e); }
 }
 export async function setTradeCustomer(x: Exec, customerId: string, member: boolean): Promise<MutationResult> { try { await x('mutation($c:ID!,$m:Boolean!){ setTradeCustomer(customerId:$c,member:$m) }', { c: customerId, m: member }); return { ok: true, message: member ? 'Marked as a trade customer.' : 'No longer a trade customer.' }; } catch (e) { return said(e); } }
+
+// ── Visitors ────────────────────────────────────────────────────────────────
+export async function getVisitorStats(x: Exec, days: number): Promise<VisitorStats> {
+  return (await x('query($d:Int){ visitorStats(days:$d){ visitors pageviews funnel{ visited viewedProduct addedToCart startedCheckout purchased } pages{ label count } sources{ label count } devices{ label count } daily{ day visitors pageviews } } }', { d: days })).visitorStats as VisitorStats;
+}

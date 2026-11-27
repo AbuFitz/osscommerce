@@ -2,14 +2,17 @@ import { parse, Kind, OperationDefinitionNode, FieldNode } from 'graphql';
 
 /** The public storefront surface. Anything not listed is refused, which keeps Admin-only and unknown fields out by construction.
  *  `private` fields need a shopper session; `public` ones are catalogue data and are safe to cache. */
-export const PUBLIC_QUERIES = new Set(['activeChannel', 'product', 'products', 'collection', 'collections', 'facet', 'facets', 'search', 'eligibleCountries', 'availableCountries']);
+export const PUBLIC_QUERIES = new Set(['activeChannel', 'product', 'products', 'collection', 'collections', 'facet', 'facets', 'search', 'productReviews', 'eligibleCountries', 'availableCountries']);
 export const PRIVATE_QUERIES = new Set(['activeOrder', 'activeCustomer', 'orderByCode', 'eligibleShippingMethods', 'eligiblePaymentMethods', 'nextOrderStates', 'me']);
 export const MUTATIONS = new Set([
   'addItemToOrder', 'adjustOrderLine', 'removeOrderLine', 'removeAllOrderLines', 'applyCouponCode', 'removeCouponCode', 'setCustomerForOrder', 'setOrderShippingAddress', 'setOrderBillingAddress',
   'setOrderShippingMethod', 'setOrderCustomFields', 'transitionOrderToState', 'createPaymentSession', 'addPaymentToOrder',
   'registerCustomerAccount', 'verifyCustomerAccount', 'login', 'logout', 'requestPasswordReset', 'resetPassword', 'updateCustomer', 'updateCustomerPassword', 'requestUpdateCustomerEmailAddress', 'updateCustomerEmailAddress',
   'createCustomerAddress', 'updateCustomerAddress', 'deleteCustomerAddress',
+  'submitReview', 'trackVisit',
 ]);
+/** Mutations a visitor makes with no basket and no sign-in: counting a visit and leaving a review. */
+const NO_SESSION = new Set(['registerCustomerAccount', 'requestPasswordReset', 'login', 'verifyCustomerAccount', 'resetPassword', 'submitReview', 'trackVisit']);
 const PAYMENT = new Set(['addPaymentToOrder']);
 export type Classified = { ok: true; kind: 'query' | 'mutation'; fields: string[]; needsSession: boolean; isPayment: boolean; cacheable: boolean } | { ok: false; reason: string };
 
@@ -28,6 +31,6 @@ export function classify(query: string, maxDepth = 12, maxLength = 20_000): Clas
   const q = op.operation === 'query';
   const allowed = q ? [...PUBLIC_QUERIES, ...PRIVATE_QUERIES] : [...MUTATIONS];
   const bad = fields.find(f => !allowed.includes(f)); if (bad) return { ok: false, reason: `Operation not available: ${bad}` };
-  const needsSession = fields.some(f => PRIVATE_QUERIES.has(f) || (!q && f !== 'registerCustomerAccount' && f !== 'requestPasswordReset' && f !== 'login' && f !== 'verifyCustomerAccount' && f !== 'resetPassword'));
+  const needsSession = fields.some(f => PRIVATE_QUERIES.has(f) || (!q && !NO_SESSION.has(f)));
   return { ok: true, kind: q ? 'query' : 'mutation', fields, needsSession: needsSession && !fields.every(f => ['addItemToOrder'].includes(f)), isPayment: fields.some(f => PAYMENT.has(f)), cacheable: q && fields.every(f => PUBLIC_QUERIES.has(f)) };
 }
